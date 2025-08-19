@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from .config import settings
 
@@ -40,7 +41,7 @@ class Database:
 
     async def set_tenant_context(self, session: AsyncSession, tenant_id: str):
         """Set the tenant context for Row Level Security"""
-        await session.execute(f"SET app.tenant_id = '{tenant_id}'")
+        await session.execute(text(f"SET app.tenant_id = '{tenant_id}'"))
 
 
 # Global database instance
