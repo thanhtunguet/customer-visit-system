@@ -1,0 +1,8 @@
+resources:
+  - api-deploy.yaml
+  - web-deploy.yaml
+  - postgres.yaml
+  - minio.yaml
+  - milvus.yaml
+  - ingress.yaml
+

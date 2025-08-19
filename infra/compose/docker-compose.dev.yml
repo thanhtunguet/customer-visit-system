@@ -1,0 +1,53 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-01T01-11-10Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - minio:/data
+
+  milvus:
+    image: milvusdb/milvus:v2.3.10
+    ports: ["19530:19530", "9091:9091"]
+
+  api:
+    build: ../../apps/api
+    environment:
+      PORT: 8080
+      API_KEY_SECRET: dev-secret
+      WORKER_API_KEY: dev-api-key
+    depends_on: [postgres]
+    ports: ["8080:8080"]
+
+  worker-sim:
+    build: ../../apps/worker
+    environment:
+      API_URL: http://api:8080
+      TENANT_ID: t-dev
+      WORKER_API_KEY: dev-api-key
+    depends_on: [api]
+
+  web:
+    working_dir: /app
+    image: node:20
+    command: sh -lc "npm i && npm run dev"
+    volumes:
+      - ../../apps/web:/app
+    ports: ["5173:5173"]
+
+volumes:
+  pgdata: {}
+  minio: {}
+

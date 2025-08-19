@@ -1,0 +1,27 @@
+# General
+.DS_Store
+*.pyc
+__pycache__/
+.venv/
+venv/
+node_modules/
+dist/
+.pytest_cache/
+coverage.xml
+htmlcov/
+.mypy_cache/
+*.log
+
+# Python
+*.egg-info/
+.tox/
+
+# Node
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# IDEs
+.idea/
+.vscode/
+

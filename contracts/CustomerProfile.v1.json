@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "CustomerProfile.v1",
+  "type": "object",
+  "required": ["tenant_id", "customer_id", "first_seen"],
+  "properties": {
+    "tenant_id": {"type": "string"},
+    "customer_id": {"type": "string"},
+    "name": {"type": ["string", "null"]},
+    "gender": {"type": ["string", "null"], "enum": ["male", "female", "other", null]},
+    "first_seen": {"type": "string", "format": "date-time"},
+    "last_seen": {"type": ["string", "null"], "format": "date-time"}
+  }
+}
+

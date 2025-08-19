@@ -1,0 +1,9 @@
+{
+  "info": {"name": "Face API", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "item": [
+    {"name": "Health", "request": {"method": "GET", "url": {"raw": "{{baseUrl}}/v1/health", "host": ["{{baseUrl}}"], "path": ["v1","health"]}}},
+    {"name": "Auth Token", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"grant_type\": \"api_key\",\n  \"api_key\": \"dev-api-key\",\n  \"tenant_id\": \"t-dev\",\n  \"role\": \"system_admin\"\n}"}, "url": {"raw": "{{baseUrl}}/v1/auth/token", "host": ["{{baseUrl}}"], "path": ["v1","auth","token"]}}}
+  ],
+  "variable": [{"key": "baseUrl", "value": "http://localhost:8080"}]
+}
+

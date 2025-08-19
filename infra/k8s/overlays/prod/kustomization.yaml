@@ -1,0 +1,9 @@
+resources:
+  - ../../base
+namePrefix: prod-
+images:
+  - name: ghcr.io/org/face-api
+    newTag: latest
+  - name: ghcr.io/org/face-web
+    newTag: latest
+

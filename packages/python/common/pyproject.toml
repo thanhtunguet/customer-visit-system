@@ -1,0 +1,13 @@
+[project]
+name = "pkg-common"
+version = "0.1.0"
+description = "Shared Pydantic models and utils"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
