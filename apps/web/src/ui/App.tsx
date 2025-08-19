@@ -88,18 +88,5 @@ export function App() {
       </Router>
     </ConfigProvider>
   );
-}}>
-      <Layout.Sider>
-        <Menu selectedKeys={[current]} onClick={(e) => setCurrent(e.key)} items={[
-          { key: 'dashboard', label: 'Dashboard' },
-          { key: 'visits', label: 'Visits' },
-        ]} />
-      </Layout.Sider>
-      <Layout.Content style={{ padding: 24 }}>
-        <h1 className="text-xl font-semibold">Face Recognition MVP</h1>
-        <p>Current: {current}</p>
-      </Layout.Content>
-    </Layout>
-  )
 }
 
