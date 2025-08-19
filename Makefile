@@ -17,7 +17,10 @@ lint:
 	@echo "Lint placeholders (ruff/flake8 can be wired)"
 
 test:
-	$(PY) -m pytest -q
+	@echo "Running API tests..."
+	@cd apps/api && $(PY) -m pytest tests/ -v
+	@echo "Running Worker tests..."
+	@cd apps/worker && $(PY) -m pytest tests/ -v
 
 e2e:
 	bash scripts/e2e_demo.sh
