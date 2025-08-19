@@ -1,13 +1,13 @@
 PY ?= python3
 PIP ?= pip3
 
-.PHONY: dev-up dev-down fmt lint test e2e buildx openapi
+.PHONY: dev-up dev-down fmt lint test e2e buildx openapi api-dev worker-dev web-dev
 
 dev-up:
-	docker compose -f infra/compose/docker-compose.dev.yml up -d --build
+	@echo "Docker dev-up deprecated on macOS. Use 'make api-dev' 'make web-dev' 'make worker-dev' in separate terminals."
 
 dev-down:
-	docker compose -f infra/compose/docker-compose.dev.yml down -v
+	@echo "Nothing to stop in script-driven dev."
 
 fmt:
 	@echo "Formatting Python..."
@@ -28,3 +28,11 @@ buildx:
 openapi:
 	$(PY) apps/api/tools/export_openapi.py
 
+api-dev:
+	bash scripts/dev/api_dev.sh
+
+worker-dev:
+	bash scripts/dev/worker_dev.sh
+
+web-dev:
+	bash scripts/dev/web_dev.sh

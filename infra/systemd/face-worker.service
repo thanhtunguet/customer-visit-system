@@ -1,0 +1,14 @@
+[Unit]
+Description=Face Worker Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/face-recognition/apps/worker
+EnvironmentFile=/etc/face/face.env
+ExecStart=%h/face-recognition/apps/worker/.venv/bin/python -m app.main
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

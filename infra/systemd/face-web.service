@@ -1,0 +1,14 @@
+[Unit]
+Description=Face Web Service (static preview)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/face-recognition/apps/web
+Environment=PORT=5173
+ExecStart=/usr/bin/env npm run preview -- --port ${PORT} --host
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
