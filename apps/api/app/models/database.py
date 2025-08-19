@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, ForeignKey, Text, Index
+from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, ForeignKey, ForeignKeyConstraint, Text, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -56,7 +56,7 @@ class Camera(Base):
     
     # Foreign key constraint
     __table_args__ = (
-        ForeignKey(["tenant_id", "site_id"], ["sites.tenant_id", "sites.site_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(['tenant_id', 'site_id'], ['sites.tenant_id', 'sites.site_id'], ondelete='CASCADE'),
     )
     
     # Relationships

@@ -30,10 +30,17 @@ async def lifespan(app: FastAPI):
     # Startup
     try:
         await milvus_client.connect()
-        await minio_client.setup_buckets()
-        logging.info("Successfully connected to external services")
+        logging.info("Connected to Milvus")
     except Exception as e:
-        logging.error(f"Failed to initialize services: {e}")
+        logging.warning(f"Failed to connect to Milvus: {e}")
+    
+    try:
+        await minio_client.setup_buckets()
+        logging.info("Connected to MinIO")
+    except Exception as e:
+        logging.warning(f"Failed to connect to MinIO: {e}")
+    
+    logging.info("API startup completed")
     
     yield
     
@@ -516,5 +523,4 @@ async def get_visitor_report(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=settings.host, port=settings.port),
-    }
+    uvicorn.run(app, host=settings.host, port=settings.port)
