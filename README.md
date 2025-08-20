@@ -175,57 +175,57 @@ mc admin info myminio
 
 #### API Service Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `APP_NAME` | Application name | `face-api` | No |
-| `ENV` | Environment (dev/prod) | `dev` | No |
-| `HOST` | Bind host | `0.0.0.0` | No |
-| `PORT` | Bind port | `8080` | No |
-| `JWT_ISSUER` | JWT token issuer | `face.local` | No |
-| `JWT_AUDIENCE` | JWT token audience | `face` | No |
-| `JWT_PRIVATE_KEY` | RSA private key for JWT signing | - | Yes (prod) |
-| `JWT_PUBLIC_KEY` | RSA public key for JWT verification | - | Yes (prod) |
-| `API_KEY_SECRET` | Secret for API key generation | `dev-secret` | Yes |
-| `DB_HOST` | PostgreSQL host | `localhost` | Yes |
-| `DB_PORT` | PostgreSQL port | `5432` | No |
-| `DB_USER` | PostgreSQL username | `postgres` | Yes |
-| `DB_PASSWORD` | PostgreSQL password | `postgres` | Yes |
-| `DB_NAME` | PostgreSQL database name | `facedb` | Yes |
-| `DATABASE_URL` | Full PostgreSQL connection string | Auto-generated | No |
-| `MILVUS_HOST` | Milvus vector database host | `localhost` | Yes |
-| `MILVUS_PORT` | Milvus port | `19530` | No |
-| `MILVUS_COLLECTION` | Milvus collection name | `face_embeddings` | No |
-| `MINIO_ENDPOINT` | MinIO endpoint (host:port) | `localhost:9000` | Yes |
-| `MINIO_ACCESS_KEY` | MinIO access key | `minioadmin` | Yes |
-| `MINIO_SECRET_KEY` | MinIO secret key | `minioadmin` | Yes |
-| `MINIO_BUCKET_RAW` | Raw images bucket | `faces-raw` | No |
-| `MINIO_BUCKET_DERIVED` | Processed images bucket | `faces-derived` | No |
-| `TENANT_HEADER` | HTTP header for tenant ID | `X-Tenant-ID` | No |
-| `FACE_SIMILARITY_THRESHOLD` | Face matching threshold (0.0-1.0) | `0.6` | No |
-| `MAX_FACE_RESULTS` | Max results from face search | `5` | No |
+| Variable                    | Description                         | Default           | Required   |
+| --------------------------- | ----------------------------------- | ----------------- | ---------- |
+| `APP_NAME`                  | Application name                    | `face-api`        | No         |
+| `ENV`                       | Environment (dev/prod)              | `dev`             | No         |
+| `HOST`                      | Bind host                           | `0.0.0.0`         | No         |
+| `PORT`                      | Bind port                           | `8080`            | No         |
+| `JWT_ISSUER`                | JWT token issuer                    | `face.local`      | No         |
+| `JWT_AUDIENCE`              | JWT token audience                  | `face`            | No         |
+| `JWT_PRIVATE_KEY`           | RSA private key for JWT signing     | -                 | Yes (prod) |
+| `JWT_PUBLIC_KEY`            | RSA public key for JWT verification | -                 | Yes (prod) |
+| `API_KEY_SECRET`            | Secret for API key generation       | `dev-secret`      | Yes        |
+| `DB_HOST`                   | PostgreSQL host                     | `localhost`       | Yes        |
+| `DB_PORT`                   | PostgreSQL port                     | `5432`            | No         |
+| `DB_USER`                   | PostgreSQL username                 | `postgres`        | Yes        |
+| `DB_PASSWORD`               | PostgreSQL password                 | `postgres`        | Yes        |
+| `DB_NAME`                   | PostgreSQL database name            | `facedb`          | Yes        |
+| `DATABASE_URL`              | Full PostgreSQL connection string   | Auto-generated    | No         |
+| `MILVUS_HOST`               | Milvus vector database host         | `localhost`       | Yes        |
+| `MILVUS_PORT`               | Milvus port                         | `19530`           | No         |
+| `MILVUS_COLLECTION`         | Milvus collection name              | `face_embeddings` | No         |
+| `MINIO_ENDPOINT`            | MinIO endpoint (host:port)          | `localhost:9000`  | Yes        |
+| `MINIO_ACCESS_KEY`          | MinIO access key                    | `minioadmin`      | Yes        |
+| `MINIO_SECRET_KEY`          | MinIO secret key                    | `minioadmin`      | Yes        |
+| `MINIO_BUCKET_RAW`          | Raw images bucket                   | `faces-raw`       | No         |
+| `MINIO_BUCKET_DERIVED`      | Processed images bucket             | `faces-derived`   | No         |
+| `TENANT_HEADER`             | HTTP header for tenant ID           | `X-Tenant-ID`     | No         |
+| `FACE_SIMILARITY_THRESHOLD` | Face matching threshold (0.0-1.0)   | `0.6`             | No         |
+| `MAX_FACE_RESULTS`          | Max results from face search        | `5`               | No         |
 
 #### Worker Service Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `API_URL` | API service endpoint | `http://api:8080` | Yes |
-| `TENANT_ID` | Worker tenant identifier | `t-dev` | Yes |
-| `SITE_ID` | Site identifier | `s-1` | Yes |
-| `CAMERA_ID` | Camera identifier | `c-1` | Yes |
-| `WORKER_API_KEY` | API authentication key | `dev-api-key` | Yes |
-| `DETECTOR_TYPE` | Face detector (`yunet`, `mock`) | `yunet` | No |
-| `EMBEDDER_TYPE` | Face embedder (`insightface`, `mock`) | `insightface` | No |
-| `WORKER_FPS` | Processing frame rate | `5` | No |
-| `RTSP_URL` | RTSP camera stream URL | - | No |
-| `USB_CAMERA` | USB camera device index | `0` | No |
-| `CONFIDENCE_THRESHOLD` | Detection confidence threshold | `0.7` | No |
-| `MOCK_MODE` | Enable mock mode for testing | `true` | No |
+| Variable               | Description                           | Default           | Required |
+| ---------------------- | ------------------------------------- | ----------------- | -------- |
+| `API_URL`              | API service endpoint                  | `http://api:8080` | Yes      |
+| `TENANT_ID`            | Worker tenant identifier              | `t-dev`           | Yes      |
+| `SITE_ID`              | Site identifier                       | `s-1`             | Yes      |
+| `CAMERA_ID`            | Camera identifier                     | `c-1`             | Yes      |
+| `WORKER_API_KEY`       | API authentication key                | `dev-api-key`     | Yes      |
+| `DETECTOR_TYPE`        | Face detector (`yunet`, `mock`)       | `yunet`           | No       |
+| `EMBEDDER_TYPE`        | Face embedder (`insightface`, `mock`) | `insightface`     | No       |
+| `WORKER_FPS`           | Processing frame rate                 | `5`               | No       |
+| `RTSP_URL`             | RTSP camera stream URL                | -                 | No       |
+| `USB_CAMERA`           | USB camera device index               | `0`               | No       |
+| `CONFIDENCE_THRESHOLD` | Detection confidence threshold        | `0.7`             | No       |
+| `MOCK_MODE`            | Enable mock mode for testing          | `true`            | No       |
 
 #### Web Service Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `VITE_API_URL` | API service endpoint for frontend | `http://localhost:8080` | Yes |
+| Variable       | Description                       | Default                 | Required |
+| -------------- | --------------------------------- | ----------------------- | -------- |
+| `VITE_API_URL` | API service endpoint for frontend | `http://localhost:8080` | Yes      |
 
 ## Deployment
 

@@ -192,6 +192,12 @@ class FaceEventResponse(BaseModel):
 async def health():
     return {"status": "ok", "env": settings.env, "timestamp": datetime.now(timezone.utc)}
 
+@app.get("/v1/health/milvus")
+async def health_milvus():
+    """Get Milvus connection health status"""
+    milvus_health = await milvus_client.health_check()
+    return milvus_health
+
 
 @app.post("/v1/auth/token", response_model=TokenResponse)
 async def issue_token(payload: TokenRequest):

@@ -1,6 +1,29 @@
 import os
 
 
+import os
+from pathlib import Path
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    
+    # Find .env file relative to this config file
+    # Structure: apps/api/app/core/config.py -> apps/api/.env
+    current_file = Path(__file__)
+    api_root = current_file.parent.parent.parent  # Go up from app/core/ to apps/api/
+    env_file = api_root / ".env"
+    
+    if env_file.exists():
+        load_dotenv(env_file)
+        print(f"✓ Loaded environment variables from {env_file}")
+    else:
+        print(f"⚠ No .env file found at {env_file} - using system environment variables only")
+        
+except ImportError:
+    print("⚠ python-dotenv not installed - using system environment variables only")
+
+
 class Settings:
     app_name: str = os.getenv("APP_NAME", "face-api")
     env: str = os.getenv("ENV", "dev")
@@ -29,6 +52,9 @@ class Settings:
     milvus_host: str = os.getenv("MILVUS_HOST", "localhost")
     milvus_port: int = int(os.getenv("MILVUS_PORT", "19530"))
     milvus_collection: str = os.getenv("MILVUS_COLLECTION", "face_embeddings")
+    milvus_user: str | None = os.getenv("MILVUS_USER")
+    milvus_password: str | None = os.getenv("MILVUS_PASSWORD") 
+    milvus_secure: bool = os.getenv("MILVUS_SECURE", "false").lower() == "true"
     
     # MinIO Configuration
     minio_endpoint: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")

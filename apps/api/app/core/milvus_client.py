@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Dict, List, Optional
 
 from .config import settings
@@ -66,32 +67,99 @@ class MilvusClient:
         self.collection_name = settings.milvus_collection
         self.connection_alias = "default"
         self.collection: Optional[Collection] = None
+        self.is_connected = False
         
     async def connect(self):
         """Connect to Milvus server"""
         if not MILVUS_AVAILABLE:
             logger.info("Using mock Milvus implementation for development")
             self.collection = Collection("mock_collection")
+            self.is_connected = True
             return
             
         try:
-            connections.connect(
-                alias=self.connection_alias,
-                host=settings.milvus_host,
-                port=settings.milvus_port,
-            )
+            # Enhanced connection with additional parameters for production
+            connect_params = {
+                "alias": self.connection_alias,
+                "host": settings.milvus_host,
+                "port": settings.milvus_port,
+            }
+            
+            # Add optional authentication if configured
+            milvus_user = os.getenv("MILVUS_USER")
+            milvus_password = os.getenv("MILVUS_PASSWORD")
+            if milvus_user and milvus_password:
+                connect_params.update({
+                    "user": milvus_user,
+                    "password": milvus_password
+                })
+                logger.info(f"Connecting to Milvus at {settings.milvus_host}:{settings.milvus_port} with authentication")
+            else:
+                logger.info(f"Connecting to Milvus at {settings.milvus_host}:{settings.milvus_port} without authentication")
+            
+            # Add SSL support if configured
+            milvus_secure = os.getenv("MILVUS_SECURE", "false").lower() == "true"
+            if milvus_secure:
+                connect_params["secure"] = True
+                logger.info("Using secure connection to Milvus")
+            
+            connections.connect(**connect_params)
             await self._ensure_collection_exists()
-            logger.info(f"Connected to Milvus at {settings.milvus_host}:{settings.milvus_port}")
+            self.is_connected = True
+            logger.info(f"Successfully connected to Milvus at {settings.milvus_host}:{settings.milvus_port}")
         except Exception as e:
             logger.error(f"Failed to connect to Milvus: {e}. Using mock implementation.")
             self.collection = Collection("mock_collection")
+            self.is_connected = False
 
     async def disconnect(self):
         """Disconnect from Milvus"""
+        if not self.is_connected:
+            return
+            
         try:
-            connections.disconnect(alias=self.connection_alias)
+            if MILVUS_AVAILABLE:
+                connections.disconnect(alias=self.connection_alias)
+            self.is_connected = False
+            self.collection = None
+            logger.info("Disconnected from Milvus")
         except Exception as e:
             logger.warning(f"Error disconnecting from Milvus: {e}")
+            self.is_connected = False
+
+    async def health_check(self) -> Dict[str, any]:
+        """Check Milvus connection health"""
+        try:
+            if not MILVUS_AVAILABLE:
+                return {
+                    "status": "mock",
+                    "message": "Using mock Milvus implementation",
+                    "connected": True
+                }
+            
+            if not self.is_connected:
+                return {
+                    "status": "disconnected", 
+                    "message": "Not connected to Milvus",
+                    "connected": False
+                }
+            
+            # Try to list collections as a health check
+            collections = utility.list_collections(using=self.connection_alias)
+            
+            return {
+                "status": "healthy",
+                "message": f"Connected to Milvus at {settings.milvus_host}:{settings.milvus_port}",
+                "connected": True,
+                "collection_exists": self.collection_name in collections,
+                "collections_count": len(collections)
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Health check failed: {str(e)}",
+                "connected": False
+            }
 
     async def _ensure_collection_exists(self):
         """Create collection if it doesn't exist"""
