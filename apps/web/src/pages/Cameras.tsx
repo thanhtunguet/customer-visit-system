@@ -127,10 +127,30 @@ export const Cameras: React.FC = () => {
       ),
     },
     {
+      title: 'Type',
+      dataIndex: 'camera_type',
+      key: 'camera_type',
+      render: (type: string) => (
+        <Tag color={type === 'rtsp' ? 'blue' : 'green'}>
+          {type === 'rtsp' ? 'RTSP' : 'Webcam'}
+        </Tag>
+      ),
+    },
+    {
       title: 'RTSP URL',
       dataIndex: 'rtsp_url',
       key: 'rtsp_url',
       render: (text?: string) => text || <span className="text-gray-400">-</span>,
+    },
+    {
+      title: 'Webcam Index',
+      dataIndex: 'device_index',
+      key: 'device_index',
+      render: (index?: number) => index !== null && index !== undefined ? (
+        <span className="font-mono bg-gray-100 px-2 py-1 rounded">{index}</span>
+      ) : (
+        <span className="text-gray-400">-</span>
+      ),
     },
     {
       title: 'Status',
