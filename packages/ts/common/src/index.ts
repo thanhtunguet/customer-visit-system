@@ -23,6 +23,8 @@ export type CustomerProfile = {
   customer_id: string;
   name?: string | null;
   gender?: "male" | "female" | "other" | null;
+  phone?: string | null;
+  email?: string | null;
   first_seen: string;
   last_seen?: string | null;
 };

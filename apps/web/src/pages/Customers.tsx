@@ -64,6 +64,8 @@ export const Customers: React.FC = () => {
     form.setFieldsValue({
       name: customer.name,
       gender: customer.gender,
+      phone: customer.phone,
+      email: customer.email,
     });
     setModalVisible(true);
   };
@@ -106,6 +108,18 @@ export const Customers: React.FC = () => {
         const color = gender === 'male' ? 'blue' : gender === 'female' ? 'pink' : 'gray';
         return <span className={`text-${color}-600 capitalize`}>{gender}</span>;
       },
+    },
+    {
+      title: 'Phone',
+      dataIndex: 'phone',
+      key: 'phone',
+      render: (text?: string) => text || <span className="text-gray-400">-</span>,
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      render: (text?: string) => text || <span className="text-gray-400">-</span>,
     },
     {
       title: 'Visit Count',
@@ -245,7 +259,7 @@ export const Customers: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateCustomer}
         >
-<Form.Item
+          <Form.Item
             name="name"
             label="Customer Name"
           >
@@ -265,6 +279,20 @@ export const Customers: React.FC = () => {
                 { value: 'unknown', label: 'Unknown' },
               ]}
             />
+          </Form.Item>
+
+          <Form.Item
+            name="phone"
+            label="Phone"
+          >
+            <Input placeholder="e.g. +1 555 123 4567" />
+          </Form.Item>
+
+          <Form.Item
+            name="email"
+            label="Email"
+          >
+            <Input type="email" placeholder="e.g. john@example.com" />
           </Form.Item>
         </Form>
       </Modal>

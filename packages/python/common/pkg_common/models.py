@@ -31,6 +31,8 @@ class CustomerProfile(BaseModel):
     customer_id: str
     name: Optional[str] | None = None
     gender: Optional[str] | None = Field(default=None)
+    phone: Optional[str] | None = None
+    email: Optional[str] | None = None
     first_seen: datetime
     last_seen: Optional[datetime] | None = None
 

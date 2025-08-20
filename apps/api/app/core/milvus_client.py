@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from typing import Dict, List, Optional
 
 from .config import settings
@@ -10,9 +11,11 @@ logger = logging.getLogger(__name__)
 
 # Try to import pymilvus, fallback to mock if not available
 try:
-    from pymilvus import Collection, DataType, FieldSchema, CollectionSchema, connections, utility
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message="pkg_resources is deprecated.*")
+        from pymilvus import Collection, DataType, FieldSchema, CollectionSchema, connections, utility
     MILVUS_AVAILABLE = True
-except ImportError as e:
+except Exception as e:
     logger.warning(f"Milvus not available: {e}. Using mock implementation.")
     MILVUS_AVAILABLE = False
     

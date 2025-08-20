@@ -43,6 +43,9 @@ export interface Customer {
   customer_id: number;
   name?: string;
   gender?: string;
+  estimated_age_range?: string;
+  phone?: string;
+  email?: string;
   first_seen: string;
   last_seen?: string;
   visit_count: number;
