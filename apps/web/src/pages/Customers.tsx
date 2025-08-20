@@ -251,12 +251,14 @@ export const Customers: React.FC = () => {
             label="Customer ID"
             rules={[
               { required: true, message: 'Please input customer ID!' },
-              { type: 'number', message: 'Customer ID must be a number' }
+              { 
+                pattern: /^(cust-\d{3,6}|\d+)$/, 
+                message: 'Customer ID must be either a number (e.g. 1222) or format "cust-XXX" (e.g. cust-001)' 
+              }
             ]}
           >
             <Input 
-              type="number"
-              placeholder="e.g. 2001" 
+              placeholder="e.g. cust-001 or 1222" 
               disabled={!!editingCustomer}
             />
           </Form.Item>

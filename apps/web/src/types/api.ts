@@ -31,7 +31,7 @@ export interface Camera {
 
 export interface Staff {
   tenant_id: string;
-  staff_id: number;
+  staff_id: string;
   name: string;
   site_id?: string;
   is_active: boolean;
@@ -40,7 +40,7 @@ export interface Staff {
 
 export interface Customer {
   tenant_id: string;
-  customer_id: number;
+  customer_id: string;
   name?: string;
   gender?: string;
   first_seen: string;
