@@ -42,6 +42,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
   Heatmap
 } from 'recharts';
 import type { RangePickerProps } from 'antd/es/date-picker';
@@ -373,6 +374,7 @@ export const Reports: React.FC = () => {
                         ))}
                       </Pie>
                       <RechartsTooltip />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -394,6 +396,7 @@ export const Reports: React.FC = () => {
                         ))}
                       </Pie>
                       <RechartsTooltip />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
