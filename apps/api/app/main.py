@@ -75,6 +75,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def to_naive_utc(dt: datetime) -> datetime:
+    """Convert timezone-aware datetime to UTC and make timezone-naive for PostgreSQL compatibility."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 # ===============================
 # Auth & Token Models
 # ===============================
@@ -459,9 +466,9 @@ async def list_visits(
     if person_id:
         query = query.where(Visit.person_id == person_id)
     if start_time:
-        query = query.where(Visit.timestamp >= start_time)
+        query = query.where(Visit.timestamp >= to_naive_utc(start_time))
     if end_time:
-        query = query.where(Visit.timestamp <= end_time)
+        query = query.where(Visit.timestamp <= to_naive_utc(end_time))
     
     query = query.order_by(Visit.timestamp.desc()).limit(limit).offset(offset)
     
@@ -509,9 +516,9 @@ async def get_visitor_report(
     if site_id:
         query = query.where(Visit.site_id == site_id)
     if start_date:
-        query = query.where(Visit.timestamp >= start_date)
+        query = query.where(Visit.timestamp >= to_naive_utc(start_date))
     if end_date:
-        query = query.where(Visit.timestamp <= end_date)
+        query = query.where(Visit.timestamp <= to_naive_utc(end_date))
     
     result = await db_session.execute(query)
     

@@ -20,6 +20,7 @@ export const Dashboard: React.FC = () => {
     todayVisits: 0,
     totalCustomers: 0,
     totalStaff: 0,
+    activeSites: 0,
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
@@ -36,10 +37,11 @@ export const Dashboard: React.FC = () => {
       setError(null);
 
       // Load basic stats
-      const [customers, staff, visits, visitorReport] = await Promise.all([
+      const [customers, staff, visits, sites, visitorReport] = await Promise.all([
         apiClient.getCustomers({ limit: 1000 }),
         apiClient.getStaff(),
         apiClient.getVisits({ limit: 10 }),
+        apiClient.getSites(),
         apiClient.getVisitorReport({ 
           granularity: 'day',
           start_date: dayjs().subtract(7, 'days').toISOString(),
@@ -58,6 +60,7 @@ export const Dashboard: React.FC = () => {
         totalStaff: staff.length,
         totalVisits: visits.length, // This would be better from a separate aggregate endpoint
         todayVisits,
+        activeSites: sites.length,
       });
 
       // Prepare chart data
@@ -134,7 +137,7 @@ export const Dashboard: React.FC = () => {
           <Card>
             <Statistic
               title="Active Sites"
-              value={1} // This would come from sites API
+              value={stats.activeSites}
               prefix={<ShopOutlined className="text-purple-600" />}
               loading={loading}
             />
