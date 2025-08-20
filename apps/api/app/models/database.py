@@ -95,6 +95,8 @@ class Customer(Base):
     name = Column(String(255))
     gender = Column(String(16))  # male, female, unknown
     estimated_age_range = Column(String(32))
+    phone = Column(String(20))
+    email = Column(String(255))
     first_seen = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_seen = Column(DateTime)
     visit_count = Column(Integer, default=0, nullable=False)

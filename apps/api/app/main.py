@@ -168,6 +168,9 @@ class CustomerResponse(BaseModel):
     customer_id: int
     name: Optional[str]
     gender: Optional[str]
+    estimated_age_range: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
     first_seen: datetime
     last_seen: Optional[datetime]
     visit_count: int
@@ -176,12 +179,16 @@ class CustomerCreate(BaseModel):
     name: Optional[str] = None
     gender: Optional[str] = None
     estimated_age_range: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
 
 class CustomerUpdate(BaseModel):
     name: Optional[str] = None
     gender: Optional[str] = None
     estimated_age_range: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
 
 class VisitResponse(BaseModel):
@@ -614,7 +621,9 @@ async def create_customer(
         tenant_id=user["tenant_id"],
         name=customer.name,
         gender=customer.gender,
-        estimated_age_range=customer.estimated_age_range
+        estimated_age_range=customer.estimated_age_range,
+        phone=customer.phone,
+        email=customer.email
     )
     db_session.add(new_customer)
     await db_session.commit()
@@ -667,6 +676,10 @@ async def update_customer(
         customer.gender = customer_update.gender
     if customer_update.estimated_age_range is not None:
         customer.estimated_age_range = customer_update.estimated_age_range
+    if customer_update.phone is not None:
+        customer.phone = customer_update.phone
+    if customer_update.email is not None:
+        customer.email = customer_update.email
     
     await db_session.commit()
     await db_session.refresh(customer)
