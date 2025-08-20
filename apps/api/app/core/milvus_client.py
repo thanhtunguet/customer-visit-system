@@ -323,13 +323,47 @@ class MilvusClient:
         return matches
 
     async def delete_person_embeddings(self, tenant_id: str, person_id: str):
-        """Delete all embeddings for a person"""
+        """Delete all embeddings for a person.
+
+        Some Milvus deployments restrict delete operations to primary key filters only.
+        To support that, we first query for primary keys matching the tenant/person,
+        then delete using an "id in [...]" expression.
+        """
         if not self.collection:
             raise RuntimeError("Not connected to Milvus")
-            
-        expr = f'tenant_id == "{tenant_id}" && person_id == "{person_id}"'
-        self.collection.delete(expr)
-        self.collection.flush()
+
+        try:
+            # Query for primary keys of matching records
+            query_expr = f'tenant_id == "{tenant_id}" && person_id == "{person_id}"'
+            rows = []
+            try:
+                # Prefer query API to fetch primary keys
+                rows = self.collection.query(expr=query_expr, output_fields=["id"])  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.warning(f"Milvus query not available or failed during delete lookup: {e}")
+
+            primary_keys: List[int] = []
+            if rows:
+                for row in rows:
+                    pk = row.get("id")
+                    if pk is not None:
+                        try:
+                            primary_keys.append(int(pk))
+                        except Exception:
+                            pass
+
+            if primary_keys:
+                pk_list = ",".join(str(pk) for pk in primary_keys)
+                delete_expr = f"id in [{pk_list}]"
+                self.collection.delete(delete_expr)
+                self.collection.flush()
+            else:
+                # Nothing to delete, or query unsupported
+                logger.info("No existing embeddings found for deletion (tenant_id=%s, person_id=%s)", tenant_id, person_id)
+
+        except Exception as e:
+            # Do not hard-fail embedding recalculation due to delete limitations
+            logger.error(f"Failed to delete existing embeddings for tenant_id={tenant_id}, person_id={person_id}: {e}")
 
     async def delete_embedding_by_metadata(self, tenant_id: str, metadata_filter: Dict):
         """Delete embeddings by metadata filter - simplified to delete by person_id"""

@@ -5,7 +5,7 @@ import {
   StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 class ApiClient {
   private client: AxiosInstance;
@@ -254,6 +254,27 @@ class ApiClient {
   async getHealth(): Promise<{ status: string; env: string; timestamp: string }> {
     const response = await this.client.get('/health');
     return response.data;
+  }
+
+  // Authenticated image loading
+  async getImageUrl(imagePath: string): Promise<string> {
+    try {
+      // If imagePath already starts with /v1/files/, use it directly
+      const url = imagePath.startsWith('/v1/files/') ? imagePath : `/v1/files/${imagePath}`;
+      
+      // Make authenticated request to get the image
+      const response = await this.client.get(url, {
+        responseType: 'blob',
+      });
+      
+      // Create blob URL for the image
+      const blob = response.data;
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error('Failed to load authenticated image:', error);
+      // Return a placeholder or fallback image URL
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBhdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+    }
   }
 }
 

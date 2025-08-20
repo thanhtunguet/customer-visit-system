@@ -11,7 +11,7 @@ from datetime import datetime
 try:
     import cv2
     import numpy as np
-    from PIL import Image
+    from PIL import Image, ImageOps
     FACE_PROCESSING_AVAILABLE = True
     ArrayType = np.ndarray
 except ImportError as e:
@@ -76,6 +76,12 @@ class FaceProcessingService:
             
             # Convert to PIL Image
             pil_image = Image.open(io.BytesIO(image_bytes))
+
+            # Normalize orientation using EXIF so pixel coords match displayed image
+            try:
+                pil_image = ImageOps.exif_transpose(pil_image)
+            except Exception:
+                pass
             
             # Convert to RGB if needed
             if pil_image.mode != 'RGB':

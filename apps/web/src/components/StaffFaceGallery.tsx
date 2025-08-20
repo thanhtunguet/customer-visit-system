@@ -43,11 +43,23 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewTitle, setPreviewTitle] = useState<string>('');
+  const [previewLandmarks, setPreviewLandmarks] = useState<number[][] | null>(null);
+  const [renderSize, setRenderSize] = useState<{ width: number; height: number; naturalWidth: number; naturalHeight: number }>({
+    width: 0,
+    height: 0,
+    naturalWidth: 0,
+    naturalHeight: 0,
+  });
 
   // Convert image path to full URL
   const getImageUrl = (imagePath: string) => {
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    return `${baseUrl}/v1/files/${imagePath}`;
+    const token = localStorage.getItem('access_token');
+    const url = new URL(`${baseUrl}/v1/files/${imagePath}`);
+    if (token) {
+      url.searchParams.set('access_token', token);
+    }
+    return url.toString();
   };
 
   // Handle file upload
@@ -102,6 +114,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   const handlePreview = (image: StaffFaceImage) => {
     setPreviewImage(getImageUrl(image.image_path));
     setPreviewTitle(`${staffName} - Image ${image.image_id.slice(0, 8)}`);
+    setPreviewLandmarks(image.face_landmarks ?? null);
     setPreviewVisible(true);
   };
 
@@ -243,11 +256,46 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
         width="auto"
         centered
       >
-        <Image
-          src={previewImage}
-          alt="Preview"
-          style={{ maxWidth: '100%', maxHeight: '70vh' }}
-        />
+        <div className="relative inline-block" style={{ maxWidth: '100%', maxHeight: '70vh' }}>
+          <img
+            src={previewImage}
+            alt="Preview"
+            style={{
+              display: 'block',
+              maxWidth: '100%',
+              maxHeight: '70vh',
+            }}
+            onLoad={(e) => {
+              const img = e.currentTarget as HTMLImageElement;
+              setRenderSize({
+                width: img.clientWidth,
+                height: img.clientHeight,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+              });
+            }}
+          />
+
+          {previewLandmarks && renderSize.naturalWidth > 0 && renderSize.naturalHeight > 0 && (
+            <svg
+              style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' }}
+              viewBox={`0 0 ${renderSize.naturalWidth} ${renderSize.naturalHeight}`}
+              preserveAspectRatio="xMidYMid meet"
+            >
+              {previewLandmarks.map(([x, y], idx) => (
+                <circle
+                  key={idx}
+                  cx={x}
+                  cy={y}
+                  r={6}
+                  fill="rgba(239, 68, 68, 0.9)"
+                  stroke="white"
+                  strokeWidth={2}
+                />
+              ))}
+            </svg>
+          )}
+        </div>
       </Modal>
     </div>
   );
