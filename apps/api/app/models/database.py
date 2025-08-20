@@ -75,7 +75,7 @@ class Staff(Base):
     __tablename__ = "staff"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    staff_id = Column(BigInteger, primary_key=True)
+    staff_id = Column(String(64), primary_key=True)  # Changed from BigInteger to String
     name = Column(String(255), nullable=False)
     site_id = Column(String(64))
     is_active = Column(Boolean, default=True, nullable=False)
@@ -91,7 +91,7 @@ class Customer(Base):
     __tablename__ = "customers"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    customer_id = Column(BigInteger, primary_key=True)
+    customer_id = Column(String(64), primary_key=True)  # Changed from BigInteger to String
     name = Column(String(255))
     gender = Column(String(16))  # male, female, unknown
     estimated_age_range = Column(String(32))

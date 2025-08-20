@@ -150,7 +150,7 @@ class CameraResponse(BaseModel):
 
 
 class StaffCreate(BaseModel):
-    staff_id: int
+    staff_id: str
     name: str
     site_id: Optional[str] = None
     face_embedding: Optional[List[float]] = None
@@ -158,7 +158,7 @@ class StaffCreate(BaseModel):
 
 class StaffResponse(BaseModel):
     tenant_id: str
-    staff_id: int
+    staff_id: str
     name: str
     site_id: Optional[str]
     is_active: bool
@@ -167,7 +167,7 @@ class StaffResponse(BaseModel):
 
 class CustomerResponse(BaseModel):
     tenant_id: str
-    customer_id: int
+    customer_id: str
     name: Optional[str]
     gender: Optional[str]
     first_seen: datetime
@@ -175,7 +175,7 @@ class CustomerResponse(BaseModel):
     visit_count: int
 
 class CustomerCreate(BaseModel):
-    customer_id: int
+    customer_id: str
     name: Optional[str] = None
     gender: Optional[str] = None
     estimated_age_range: Optional[str] = None
