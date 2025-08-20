@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .core.config import settings
@@ -498,8 +498,8 @@ async def get_visitor_report(
             time_trunc.label("period"),
             func.count().label("total_visits"),
             func.count(func.distinct(Visit.person_id)).label("unique_visitors"),
-            func.sum(func.case((Visit.person_type == "staff", 1), else_=0)).label("staff_visits"),
-            func.sum(func.case((Visit.person_type == "customer", 1), else_=0)).label("customer_visits"),
+            func.sum(case((Visit.person_type == "staff", 1), else_=0)).label("staff_visits"),
+            func.sum(case((Visit.person_type == "customer", 1), else_=0)).label("customer_visits"),
         )
         .where(Visit.tenant_id == user["tenant_id"])
         .group_by(time_trunc)

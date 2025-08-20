@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
+from app.models.database import Base
 
 # this is the Alembic Config object
 config = context.config
@@ -22,7 +23,7 @@ config.set_main_option(
     f"postgresql://{settings.db_user}:{settings.db_password}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
 )
 
-target_metadata = None
+target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
