@@ -62,7 +62,6 @@ export const Customers: React.FC = () => {
   const handleEditCustomer = (customer: Customer) => {
     setEditingCustomer(customer);
     form.setFieldsValue({
-      customer_id: customer.customer_id,
       name: customer.name,
       gender: customer.gender,
     });
@@ -246,24 +245,7 @@ export const Customers: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateCustomer}
         >
-          <Form.Item
-            name="customer_id"
-            label="Customer ID"
-            rules={[
-              { required: true, message: 'Please input customer ID!' },
-              { 
-                pattern: /^(cust-\d{3,6}|\d+)$/, 
-                message: 'Customer ID must be either a number (e.g. 1222) or format "cust-XXX" (e.g. cust-001)' 
-              }
-            ]}
-          >
-            <Input 
-              placeholder="e.g. cust-001 or 1222" 
-              disabled={!!editingCustomer}
-            />
-          </Form.Item>
-
-          <Form.Item
+<Form.Item
             name="name"
             label="Customer Name"
           >
