@@ -20,7 +20,7 @@ export enum CameraType {
 export interface Camera {
   tenant_id: string;
   site_id: string;
-  camera_id: string;
+  camera_id: number;
   name: string;
   camera_type: CameraType;
   rtsp_url?: string;
@@ -31,7 +31,7 @@ export interface Camera {
 
 export interface Staff {
   tenant_id: string;
-  staff_id: string;
+  staff_id: number;
   name: string;
   site_id?: string;
   is_active: boolean;
@@ -40,7 +40,7 @@ export interface Staff {
 
 export interface Customer {
   tenant_id: string;
-  customer_id: string;
+  customer_id: number;
   name?: string;
   gender?: string;
   first_seen: string;
@@ -51,10 +51,10 @@ export interface Customer {
 export interface Visit {
   tenant_id: string;
   visit_id: string;
-  person_id: string;
+  person_id: number;
   person_type: 'staff' | 'customer';
   site_id: string;
-  camera_id: string;
+  camera_id: number;
   timestamp: string;
   confidence_score: number;
   image_path?: string;

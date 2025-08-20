@@ -99,27 +99,27 @@ class ApiClient {
 
   async createCamera(
     siteId: string, 
-    camera: Omit<Camera, 'tenant_id' | 'site_id' | 'created_at' | 'is_active'>
+    camera: Omit<Camera, 'tenant_id' | 'site_id' | 'camera_id' | 'created_at' | 'is_active'>
   ): Promise<Camera> {
     const response = await this.client.post<Camera>(`/sites/${siteId}/cameras`, camera);
     return response.data;
   }
 
-  async getCamera(siteId: string, cameraId: string): Promise<Camera> {
+  async getCamera(siteId: string, cameraId: number): Promise<Camera> {
     const response = await this.client.get<Camera>(`/sites/${siteId}/cameras/${cameraId}`);
     return response.data;
   }
 
   async updateCamera(
     siteId: string, 
-    cameraId: string,
+    cameraId: number,
     camera: Omit<Camera, 'tenant_id' | 'site_id' | 'created_at' | 'is_active' | 'camera_id'>
   ): Promise<Camera> {
     const response = await this.client.put<Camera>(`/sites/${siteId}/cameras/${cameraId}`, camera);
     return response.data;
   }
 
-  async deleteCamera(siteId: string, cameraId: string): Promise<void> {
+  async deleteCamera(siteId: string, cameraId: number): Promise<void> {
     await this.client.delete(`/sites/${siteId}/cameras/${cameraId}`);
   }
 
@@ -129,25 +129,25 @@ class ApiClient {
     return response.data;
   }
 
-  async createStaff(staff: Omit<Staff, 'tenant_id' | 'created_at' | 'is_active'>): Promise<Staff> {
+  async createStaff(staff: Omit<Staff, 'tenant_id' | 'staff_id' | 'created_at' | 'is_active'>): Promise<Staff> {
     const response = await this.client.post<Staff>('/staff', staff);
     return response.data;
   }
 
-  async getStaffMember(staffId: string): Promise<Staff> {
+  async getStaffMember(staffId: number): Promise<Staff> {
     const response = await this.client.get<Staff>(`/staff/${staffId}`);
     return response.data;
   }
 
   async updateStaff(
-    staffId: string,
+    staffId: number,
     staff: Omit<Staff, 'tenant_id' | 'created_at' | 'is_active' | 'staff_id'>
   ): Promise<Staff> {
     const response = await this.client.put<Staff>(`/staff/${staffId}`, staff);
     return response.data;
   }
 
-  async deleteStaff(staffId: string): Promise<void> {
+  async deleteStaff(staffId: number): Promise<void> {
     await this.client.delete(`/staff/${staffId}`);
   }
 
@@ -157,25 +157,25 @@ class ApiClient {
     return response.data;
   }
 
-  async createCustomer(customer: Omit<Customer, 'tenant_id' | 'first_seen' | 'last_seen' | 'visit_count'>): Promise<Customer> {
+  async createCustomer(customer: Omit<Customer, 'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'>): Promise<Customer> {
     const response = await this.client.post<Customer>('/customers', customer);
     return response.data;
   }
 
-  async getCustomer(customerId: string): Promise<Customer> {
+  async getCustomer(customerId: number): Promise<Customer> {
     const response = await this.client.get<Customer>(`/customers/${customerId}`);
     return response.data;
   }
 
   async updateCustomer(
-    customerId: string,
+    customerId: number,
     customer: Partial<Omit<Customer, 'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'>>
   ): Promise<Customer> {
     const response = await this.client.put<Customer>(`/customers/${customerId}`, customer);
     return response.data;
   }
 
-  async deleteCustomer(customerId: string): Promise<void> {
+  async deleteCustomer(customerId: number): Promise<void> {
     await this.client.delete(`/customers/${customerId}`);
   }
 

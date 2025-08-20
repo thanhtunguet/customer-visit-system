@@ -68,7 +68,6 @@ export const StaffPage: React.FC = () => {
   const handleEditStaff = (staffMember: Staff) => {
     setEditingStaff(staffMember);
     form.setFieldsValue({
-      staff_id: staffMember.staff_id,
       name: staffMember.name,
       site_id: staffMember.site_id,
     });
@@ -241,22 +240,7 @@ export const StaffPage: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateStaff}
         >
-          <Form.Item
-            name="staff_id"
-            label="Staff ID"
-            rules={[
-              { required: true, message: 'Please input staff ID!' },
-              { 
-                pattern: /^(staff-\d{3,6}|\d+)$/, 
-                message: 'Staff ID must be either a number (e.g. 1001) or format "staff-XXX" (e.g. staff-001)' 
-              }
-            ]}
-          >
-            <Input 
-              placeholder="e.g. staff-001 or 1001" 
-              disabled={!!editingStaff}
-            />
-          </Form.Item>
+
 
           <Form.Item
             name="name"

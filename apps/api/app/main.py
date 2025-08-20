@@ -130,7 +130,6 @@ class SiteResponse(BaseModel):
 
 
 class CameraCreate(BaseModel):
-    camera_id: str
     name: str
     camera_type: CameraType = CameraType.RTSP
     rtsp_url: Optional[str] = None
@@ -140,7 +139,7 @@ class CameraCreate(BaseModel):
 class CameraResponse(BaseModel):
     tenant_id: str
     site_id: str
-    camera_id: str
+    camera_id: int
     name: str
     camera_type: CameraType
     rtsp_url: Optional[str]
@@ -150,7 +149,6 @@ class CameraResponse(BaseModel):
 
 
 class StaffCreate(BaseModel):
-    staff_id: str
     name: str
     site_id: Optional[str] = None
     face_embedding: Optional[List[float]] = None
@@ -158,7 +156,7 @@ class StaffCreate(BaseModel):
 
 class StaffResponse(BaseModel):
     tenant_id: str
-    staff_id: str
+    staff_id: int
     name: str
     site_id: Optional[str]
     is_active: bool
@@ -167,7 +165,7 @@ class StaffResponse(BaseModel):
 
 class CustomerResponse(BaseModel):
     tenant_id: str
-    customer_id: str
+    customer_id: int
     name: Optional[str]
     gender: Optional[str]
     first_seen: datetime
@@ -175,7 +173,6 @@ class CustomerResponse(BaseModel):
     visit_count: int
 
 class CustomerCreate(BaseModel):
-    customer_id: str
     name: Optional[str] = None
     gender: Optional[str] = None
     estimated_age_range: Optional[str] = None
@@ -190,10 +187,10 @@ class CustomerUpdate(BaseModel):
 class VisitResponse(BaseModel):
     tenant_id: str
     visit_id: str
-    person_id: str
+    person_id: int
     person_type: str
     site_id: str
-    camera_id: str
+    camera_id: int
     timestamp: datetime
     confidence_score: float
     image_path: Optional[str]
@@ -201,7 +198,7 @@ class VisitResponse(BaseModel):
 
 class FaceEventResponse(BaseModel):
     match: str
-    person_id: Optional[str]
+    person_id: Optional[int]
     similarity: float
     visit_id: Optional[str]
     person_type: str
@@ -349,7 +346,6 @@ async def create_camera(
     new_camera = Camera(
         tenant_id=user["tenant_id"],
         site_id=site_id,
-        camera_id=camera.camera_id,
         name=camera.name,
         camera_type=camera.camera_type,
         rtsp_url=camera.rtsp_url,
@@ -362,7 +358,7 @@ async def create_camera(
 @app.get("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
 async def get_camera(
     site_id: str,
-    camera_id: str,
+    camera_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -387,7 +383,7 @@ async def get_camera(
 @app.put("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
 async def update_camera(
     site_id: str,
-    camera_id: str,
+    camera_id: int,
     camera_update: CameraCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -421,7 +417,7 @@ async def update_camera(
 @app.delete("/v1/sites/{site_id}/cameras/{camera_id}")
 async def delete_camera(
     site_id: str,
-    camera_id: str,
+    camera_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -471,37 +467,33 @@ async def create_staff(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
-    # Enroll staff with face embedding if provided
+    # Create staff member first to get auto-generated ID
+    new_staff = Staff(
+        tenant_id=user["tenant_id"],
+        name=staff.name,
+        site_id=staff.site_id
+    )
+    db_session.add(new_staff)
+    await db_session.commit()
+    await db_session.refresh(new_staff)
+    
+    # Enroll with face embedding if provided
     if staff.face_embedding:
         await staff_service.enroll_staff_member(
             db_session=db_session,
             tenant_id=user["tenant_id"],
-            staff_id=staff.staff_id,
+            staff_id=new_staff.staff_id,
             name=staff.name,
             face_embedding=staff.face_embedding,
             site_id=staff.site_id
         )
-    else:
-        new_staff = Staff(
-            tenant_id=user["tenant_id"],
-            staff_id=staff.staff_id,
-            name=staff.name,
-            site_id=staff.site_id
-        )
-        db_session.add(new_staff)
-        await db_session.commit()
     
     # Return the created staff member
-    result = await db_session.execute(
-        select(Staff).where(
-            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff.staff_id)
-        )
-    )
-    return result.scalar_one()
+    return new_staff
 
 @app.get("/v1/staff/{staff_id}", response_model=StaffResponse)
 async def get_staff_member(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -521,7 +513,7 @@ async def get_staff_member(
 
 @app.put("/v1/staff/{staff_id}", response_model=StaffResponse)
 async def update_staff(
-    staff_id: str,
+    staff_id: int,
     staff_update: StaffCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -561,7 +553,7 @@ async def update_staff(
 
 @app.delete("/v1/staff/{staff_id}")
 async def delete_staff(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -620,7 +612,6 @@ async def create_customer(
     
     new_customer = Customer(
         tenant_id=user["tenant_id"],
-        customer_id=customer.customer_id,
         name=customer.name,
         gender=customer.gender,
         estimated_age_range=customer.estimated_age_range
@@ -633,7 +624,7 @@ async def create_customer(
 
 @app.get("/v1/customers/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
-    customer_id: str,
+    customer_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -653,7 +644,7 @@ async def get_customer(
 
 @app.put("/v1/customers/{customer_id}", response_model=CustomerResponse)
 async def update_customer(
-    customer_id: str,
+    customer_id: int,
     customer_update: CustomerUpdate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -684,7 +675,7 @@ async def update_customer(
 
 @app.delete("/v1/customers/{customer_id}")
 async def delete_customer(
-    customer_id: str,
+    customer_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):

@@ -88,7 +88,6 @@ export const Cameras: React.FC = () => {
   const handleEditCamera = (camera: Camera) => {
     setEditingCamera(camera);
     form.setFieldsValue({
-      camera_id: camera.camera_id,
       name: camera.name,
       camera_type: camera.camera_type,
       rtsp_url: camera.rtsp_url,
@@ -296,19 +295,7 @@ export const Cameras: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateCamera}
         >
-          <Form.Item
-            name="camera_id"
-            label="Camera ID"
-            rules={[
-              { required: true, message: 'Please input camera ID!' },
-              { pattern: /^[a-z0-9-]+$/, message: 'Camera ID can only contain lowercase letters, numbers, and hyphens' }
-            ]}
-          >
-            <Input 
-              placeholder="e.g. entrance-cam-01" 
-              disabled={!!editingCamera}
-            />
-          </Form.Item>
+
 
           <Form.Item
             name="name"

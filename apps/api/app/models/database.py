@@ -53,7 +53,7 @@ class Camera(Base):
     
     tenant_id = Column(String(64), primary_key=True)
     site_id = Column(String(64), primary_key=True)
-    camera_id = Column(String(64), primary_key=True)
+    camera_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)
     rtsp_url = Column(Text)  # For RTSP cameras
@@ -75,7 +75,7 @@ class Staff(Base):
     __tablename__ = "staff"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    staff_id = Column(String(64), primary_key=True)  # Changed from BigInteger to String
+    staff_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     site_id = Column(String(64))
     is_active = Column(Boolean, default=True, nullable=False)
@@ -91,7 +91,7 @@ class Customer(Base):
     __tablename__ = "customers"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    customer_id = Column(String(64), primary_key=True)  # Changed from BigInteger to String
+    customer_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255))
     gender = Column(String(16))  # male, female, unknown
     estimated_age_range = Column(String(32))
@@ -112,10 +112,10 @@ class Visit(Base):
     
     tenant_id = Column(String(64), primary_key=True)
     visit_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
-    person_id = Column(String(64), nullable=False)
+    person_id = Column(Integer, nullable=False)
     person_type = Column(String(16), nullable=False)  # staff, customer
     site_id = Column(String(64), nullable=False)
-    camera_id = Column(String(64), nullable=False)
+    camera_id = Column(Integer, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     confidence_score = Column(Float, nullable=False)
     face_embedding = Column(Text)  # JSON serialized vector
