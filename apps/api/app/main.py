@@ -19,7 +19,7 @@ from .core.middleware import tenant_context_middleware
 from .core.security import mint_jwt, get_current_user
 from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
-from .models.database import Tenant, Site, Camera, Staff, Customer, Visit, ApiKey
+from .models.database import Tenant, Site, Camera, Staff, Customer, Visit, ApiKey, CameraType
 from .services.face_service import face_service, staff_service
 from pkg_common.models import FaceDetectedEvent
 
@@ -132,7 +132,9 @@ class SiteResponse(BaseModel):
 class CameraCreate(BaseModel):
     camera_id: str
     name: str
+    camera_type: CameraType = CameraType.RTSP
     rtsp_url: Optional[str] = None
+    device_index: Optional[int] = None
 
 
 class CameraResponse(BaseModel):
@@ -140,13 +142,15 @@ class CameraResponse(BaseModel):
     site_id: str
     camera_id: str
     name: str
+    camera_type: CameraType
     rtsp_url: Optional[str]
+    device_index: Optional[int]
     is_active: bool
     created_at: datetime
 
 
 class StaffCreate(BaseModel):
-    staff_id: str
+    staff_id: int
     name: str
     site_id: Optional[str] = None
     face_embedding: Optional[List[float]] = None
@@ -154,7 +158,7 @@ class StaffCreate(BaseModel):
 
 class StaffResponse(BaseModel):
     tenant_id: str
-    staff_id: str
+    staff_id: int
     name: str
     site_id: Optional[str]
     is_active: bool
@@ -163,7 +167,7 @@ class StaffResponse(BaseModel):
 
 class CustomerResponse(BaseModel):
     tenant_id: str
-    customer_id: str
+    customer_id: int
     name: Optional[str]
     gender: Optional[str]
     first_seen: datetime
@@ -171,7 +175,7 @@ class CustomerResponse(BaseModel):
     visit_count: int
 
 class CustomerCreate(BaseModel):
-    customer_id: str
+    customer_id: int
     name: Optional[str] = None
     gender: Optional[str] = None
     estimated_age_range: Optional[str] = None
@@ -347,7 +351,9 @@ async def create_camera(
         site_id=site_id,
         camera_id=camera.camera_id,
         name=camera.name,
-        rtsp_url=camera.rtsp_url
+        camera_type=camera.camera_type,
+        rtsp_url=camera.rtsp_url,
+        device_index=camera.device_index
     )
     db_session.add(new_camera)
     await db_session.commit()
@@ -403,7 +409,9 @@ async def update_camera(
     
     # Update camera fields
     camera.name = camera_update.name
+    camera.camera_type = camera_update.camera_type
     camera.rtsp_url = camera_update.rtsp_url
+    camera.device_index = camera_update.device_index
     
     await db_session.commit()
     await db_session.refresh(camera)

@@ -14,7 +14,7 @@ import {
 } from 'antd';
 import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
-import { Camera, Site } from '../types/api';
+import { Camera, Site, CameraType } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -89,7 +89,9 @@ export const Cameras: React.FC = () => {
     form.setFieldsValue({
       camera_id: camera.camera_id,
       name: camera.name,
+      camera_type: camera.camera_type,
       rtsp_url: camera.rtsp_url,
+      device_index: camera.device_index,
     });
     setModalVisible(true);
   };
@@ -292,8 +294,61 @@ export const Cameras: React.FC = () => {
           </Form.Item>
 
           <Form.Item
+            name="camera_type"
+            label="Camera Type"
+            rules={[{ required: true, message: 'Please select camera type!' }]}
+          >
+            <Select placeholder="Select camera type" defaultValue={CameraType.RTSP}>
+              <Select.Option value={CameraType.RTSP}>RTSP Camera</Select.Option>
+              <Select.Option value={CameraType.WEBCAM}>Webcam</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => 
+              prevValues.camera_type !== currentValues.camera_type
+            }
+          >
+            {({ getFieldValue }) => {
+              const cameraType = getFieldValue('camera_type');
+              
+              if (cameraType === CameraType.RTSP) {
+                return (
+                  <Form.Item
+                    name="rtsp_url"
+                    label="RTSP URL"
+                    rules={[{ required: true, message: 'Please input RTSP URL!' }]}
+                  >
+                    <Input placeholder="e.g. rtsp://192.168.1.100:554/stream" />
+                  </Form.Item>
+                );
+              }
+              
+              if (cameraType === CameraType.WEBCAM) {
+                return (
+                  <Form.Item
+                    name="device_index"
+                    label="Device Index"
+                    rules={[{ required: true, message: 'Please input device index!' }]}
+                  >
+                    <Input 
+                      type="number" 
+                      placeholder="e.g. 0 for first webcam, 1 for second" 
+                      min={0}
+                    />
+                  </Form.Item>
+                );
+              }
+              
+              return null;
+            }}
+          </Form.Item>
+
+          <Form.Item
             name="rtsp_url"
-            label="RTSP URL"
+            label="RTSP URL (legacy)"
+            style={{ display: 'none' }}
           >
             <Input placeholder="e.g. rtsp://192.168.1.100:554/stream" />
           </Form.Item>

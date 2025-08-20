@@ -246,11 +246,12 @@ export const StaffPage: React.FC = () => {
             label="Staff ID"
             rules={[
               { required: true, message: 'Please input staff ID!' },
-              { pattern: /^[a-z0-9-]+$/, message: 'Staff ID can only contain lowercase letters, numbers, and hyphens' }
+              { type: 'number', message: 'Staff ID must be a number' }
             ]}
           >
             <Input 
-              placeholder="e.g. john-doe" 
+              type="number"
+              placeholder="e.g. 1001" 
               disabled={!!editingStaff}
             />
           </Form.Item>

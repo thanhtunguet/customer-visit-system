@@ -251,11 +251,12 @@ export const Customers: React.FC = () => {
             label="Customer ID"
             rules={[
               { required: true, message: 'Please input customer ID!' },
-              { pattern: /^[a-z0-9-]+$/, message: 'Customer ID can only contain lowercase letters, numbers, and hyphens' }
+              { type: 'number', message: 'Customer ID must be a number' }
             ]}
           >
             <Input 
-              placeholder="e.g. cust-001" 
+              type="number"
+              placeholder="e.g. 2001" 
               disabled={!!editingCustomer}
             />
           </Form.Item>

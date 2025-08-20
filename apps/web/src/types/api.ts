@@ -12,19 +12,26 @@ export interface Site {
   created_at: string;
 }
 
+export enum CameraType {
+  RTSP = 'rtsp',
+  WEBCAM = 'webcam'
+}
+
 export interface Camera {
   tenant_id: string;
   site_id: string;
   camera_id: string;
   name: string;
+  camera_type: CameraType;
   rtsp_url?: string;
+  device_index?: number;
   is_active: boolean;
   created_at: string;
 }
 
 export interface Staff {
   tenant_id: string;
-  staff_id: string;
+  staff_id: number;
   name: string;
   site_id?: string;
   is_active: boolean;
@@ -33,7 +40,7 @@ export interface Staff {
 
 export interface Customer {
   tenant_id: string;
-  customer_id: string;
+  customer_id: number;
   name?: string;
   gender?: string;
   first_seen: string;

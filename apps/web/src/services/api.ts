@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { 
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
-  AuthUser, LoginRequest, TokenResponse 
+  AuthUser, LoginRequest, TokenResponse, CameraType 
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';

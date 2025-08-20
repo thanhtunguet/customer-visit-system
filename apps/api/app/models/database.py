@@ -3,13 +3,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, ForeignKey, ForeignKeyConstraint, Text, Index
+from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, BigInteger, ForeignKey, ForeignKeyConstraint, Text, Index, Enum
+import enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 Base = declarative_base()
+
+
+class CameraType(enum.Enum):
+    RTSP = "rtsp"
+    WEBCAM = "webcam"
 
 
 class Tenant(Base):
@@ -49,7 +55,9 @@ class Camera(Base):
     site_id = Column(String(64), primary_key=True)
     camera_id = Column(String(64), primary_key=True)
     name = Column(String(255), nullable=False)
-    rtsp_url = Column(Text)
+    camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)
+    rtsp_url = Column(Text)  # For RTSP cameras
+    device_index = Column(Integer)  # For webcam cameras (e.g., 0, 1, 2)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -67,7 +75,7 @@ class Staff(Base):
     __tablename__ = "staff"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    staff_id = Column(String(64), primary_key=True)
+    staff_id = Column(BigInteger, primary_key=True)
     name = Column(String(255), nullable=False)
     site_id = Column(String(64))
     is_active = Column(Boolean, default=True, nullable=False)
@@ -83,7 +91,7 @@ class Customer(Base):
     __tablename__ = "customers"
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    customer_id = Column(String(64), primary_key=True)
+    customer_id = Column(BigInteger, primary_key=True)
     name = Column(String(255))
     gender = Column(String(16))  # male, female, unknown
     estimated_age_range = Column(String(32))
