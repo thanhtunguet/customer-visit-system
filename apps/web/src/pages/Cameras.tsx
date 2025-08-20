@@ -10,6 +10,7 @@ import {
   Alert,
   Tag,
   Select,
+  Radio,
   Popconfirm
 } from 'antd';
 import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -220,6 +221,10 @@ export const Cameras: React.FC = () => {
             onClick={() => {
               setEditingCamera(null);
               form.resetFields();
+              // Set default values when creating new camera
+              form.setFieldsValue({
+                camera_type: CameraType.RTSP
+              });
               setModalVisible(true);
             }}
             className="bg-blue-600"
@@ -298,17 +303,15 @@ export const Cameras: React.FC = () => {
             label="Camera Type"
             rules={[{ required: true, message: 'Please select camera type!' }]}
           >
-            <Select placeholder="Select camera type" defaultValue={CameraType.RTSP}>
-              <Select.Option value={CameraType.RTSP}>RTSP Camera</Select.Option>
-              <Select.Option value={CameraType.WEBCAM}>Webcam</Select.Option>
-            </Select>
+            <Radio.Group>
+              <Radio value={CameraType.RTSP}>RTSP Camera</Radio>
+              <Radio value={CameraType.WEBCAM}>Webcam</Radio>
+            </Radio.Group>
           </Form.Item>
 
           <Form.Item
             noStyle
-            shouldUpdate={(prevValues, currentValues) => 
-              prevValues.camera_type !== currentValues.camera_type
-            }
+            shouldUpdate={true}
           >
             {({ getFieldValue }) => {
               const cameraType = getFieldValue('camera_type');

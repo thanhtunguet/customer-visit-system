@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
 from app.services.face_service import FaceMatchingService, StaffService
@@ -50,9 +50,9 @@ async def test_process_new_customer_face_event(mock_db_session, face_event):
     service = FaceMatchingService()
     
     # Mock Milvus to return no matches
-    with pytest.mock.patch('app.services.face_service.milvus_client.search_similar_faces', 
+    with patch('app.services.face_service.milvus_client.search_similar_faces', 
                           return_value=[]):
-        with pytest.mock.patch('app.services.face_service.milvus_client.insert_embedding'):
+        with patch('app.services.face_service.milvus_client.insert_embedding'):
             result = await service.process_face_event(
                 event=face_event,
                 db_session=mock_db_session,
@@ -77,9 +77,9 @@ async def test_process_known_customer_face_event(mock_db_session, face_event):
         "similarity": 0.85
     }]
     
-    with pytest.mock.patch('app.services.face_service.milvus_client.search_similar_faces',
+    with patch('app.services.face_service.milvus_client.search_similar_faces',
                           return_value=mock_matches):
-        with pytest.mock.patch('app.services.face_service.milvus_client.insert_embedding'):
+        with patch('app.services.face_service.milvus_client.insert_embedding'):
             result = await service.process_face_event(
                 event=face_event,
                 db_session=mock_db_session,
@@ -98,7 +98,7 @@ async def test_staff_enrollment(mock_db_session):
     service = StaffService()
     embedding = [0.1] * 512
     
-    with pytest.mock.patch('app.services.face_service.milvus_client.insert_embedding'):
+    with patch('app.services.face_service.milvus_client.insert_embedding'):
         staff = await service.enroll_staff_member(
             db_session=mock_db_session,
             tenant_id="t-test",

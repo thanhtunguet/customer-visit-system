@@ -8,8 +8,8 @@ sqlalchemy==2.0.30
 asyncpg==0.29.0
 alembic==1.13.2
 httpx==0.27.0
-# pymilvus==2.4.5  # Temporarily disabled due to dependency conflicts
-# minio==7.2.7  # Temporarily disabled for development
+pymilvus==2.4.5
+minio==7.2.7
 APScheduler==3.10.4
 pgvector==0.3.2
 pytest==8.2.2
