@@ -101,7 +101,7 @@ class StaffFaceImage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationships 
-    tenant = relationship("Tenant")
+    tenant = relationship("Tenant", overlaps="face_images")
     
     __table_args__ = (
         ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),

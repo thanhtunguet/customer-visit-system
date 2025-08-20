@@ -117,6 +117,9 @@ class FaceProcessingService:
             
             face_results = []
             for (x, y, w, h) in faces:
+                # Convert NumPy types to Python ints to avoid JSON serialization issues
+                x, y, w, h = int(x), int(y), int(w), int(h)
+                
                 # Generate synthetic 5-point landmarks based on face bbox
                 # In production, use a proper landmark detector like dlib or MediaPipe
                 center_x, center_y = x + w // 2, y + h // 2
@@ -125,18 +128,18 @@ class FaceProcessingService:
                 mouth_y = y + 2 * h // 3
                 
                 landmarks = [
-                    [x + w // 4, eye_y],      # left eye
-                    [x + 3 * w // 4, eye_y],  # right eye
-                    [center_x, nose_y],        # nose tip
-                    [x + w // 3, mouth_y],     # left mouth corner
-                    [x + 2 * w // 3, mouth_y] # right mouth corner
+                    [float(x + w // 4), float(eye_y)],      # left eye
+                    [float(x + 3 * w // 4), float(eye_y)],  # right eye
+                    [float(center_x), float(nose_y)],        # nose tip
+                    [float(x + w // 3), float(mouth_y)],     # left mouth corner
+                    [float(x + 2 * w // 3), float(mouth_y)] # right mouth corner
                 ]
                 
                 # Calculate confidence based on face size (larger faces = higher confidence)
                 confidence = min(0.9, max(0.3, (w * h) / (image.shape[0] * image.shape[1]) * 10))
                 
                 face_results.append({
-                    'bbox': [int(x), int(y), int(w), int(h)],
+                    'bbox': [x, y, w, h],
                     'landmarks': landmarks,
                     'confidence': float(confidence)
                 })
@@ -234,10 +237,10 @@ class FaceProcessingService:
             # Upload to MinIO
             object_path = f"staff-faces/{tenant_id}/{image_id}.jpg"
             
-            await minio_client.upload_file(
-                bucket_name="faces-derived",
+            minio_client.upload_image(
+                bucket="faces-derived",
                 object_name=object_path,
-                file_data=image_bytes,
+                data=image_bytes,
                 content_type="image/jpeg"
             )
             
@@ -288,16 +291,32 @@ class FaceProcessingService:
             # Upload to MinIO
             image_path = await self.upload_image_to_minio(image, tenant_id, image_id)
             
-            return {
+            # Ensure all data is JSON serializable
+            def ensure_json_serializable(obj):
+                """Convert NumPy types to Python native types"""
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, list):
+                    return [ensure_json_serializable(item) for item in obj]
+                elif isinstance(obj, dict):
+                    return {key: ensure_json_serializable(value) for key, value in obj.items()}
+                else:
+                    return obj
+            
+            result = {
                 'success': True,
                 'image_id': image_id,
                 'image_path': image_path,
-                'landmarks': landmarks,
-                'embedding': embedding,
-                'face_count': len(face_results),
-                'confidence': face_data['confidence'],
-                'bbox': face_data['bbox']
+                'landmarks': ensure_json_serializable(landmarks),
+                'embedding': ensure_json_serializable(embedding),
+                'face_count': int(len(face_results)),
+                'confidence': float(face_data['confidence']),
+                'bbox': ensure_json_serializable(face_data['bbox'])
             }
+            
+            return result
             
         except Exception as e:
             logger.error(f"Face processing failed: {e}")

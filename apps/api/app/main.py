@@ -800,11 +800,7 @@ async def upload_staff_face_image(
             person_id=staff_id,
             person_type="staff",
             embedding=processing_result['embedding'],
-            created_at=datetime.utcnow(),
-            metadata={
-                "image_id": processing_result['image_id'],
-                "is_primary": face_data.is_primary
-            }
+            created_at=int(datetime.utcnow().timestamp())
         )
         
         await db_session.commit()
@@ -858,11 +854,10 @@ async def delete_staff_face_image(
         # Delete from MinIO
         await minio_client.delete_file("faces-derived", face_image.image_path)
         
-        # Delete embedding from Milvus (by metadata filter)
-        await milvus_client.delete_embedding_by_metadata(
-            tenant_id=user["tenant_id"],
-            metadata_filter={"image_id": image_id}
-        )
+        # Delete embedding from Milvus 
+        # Note: Since we don't have metadata support, we delete by person_id
+        # This will delete all embeddings for this staff member
+        await milvus_client.delete_person_embeddings(user["tenant_id"], staff_id)
         
         # Delete from database
         await db_session.delete(face_image)
@@ -926,21 +921,15 @@ async def recalculate_face_embedding(
         face_image.updated_at = datetime.utcnow()
         
         # Update embedding in Milvus
-        await milvus_client.delete_embedding_by_metadata(
-            tenant_id=user["tenant_id"],
-            metadata_filter={"image_id": image_id}
-        )
+        # Note: Since we don't have metadata support, we delete by person_id and recreate
+        await milvus_client.delete_person_embeddings(user["tenant_id"], staff_id)
         
         await milvus_client.insert_embedding(
             tenant_id=user["tenant_id"],
             person_id=staff_id,
             person_type="staff",
             embedding=processing_result['embedding'],
-            created_at=datetime.utcnow(),
-            metadata={
-                "image_id": image_id,
-                "is_primary": face_image.is_primary
-            }
+            created_at=int(datetime.utcnow().timestamp())
         )
         
         await db_session.commit()

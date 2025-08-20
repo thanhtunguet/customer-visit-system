@@ -148,6 +148,22 @@ class MinIOClient:
         except Exception:
             return False
 
+    async def download_file(self, bucket: str, object_name: str) -> bytes:
+        """Download file data from MinIO bucket"""
+        try:
+            response = self.client.get_object(bucket, object_name)
+            data = response.read()
+            response.close()
+            response.release_conn()
+            return data
+        except Exception as e:
+            logger.error(f"Failed to download file {object_name}: {e}")
+            raise
+
+    async def delete_file(self, bucket: str, object_name: str) -> bool:
+        """Delete a file from bucket (alias for delete_object)"""
+        return self.delete_object(bucket, object_name)
+
 
 # Global MinIO client instance
 minio_client = MinIOClient()
