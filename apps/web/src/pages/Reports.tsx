@@ -438,8 +438,8 @@ export const Reports: React.FC = () => {
                 <XAxis dataKey="day" />
                 <YAxis />
                 <RechartsTooltip />
-                <Bar dataKey="customers" stackId="a" fill={COLORS.primary} name="Customers" />
                 <Bar dataKey="staff" stackId="a" fill={COLORS.warning} name="Staff" />
+                <Bar dataKey="customers" stackId="a" fill={COLORS.primary} name="Customers" />
               </BarChart>
             </ResponsiveContainer>
           </Card>
