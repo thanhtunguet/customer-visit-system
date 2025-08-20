@@ -9,6 +9,7 @@ import { Cameras } from '../pages/Cameras';
 import { StaffPage } from '../pages/Staff';
 import { Customers } from '../pages/Customers';
 import { VisitsPage } from '../pages/Visits';
+import { Reports } from '../pages/Reports';
 import '../styles.css';
 
 // Protected Route component
@@ -65,10 +66,7 @@ export function App() {
               <Route path="visits" element={<VisitsPage />} />
               
               {/* Placeholder routes for other pages */}
-              <Route 
-                path="reports" 
-                element={<div className="p-6"><h2>Reports - Coming Soon</h2></div>} 
-              />
+              <Route path="reports" element={<Reports />} />
               <Route 
                 path="tenants" 
                 element={<div className="p-6"><h2>Tenants - Coming Soon</h2></div>} 
