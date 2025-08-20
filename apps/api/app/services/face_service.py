@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.milvus_client import milvus_client
@@ -178,8 +178,16 @@ class StaffService:
         name: str,
         face_embedding: List[float],
         site_id: Optional[str] = None,
+        update_existing: bool = False,
     ) -> Staff:
         """Enroll a new staff member with face embedding"""
+        
+        # If updating, delete existing embeddings first
+        if update_existing:
+            try:
+                await milvus_client.delete_person_embeddings(tenant_id, staff_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete existing staff embeddings: {e}")
         
         # Store embedding in Milvus
         current_time = int(time.time())
@@ -191,16 +199,26 @@ class StaffService:
             created_at=current_time,
         )
 
-        # Create staff record
-        staff = Staff(
-            tenant_id=tenant_id,
-            staff_id=staff_id,
-            name=name,
-            site_id=site_id,
-            face_embedding=json.dumps(face_embedding),
-        )
+        if update_existing:
+            # Update existing staff record
+            result = await db_session.execute(
+                select(Staff).where(
+                    and_(Staff.tenant_id == tenant_id, Staff.staff_id == staff_id)
+                )
+            )
+            staff = result.scalar_one()
+            staff.face_embedding = json.dumps(face_embedding)
+        else:
+            # Create new staff record
+            staff = Staff(
+                tenant_id=tenant_id,
+                staff_id=staff_id,
+                name=name,
+                site_id=site_id,
+                face_embedding=json.dumps(face_embedding),
+            )
+            db_session.add(staff)
         
-        db_session.add(staff)
         await db_session.commit()
         return staff
 

@@ -170,6 +170,18 @@ class CustomerResponse(BaseModel):
     last_seen: Optional[datetime]
     visit_count: int
 
+class CustomerCreate(BaseModel):
+    customer_id: str
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    estimated_age_range: Optional[str] = None
+
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    estimated_age_range: Optional[str] = None
+
 
 class VisitResponse(BaseModel):
     tenant_id: str
@@ -341,6 +353,89 @@ async def create_camera(
     await db_session.commit()
     return new_camera
 
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
+async def get_camera(
+    site_id: str,
+    camera_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == user["tenant_id"],
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    return camera
+
+
+@app.put("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
+async def update_camera(
+    site_id: str,
+    camera_id: str,
+    camera_update: CameraCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == user["tenant_id"],
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Update camera fields
+    camera.name = camera_update.name
+    camera.rtsp_url = camera_update.rtsp_url
+    
+    await db_session.commit()
+    await db_session.refresh(camera)
+    return camera
+
+
+@app.delete("/v1/sites/{site_id}/cameras/{camera_id}")
+async def delete_camera(
+    site_id: str,
+    camera_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == user["tenant_id"],
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    await db_session.delete(camera)
+    await db_session.commit()
+    return {"message": "Camera deleted successfully"}
+
 
 # ===============================
 # Staff Management
@@ -396,6 +491,93 @@ async def create_staff(
     )
     return result.scalar_one()
 
+@app.get("/v1/staff/{staff_id}", response_model=StaffResponse)
+async def get_staff_member(
+    staff_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    staff_member = result.scalar_one_or_none()
+    if not staff_member:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    return staff_member
+
+
+@app.put("/v1/staff/{staff_id}", response_model=StaffResponse)
+async def update_staff(
+    staff_id: str,
+    staff_update: StaffCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    staff_member = result.scalar_one_or_none()
+    if not staff_member:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    # Update staff fields
+    staff_member.name = staff_update.name
+    staff_member.site_id = staff_update.site_id
+    
+    # Handle face embedding update
+    if staff_update.face_embedding:
+        # Delete existing embeddings and create new ones
+        await staff_service.enroll_staff_member(
+            db_session=db_session,
+            tenant_id=user["tenant_id"],
+            staff_id=staff_id,
+            name=staff_update.name,
+            face_embedding=staff_update.face_embedding,
+            site_id=staff_update.site_id,
+            update_existing=True
+        )
+    
+    await db_session.commit()
+    await db_session.refresh(staff_member)
+    return staff_member
+
+
+@app.delete("/v1/staff/{staff_id}")
+async def delete_staff(
+    staff_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    staff_member = result.scalar_one_or_none()
+    if not staff_member:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    # Delete from Milvus as well
+    try:
+        await milvus_client.delete_person_embeddings(user["tenant_id"], staff_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete staff embeddings from Milvus: {e}")
+    
+    await db_session.delete(staff_member)
+    await db_session.commit()
+    return {"message": "Staff member deleted successfully"}
+
 
 # ===============================
 # Customers
@@ -419,6 +601,105 @@ async def list_customers(
     )
     customers = result.scalars().all()
     return customers
+
+@app.post("/v1/customers", response_model=CustomerResponse)
+async def create_customer(
+    customer: CustomerCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    new_customer = Customer(
+        tenant_id=user["tenant_id"],
+        customer_id=customer.customer_id,
+        name=customer.name,
+        gender=customer.gender,
+        estimated_age_range=customer.estimated_age_range
+    )
+    db_session.add(new_customer)
+    await db_session.commit()
+    await db_session.refresh(new_customer)
+    return new_customer
+
+
+@app.get("/v1/customers/{customer_id}", response_model=CustomerResponse)
+async def get_customer(
+    customer_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    customer = result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    return customer
+
+
+@app.put("/v1/customers/{customer_id}", response_model=CustomerResponse)
+async def update_customer(
+    customer_id: str,
+    customer_update: CustomerUpdate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    customer = result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Update customer fields
+    if customer_update.name is not None:
+        customer.name = customer_update.name
+    if customer_update.gender is not None:
+        customer.gender = customer_update.gender
+    if customer_update.estimated_age_range is not None:
+        customer.estimated_age_range = customer_update.estimated_age_range
+    
+    await db_session.commit()
+    await db_session.refresh(customer)
+    return customer
+
+
+@app.delete("/v1/customers/{customer_id}")
+async def delete_customer(
+    customer_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    result = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    customer = result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Delete customer embeddings from Milvus
+    try:
+        await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete customer embeddings from Milvus: {e}")
+    
+    await db_session.delete(customer)
+    await db_session.commit()
+    return {"message": "Customer deleted successfully"}
 
 
 # ===============================

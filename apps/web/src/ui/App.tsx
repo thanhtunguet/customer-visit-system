@@ -5,6 +5,9 @@ import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
 import { Dashboard } from '../pages/Dashboard';
 import { Sites } from '../pages/Sites';
+import { Cameras } from '../pages/Cameras';
+import { StaffPage } from '../pages/Staff';
+import { Customers } from '../pages/Customers';
 import '../styles.css';
 
 // Protected Route component
@@ -55,18 +58,9 @@ export function App() {
               <Route path="sites" element={<Sites />} />
               
               {/* Placeholder routes for other pages */}
-              <Route 
-                path="cameras" 
-                element={<div className="p-6"><h2>Cameras - Coming Soon</h2></div>} 
-              />
-              <Route 
-                path="staff" 
-                element={<div className="p-6"><h2>Staff - Coming Soon</h2></div>} 
-              />
-              <Route 
-                path="customers" 
-                element={<div className="p-6"><h2>Customers - Coming Soon</h2></div>} 
-              />
+              <Route path="cameras" element={<Cameras />} />
+              <Route path="staff" element={<StaffPage />} />
+              <Route path="customers" element={<Customers />} />
               <Route 
                 path="visits" 
                 element={<div className="p-6"><h2>Visits - Coming Soon</h2></div>} 
