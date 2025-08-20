@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_, case
+from sqlalchemy import select, func, and_, case, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .core.config import settings
@@ -19,8 +19,9 @@ from .core.middleware import tenant_context_middleware
 from .core.security import mint_jwt, get_current_user
 from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
-from .models.database import Tenant, Site, Camera, Staff, Customer, Visit, ApiKey, CameraType
+from .models.database import Tenant, Site, Camera, Staff, Customer, Visit, ApiKey, CameraType, StaffFaceImage
 from .services.face_service import face_service, staff_service
+from .services.face_processing_service import face_processing_service
 from pkg_common.models import FaceDetectedEvent
 
 
@@ -156,11 +157,35 @@ class StaffCreate(BaseModel):
 
 class StaffResponse(BaseModel):
     tenant_id: str
-    staff_id: int
+    staff_id: str
     name: str
     site_id: Optional[str]
     is_active: bool
     created_at: datetime
+
+class StaffFaceImageCreate(BaseModel):
+    image_data: str  # Base64 encoded image
+    is_primary: bool = False
+
+class StaffFaceImageResponse(BaseModel):
+    tenant_id: str
+    image_id: str  
+    staff_id: str
+    image_path: str
+    face_landmarks: Optional[List[List[float]]] = None  # 5-point landmarks
+    is_primary: bool
+    created_at: datetime
+
+class StaffWithFacesResponse(StaffResponse):
+    face_images: List[StaffFaceImageResponse] = []
+
+class FaceRecognitionTestRequest(BaseModel):
+    test_image: str  # Base64 encoded test image
+
+class FaceRecognitionTestResponse(BaseModel):
+    matches: List[dict]  # List of potential matches with similarity scores
+    best_match: Optional[dict] = None
+    processing_info: dict
 
 
 class CustomerResponse(BaseModel):
@@ -224,6 +249,23 @@ async def health_milvus():
     """Get Milvus connection health status"""
     milvus_health = await milvus_client.health_check()
     return milvus_health
+
+@app.get("/v1/health/face-processing")
+async def health_face_processing():
+    """Check if face processing dependencies are available."""
+    try:
+        from .services.face_processing_service import FACE_PROCESSING_AVAILABLE
+        return {
+            "face_processing_available": FACE_PROCESSING_AVAILABLE,
+            "status": "ready" if FACE_PROCESSING_AVAILABLE else "dependencies_missing",
+            "message": "Face processing is ready" if FACE_PROCESSING_AVAILABLE else "Install Pillow, OpenCV, and NumPy to enable face processing"
+        }
+    except Exception as e:
+        return {
+            "face_processing_available": False,
+            "status": "error",
+            "message": f"Error checking face processing status: {e}"
+        }
 
 
 @app.post("/v1/auth/token", response_model=TokenResponse)
@@ -500,7 +542,7 @@ async def create_staff(
 
 @app.get("/v1/staff/{staff_id}", response_model=StaffResponse)
 async def get_staff_member(
-    staff_id: int,
+    staff_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -520,7 +562,7 @@ async def get_staff_member(
 
 @app.put("/v1/staff/{staff_id}", response_model=StaffResponse)
 async def update_staff(
-    staff_id: int,
+    staff_id: str,
     staff_update: StaffCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -560,7 +602,7 @@ async def update_staff(
 
 @app.delete("/v1/staff/{staff_id}")
 async def delete_staff(
-    staff_id: int,
+    staff_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -584,6 +626,413 @@ async def delete_staff(
     await db_session.delete(staff_member)
     await db_session.commit()
     return {"message": "Staff member deleted successfully"}
+
+# ===============================
+# Staff Face Images API
+# ===============================
+
+@app.get("/v1/staff/{staff_id}/faces", response_model=List[StaffFaceImageResponse])
+async def get_staff_face_images(
+    staff_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get all face images for a staff member."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    if not staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    # Get face images
+    result = await db_session.execute(
+        select(StaffFaceImage).where(
+            and_(
+                StaffFaceImage.tenant_id == user["tenant_id"],
+                StaffFaceImage.staff_id == staff_id
+            )
+        ).order_by(StaffFaceImage.created_at.desc())
+    )
+    
+    face_images = result.scalars().all()
+    
+    # Parse landmarks from JSON
+    response_images = []
+    for img in face_images:
+        response_data = {
+            "tenant_id": img.tenant_id,
+            "image_id": img.image_id,
+            "staff_id": img.staff_id,
+            "image_path": img.image_path,
+            "is_primary": img.is_primary,
+            "created_at": img.created_at,
+            "face_landmarks": json.loads(img.face_landmarks) if img.face_landmarks else None
+        }
+        response_images.append(StaffFaceImageResponse(**response_data))
+    
+    return response_images
+
+@app.get("/v1/staff/{staff_id}/details", response_model=StaffWithFacesResponse)
+async def get_staff_with_faces(
+    staff_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get staff details with all face images."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Get staff member
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    staff = staff_result.scalar_one_or_none()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    # Get face images
+    images_result = await db_session.execute(
+        select(StaffFaceImage).where(
+            and_(
+                StaffFaceImage.tenant_id == user["tenant_id"],
+                StaffFaceImage.staff_id == staff_id
+            )
+        ).order_by(StaffFaceImage.created_at.desc())
+    )
+    
+    face_images = images_result.scalars().all()
+    
+    # Build response
+    response_images = []
+    for img in face_images:
+        response_data = {
+            "tenant_id": img.tenant_id,
+            "image_id": img.image_id,
+            "staff_id": img.staff_id,
+            "image_path": img.image_path,
+            "is_primary": img.is_primary,
+            "created_at": img.created_at,
+            "face_landmarks": json.loads(img.face_landmarks) if img.face_landmarks else None
+        }
+        response_images.append(StaffFaceImageResponse(**response_data))
+    
+    staff_data = {
+        "tenant_id": staff.tenant_id,
+        "staff_id": staff.staff_id,
+        "name": staff.name,
+        "site_id": staff.site_id,
+        "is_active": staff.is_active,
+        "created_at": staff.created_at,
+        "face_images": response_images
+    }
+    
+    return StaffWithFacesResponse(**staff_data)
+
+@app.post("/v1/staff/{staff_id}/faces", response_model=StaffFaceImageResponse)
+async def upload_staff_face_image(
+    staff_id: str,
+    face_data: StaffFaceImageCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Upload a new face image for a staff member."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    if not staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        # Process face image
+        processing_result = await face_processing_service.process_staff_face_image(
+            base64_image=face_data.image_data,
+            tenant_id=user["tenant_id"],
+            staff_id=staff_id
+        )
+        
+        if not processing_result['success']:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Face processing failed: {processing_result.get('error', 'Unknown error')}"
+            )
+        
+        # If this is set as primary, update existing primary images
+        if face_data.is_primary:
+            await db_session.execute(
+                update(StaffFaceImage)
+                .where(
+                    and_(
+                        StaffFaceImage.tenant_id == user["tenant_id"],
+                        StaffFaceImage.staff_id == staff_id,
+                        StaffFaceImage.is_primary == True
+                    )
+                )
+                .values(is_primary=False)
+            )
+        
+        # Create face image record
+        face_image = StaffFaceImage(
+            tenant_id=user["tenant_id"],
+            image_id=processing_result['image_id'],
+            staff_id=staff_id,
+            image_path=processing_result['image_path'],
+            face_landmarks=json.dumps(processing_result['landmarks']),
+            face_embedding=json.dumps(processing_result['embedding']),
+            is_primary=face_data.is_primary
+        )
+        
+        db_session.add(face_image)
+        
+        # Store embedding in Milvus
+        await milvus_client.insert_embedding(
+            tenant_id=user["tenant_id"],
+            person_id=staff_id,
+            person_type="staff",
+            embedding=processing_result['embedding'],
+            created_at=datetime.utcnow(),
+            metadata={
+                "image_id": processing_result['image_id'],
+                "is_primary": face_data.is_primary
+            }
+        )
+        
+        await db_session.commit()
+        await db_session.refresh(face_image)
+        
+        # Build response
+        response_data = {
+            "tenant_id": face_image.tenant_id,
+            "image_id": face_image.image_id,
+            "staff_id": face_image.staff_id,
+            "image_path": face_image.image_path,
+            "is_primary": face_image.is_primary,
+            "created_at": face_image.created_at,
+            "face_landmarks": json.loads(face_image.face_landmarks) if face_image.face_landmarks else None
+        }
+        
+        return StaffFaceImageResponse(**response_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload staff face image: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.delete("/v1/staff/{staff_id}/faces/{image_id}")
+async def delete_staff_face_image(
+    staff_id: str,
+    image_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete a staff face image."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Get the face image
+    result = await db_session.execute(
+        select(StaffFaceImage).where(
+            and_(
+                StaffFaceImage.tenant_id == user["tenant_id"],
+                StaffFaceImage.staff_id == staff_id,
+                StaffFaceImage.image_id == image_id
+            )
+        )
+    )
+    
+    face_image = result.scalar_one_or_none()
+    if not face_image:
+        raise HTTPException(status_code=404, detail="Face image not found")
+    
+    try:
+        # Delete from MinIO
+        await minio_client.delete_file("faces-derived", face_image.image_path)
+        
+        # Delete embedding from Milvus (by metadata filter)
+        await milvus_client.delete_embedding_by_metadata(
+            tenant_id=user["tenant_id"],
+            metadata_filter={"image_id": image_id}
+        )
+        
+        # Delete from database
+        await db_session.delete(face_image)
+        await db_session.commit()
+        
+        return {"message": "Face image deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to delete face image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete face image")
+
+@app.put("/v1/staff/{staff_id}/faces/{image_id}/recalculate")
+async def recalculate_face_embedding(
+    staff_id: str,
+    image_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Recalculate face landmarks and embedding for an existing image."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Get the face image
+    result = await db_session.execute(
+        select(StaffFaceImage).where(
+            and_(
+                StaffFaceImage.tenant_id == user["tenant_id"],
+                StaffFaceImage.staff_id == staff_id,
+                StaffFaceImage.image_id == image_id
+            )
+        )
+    )
+    
+    face_image = result.scalar_one_or_none()
+    if not face_image:
+        raise HTTPException(status_code=404, detail="Face image not found")
+    
+    try:
+        # Download image from MinIO
+        image_data = await minio_client.download_file("faces-derived", face_image.image_path)
+        
+        # Convert to base64 for processing
+        import base64
+        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Reprocess the image
+        processing_result = await face_processing_service.process_staff_face_image(
+            base64_image=image_b64,
+            tenant_id=user["tenant_id"],
+            staff_id=staff_id
+        )
+        
+        if not processing_result['success']:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Face reprocessing failed: {processing_result.get('error', 'Unknown error')}"
+            )
+        
+        # Update the face image record
+        face_image.face_landmarks = json.dumps(processing_result['landmarks'])
+        face_image.face_embedding = json.dumps(processing_result['embedding'])
+        face_image.updated_at = datetime.utcnow()
+        
+        # Update embedding in Milvus
+        await milvus_client.delete_embedding_by_metadata(
+            tenant_id=user["tenant_id"],
+            metadata_filter={"image_id": image_id}
+        )
+        
+        await milvus_client.insert_embedding(
+            tenant_id=user["tenant_id"],
+            person_id=staff_id,
+            person_type="staff",
+            embedding=processing_result['embedding'],
+            created_at=datetime.utcnow(),
+            metadata={
+                "image_id": image_id,
+                "is_primary": face_image.is_primary
+            }
+        )
+        
+        await db_session.commit()
+        await db_session.refresh(face_image)
+        
+        return {
+            "message": "Face landmarks and embedding recalculated successfully",
+            "processing_info": {
+                "face_count": processing_result['face_count'],
+                "confidence": processing_result['confidence']
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to recalculate face embedding: {e}")
+        raise HTTPException(status_code=500, detail="Failed to recalculate face embedding")
+
+@app.post("/v1/staff/{staff_id}/test-recognition", response_model=FaceRecognitionTestResponse)
+async def test_face_recognition(
+    staff_id: str,
+    test_data: FaceRecognitionTestRequest,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Test face recognition accuracy by uploading a test image."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    staff = staff_result.scalar_one_or_none()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        # Get all staff embeddings for comparison
+        all_staff_result = await db_session.execute(
+            select(StaffFaceImage).where(
+                StaffFaceImage.tenant_id == user["tenant_id"]
+            )
+        )
+        
+        staff_embeddings = []
+        for img in all_staff_result.scalars().all():
+            if img.face_embedding:
+                # Get staff name
+                staff_name_result = await db_session.execute(
+                    select(Staff.name).where(
+                        and_(
+                            Staff.tenant_id == user["tenant_id"],
+                            Staff.staff_id == img.staff_id
+                        )
+                    )
+                )
+                staff_name = staff_name_result.scalar_one_or_none() or "Unknown"
+                
+                staff_embeddings.append({
+                    'staff_id': img.staff_id,
+                    'image_id': img.image_id,
+                    'name': staff_name,
+                    'embedding': json.loads(img.face_embedding)
+                })
+        
+        # Test recognition
+        recognition_result = await face_processing_service.test_face_recognition(
+            test_image_b64=test_data.test_image,
+            tenant_id=user["tenant_id"],
+            staff_embeddings=staff_embeddings
+        )
+        
+        if not recognition_result['success']:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Recognition test failed: {recognition_result.get('error', 'Unknown error')}"
+            )
+        
+        return FaceRecognitionTestResponse(
+            matches=recognition_result['matches'],
+            best_match=recognition_result['best_match'],
+            processing_info=recognition_result['processing_info']
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Face recognition test failed: {e}")
+        raise HTTPException(status_code=500, detail="Recognition test failed")
 
 
 # ===============================

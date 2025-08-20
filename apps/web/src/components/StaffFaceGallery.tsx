@@ -1,0 +1,254 @@
+import React, { useState } from 'react';
+import {
+  Upload,
+  Button,
+  Modal,
+  Card,
+  Image,
+  Tag,
+  Space,
+  Popconfirm,
+  message,
+  Spin,
+  Alert,
+  Tooltip,
+  Badge
+} from 'antd';
+import {
+  UploadOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  EyeOutlined,
+  StarOutlined,
+  StarFilled
+} from '@ant-design/icons';
+import { StaffFaceImage } from '../types/api';
+import { apiClient } from '../services/api';
+
+interface StaffFaceGalleryProps {
+  staffId: string;
+  staffName: string;
+  faceImages: StaffFaceImage[];
+  onImagesChange: () => void;
+}
+
+export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
+  staffId,
+  staffName,
+  faceImages,
+  onImagesChange
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string>('');
+  const [previewTitle, setPreviewTitle] = useState<string>('');
+
+  // Convert image path to full URL
+  const getImageUrl = (imagePath: string) => {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    return `${baseUrl}/v1/files/${imagePath}`;
+  };
+
+  // Handle file upload
+  const handleUpload = async (file: File, isPrimary: boolean = false) => {
+    try {
+      setUploading(true);
+      
+      // Convert file to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      await apiClient.uploadStaffFaceImage(staffId, base64, isPrimary);
+      message.success('Face image uploaded successfully');
+      onImagesChange();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Handle image deletion
+  const handleDelete = async (imageId: string) => {
+    try {
+      await apiClient.deleteStaffFaceImage(staffId, imageId);
+      message.success('Face image deleted successfully');
+      onImagesChange();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to delete image');
+    }
+  };
+
+  // Handle recalculation
+  const handleRecalculate = async (imageId: string) => {
+    try {
+      setRecalculatingId(imageId);
+      const result = await apiClient.recalculateFaceEmbedding(staffId, imageId);
+      message.success(`${result.message} (Confidence: ${(result.processing_info.confidence * 100).toFixed(1)}%)`);
+      onImagesChange();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to recalculate embedding');
+    } finally {
+      setRecalculatingId(null);
+    }
+  };
+
+  // Handle image preview
+  const handlePreview = (image: StaffFaceImage) => {
+    setPreviewImage(getImageUrl(image.image_path));
+    setPreviewTitle(`${staffName} - Image ${image.image_id.slice(0, 8)}`);
+    setPreviewVisible(true);
+  };
+
+  const primaryImage = faceImages.find(img => img.is_primary);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">Face Images ({faceImages.length})</h3>
+        <Space>
+          <Upload
+            accept="image/*"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              handleUpload(file, false);
+              return false; // Prevent default upload
+            }}
+            disabled={uploading}
+          >
+            <Button icon={<UploadOutlined />} loading={uploading}>
+              Add Image
+            </Button>
+          </Upload>
+          
+          {faceImages.length === 0 && (
+            <Upload
+              accept="image/*"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUpload(file, true);
+                return false; // Prevent default upload
+              }}
+              disabled={uploading}
+            >
+              <Button type="primary" icon={<StarOutlined />} loading={uploading}>
+                Add Primary Image
+              </Button>
+            </Upload>
+          )}
+        </Space>
+      </div>
+
+      {faceImages.length === 0 ? (
+        <Alert
+          message="No face images"
+          description="Upload face images to enable face recognition for this staff member."
+          type="info"
+          showIcon
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {faceImages.map((image) => (
+            <Card
+              key={image.image_id}
+              size="small"
+              cover={
+                <div className="relative">
+                  <Image
+                    src={getImageUrl(image.image_path)}
+                    alt={`Face image ${image.image_id.slice(0, 8)}`}
+                    className="object-cover"
+                    height={200}
+                    preview={false}
+                    onClick={() => handlePreview(image)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  {image.is_primary && (
+                    <Badge
+                      count={<StarFilled className="text-yellow-500" />}
+                      className="absolute top-2 right-2"
+                    />
+                  )}
+                </div>
+              }
+              actions={[
+                <Tooltip title="View Image">
+                  <Button
+                    type="text"
+                    icon={<EyeOutlined />}
+                    onClick={() => handlePreview(image)}
+                  />
+                </Tooltip>,
+                <Tooltip title="Recalculate Landmarks & Embedding">
+                  <Button
+                    type="text"
+                    icon={<ReloadOutlined />}
+                    loading={recalculatingId === image.image_id}
+                    onClick={() => handleRecalculate(image.image_id)}
+                  />
+                </Tooltip>,
+                <Popconfirm
+                  title="Delete Face Image"
+                  description="Are you sure you want to delete this face image?"
+                  onConfirm={() => handleDelete(image.image_id)}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Tooltip title="Delete Image">
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              ]}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500 font-mono">
+                    {image.image_id.slice(0, 8)}...
+                  </span>
+                  {image.is_primary && (
+                    <Tag color="gold" size="small">Primary</Tag>
+                  )}
+                </div>
+                
+                <div className="text-xs text-gray-400">
+                  Uploaded: {new Date(image.created_at).toLocaleDateString()}
+                </div>
+                
+                {image.face_landmarks && (
+                  <div className="text-xs text-green-600">
+                    ✓ Landmarks detected ({image.face_landmarks.length} points)
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      <Modal
+        open={previewVisible}
+        title={previewTitle}
+        footer={null}
+        onCancel={() => setPreviewVisible(false)}
+        width="auto"
+        centered
+      >
+        <Image
+          src={previewImage}
+          alt="Preview"
+          style={{ maxWidth: '100%', maxHeight: '70vh' }}
+        />
+      </Modal>
+    </div>
+  );
+};

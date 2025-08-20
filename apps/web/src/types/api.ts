@@ -31,7 +31,7 @@ export interface Camera {
 
 export interface Staff {
   tenant_id: string;
-  staff_id: number;
+  staff_id: string;
   name: string;
   site_id?: string;
   is_active: boolean;
@@ -87,4 +87,35 @@ export interface LoginRequest {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+}
+
+export interface StaffFaceImage {
+  tenant_id: string;
+  image_id: string;
+  staff_id: string;
+  image_path: string;
+  face_landmarks?: number[][];  // 5-point landmarks
+  is_primary: boolean;
+  created_at: string;
+}
+
+export interface StaffWithFaces extends Staff {
+  face_images: StaffFaceImage[];
+}
+
+export interface FaceRecognitionMatch {
+  staff_id: string;
+  staff_name: string;
+  similarity: number;
+  image_id?: string;
+}
+
+export interface FaceRecognitionTestResult {
+  matches: FaceRecognitionMatch[];
+  best_match?: FaceRecognitionMatch;
+  processing_info: {
+    test_face_detected: boolean;
+    test_confidence: number;
+    total_staff_compared: number;
+  };
 }

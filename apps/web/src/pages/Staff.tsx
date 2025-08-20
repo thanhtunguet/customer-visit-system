@@ -12,9 +12,10 @@ import {
   Select,
   Popconfirm
 } from 'antd';
-import { PlusOutlined, TeamOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, TeamOutlined, EditOutlined, DeleteOutlined, PictureOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Staff, Site } from '../types/api';
+import { StaffDetailsModal } from '../components/StaffDetailsModal';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -24,6 +25,8 @@ export const StaffPage: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +68,11 @@ export const StaffPage: React.FC = () => {
     }
   };
 
+  const handleViewDetails = (staffMember: Staff) => {
+    setSelectedStaffId(staffMember.staff_id);
+    setDetailsModalVisible(true);
+  };
+
   const handleEditStaff = (staffMember: Staff) => {
     setEditingStaff(staffMember);
     form.setFieldsValue({
@@ -72,6 +80,14 @@ export const StaffPage: React.FC = () => {
       site_id: staffMember.site_id,
     });
     setModalVisible(true);
+  };
+
+  const handleEditFromDetails = (staffId: string) => {
+    const staffMember = staff.find(s => s.staff_id === staffId);
+    if (staffMember) {
+      setDetailsModalVisible(false);
+      handleEditStaff(staffMember);
+    }
   };
 
   const handleDeleteStaff = async (staffMember: Staff) => {
@@ -99,8 +115,14 @@ export const StaffPage: React.FC = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string) => (
-        <span className="font-medium">{text}</span>
+      render: (text: string, record: Staff) => (
+        <Button 
+          type="link" 
+          className="p-0 h-auto font-medium text-left"
+          onClick={() => handleViewDetails(record)}
+        >
+          {text}
+        </Button>
       ),
     },
     {
@@ -138,6 +160,14 @@ export const StaffPage: React.FC = () => {
       key: 'actions',
       render: (_, staffMember: Staff) => (
         <Space>
+          <Button
+            icon={<PictureOutlined />}
+            onClick={() => handleViewDetails(staffMember)}
+            size="small"
+            title="View Details & Manage Face Images"
+          >
+            Details
+          </Button>
           <Button
             icon={<EditOutlined />}
             onClick={() => handleEditStaff(staffMember)}
@@ -184,7 +214,7 @@ export const StaffPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title level={2} className="mb-0">Staff</Title>
+        <Title level={2} className="mb-0">Staff Management</Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -224,6 +254,7 @@ export const StaffPage: React.FC = () => {
         />
       </div>
 
+      {/* Add/Edit Staff Modal */}
       <Modal
         title={editingStaff ? "Edit Staff Member" : "Add New Staff Member"}
         open={modalVisible}
@@ -240,8 +271,6 @@ export const StaffPage: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateStaff}
         >
-
-
           <Form.Item
             name="name"
             label="Full Name"
@@ -265,6 +294,17 @@ export const StaffPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Staff Details Modal */}
+      <StaffDetailsModal
+        visible={detailsModalVisible}
+        staffId={selectedStaffId}
+        onClose={() => {
+          setDetailsModalVisible(false);
+          setSelectedStaffId(null);
+        }}
+        onEdit={handleEditFromDetails}
+      />
     </div>
   );
 };

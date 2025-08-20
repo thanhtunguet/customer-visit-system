@@ -79,12 +79,35 @@ class Staff(Base):
     name = Column(String(255), nullable=False)
     site_id = Column(String(64))
     is_active = Column(Boolean, default=True, nullable=False)
-    face_embedding = Column(Text)  # JSON serialized vector
+    face_embedding = Column(Text)  # Legacy field - kept for backwards compatibility
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationships
     tenant = relationship("Tenant", back_populates="staff")
+    face_images = relationship("StaffFaceImage", cascade="all, delete-orphan")
+
+class StaffFaceImage(Base):
+    __tablename__ = "staff_face_images"
+    
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
+    image_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    staff_id = Column(String(64), nullable=False)
+    image_path = Column(String(500), nullable=False)
+    face_landmarks = Column(Text)  # JSON serialized landmarks (5-point)
+    face_embedding = Column(Text)  # JSON serialized 512-D vector  
+    is_primary = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships 
+    tenant = relationship("Tenant")
+    
+    __table_args__ = (
+        ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),
+        Index('idx_staff_face_images_staff_id', 'tenant_id', 'staff_id'),
+        Index('idx_staff_face_images_primary', 'tenant_id', 'is_primary'),
+    )
 
 
 class Customer(Base):
