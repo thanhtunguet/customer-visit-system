@@ -170,9 +170,56 @@ async def delete_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
+    # Stop all running jobs for this camera before deletion
+    logger.info(f"Stopping all jobs for camera {camera_id} before deletion")
+    
+    camera_id_str = str(camera_id)
+    stopped_services = []
+    
+    # 1. Stop camera streaming if active
+    if streaming_service.is_stream_active(camera_id_str):
+        logger.info(f"Stopping active stream for camera {camera_id}")
+        success = streaming_service.stop_stream(camera_id_str)
+        if success:
+            stopped_services.append("camera_streaming")
+        else:
+            logger.warning(f"Failed to stop stream for camera {camera_id}")
+    
+    # 2. Clean up device locks for webcam cameras
+    device_status = streaming_service.get_device_status()
+    device_locks = device_status.get("device_locks", {})
+    for device_index, locked_camera in device_locks.items():
+        if str(locked_camera) == camera_id_str:
+            streaming_service.device_locks.pop(device_index, None)
+            stopped_services.append(f"device_lock_{device_index}")
+            logger.info(f"Cleaned up device lock {device_index} for camera {camera_id}")
+    
+    # 3. Future: Notify worker processes to stop processing this camera
+    # When workers support dynamic camera management, this would send
+    # a stop signal to any worker processes handling this camera:
+    # await worker_coordinator.stop_camera_processing(camera_id_str)
+    
+    # 4. Future: Stop any background face recognition jobs
+    # When background face recognition jobs are implemented:
+    # await face_job_manager.stop_camera_jobs(camera_id_str)
+    
+    # Log any services that were stopped
+    if stopped_services:
+        logger.info(f"Stopped services for camera {camera_id}: {stopped_services}")
+    
+    # Now safe to delete the camera from database
     await db_session.delete(camera)
     await db_session.commit()
-    return {"message": "Camera deleted successfully"}
+    
+    response = {
+        "message": "Camera deleted successfully", 
+        "camera_id": camera_id
+    }
+    if stopped_services:
+        response["stopped_services"] = stopped_services
+        logger.info(f"Camera {camera_id} deleted after stopping services: {stopped_services}")
+    
+    return response
 
 
 # Camera Streaming Endpoints
@@ -358,6 +405,41 @@ async def cleanup_all_streams(
     streaming_service.cleanup_all_streams()
     return {
         "message": "All streams and device locks have been cleaned up"
+    }
+
+@router.post("/cameras/{camera_id:int}/stop-all-jobs")
+async def stop_all_camera_jobs(
+    camera_id: int,
+    user: Dict = Depends(get_current_user)
+):
+    """Stop all running jobs (streaming, face recognition, etc.) for a specific camera"""
+    camera_id_str = str(camera_id)
+    stopped_services = []
+    
+    # Stop camera streaming
+    if streaming_service.is_stream_active(camera_id_str):
+        logger.info(f"Stopping stream for camera {camera_id}")
+        success = streaming_service.stop_stream(camera_id_str)
+        if success:
+            stopped_services.append("camera_streaming")
+    
+    # Future: Stop face recognition workers
+    # This endpoint can be extended to notify worker processes
+    # that they should stop processing this camera
+    
+    # Clean up device locks
+    device_status = streaming_service.get_device_status()
+    device_locks = device_status.get("device_locks", {})
+    for device_index, locked_camera in device_locks.items():
+        if str(locked_camera) == camera_id_str:
+            streaming_service.device_locks.pop(device_index, None)
+            stopped_services.append(f"device_lock_{device_index}")
+            logger.info(f"Cleaned up device lock {device_index} for camera {camera_id}")
+    
+    return {
+        "message": f"Stopped all jobs for camera {camera_id}",
+        "camera_id": camera_id,
+        "stopped_services": stopped_services
     }
 
 
