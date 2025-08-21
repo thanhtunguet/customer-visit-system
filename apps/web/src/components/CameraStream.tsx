@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button, Space, Alert, Tag, Spin, Tooltip, message, Popconfirm } from 'antd';
 import { 
   PlayCircleOutlined, 
@@ -55,8 +55,11 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   const imgRef = useRef<HTMLImageElement>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Get stream URL
-  const streamUrl = apiClient.getCameraStreamUrl(siteId, cameraId);
+  // Get stream URL (updates when siteId or cameraId changes)
+  const streamUrl = useMemo(() => 
+    apiClient.getCameraStreamUrl(siteId, cameraId), 
+    [siteId, cameraId]
+  );
 
   // Notify parent component of stream state changes
   const notifyStreamStateChange = useCallback((isActive: boolean) => {
@@ -197,12 +200,14 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     }
   };
 
+
+
   // Sync internal state with external currentStreamStatus
   useEffect(() => {
     setIsStreaming(currentStreamStatus);
   }, [currentStreamStatus]);
 
-  // Auto-start/reconnect stream if requested (only on initial mount)
+  // Auto-start/reconnect stream on component mount
   useEffect(() => {
     const initializeStream = async () => {
       if ((autoStart || autoReconnect) && !manuallyStopped) {
@@ -218,13 +223,12 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
           // Start new stream only if autoStart is enabled (not for reconnect)
           handleStartStream();
         }
-        // Note: No auto-restart for stopped streams
       }
     };
 
     initializeStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount, not on state changes
+  }, []); // Only run on mount - component remounts when camera changes due to key prop
 
   // Periodic status check
   useEffect(() => {
