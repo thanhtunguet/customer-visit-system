@@ -101,7 +101,26 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      // Exit fullscreen if active when component unmounts
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(console.error);
+      }
+    };
   }, []);
 
   // Layout menu items

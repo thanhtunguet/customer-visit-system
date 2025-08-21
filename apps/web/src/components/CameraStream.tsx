@@ -54,6 +54,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   
   const imgRef = useRef<HTMLImageElement>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Get stream URL (updates when siteId or cameraId changes)
   const streamUrl = useMemo(() => 
@@ -101,7 +102,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       setManuallyStopped(false); // Reset manually stopped flag when starting
       
       // Wait a moment for the stream to start
-      setTimeout(() => {
+      startTimeoutRef.current = setTimeout(() => {
         if (imgRef.current) {
           imgRef.current.src = `${streamUrl}&t=${Date.now()}`;
         }
@@ -129,9 +130,13 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       notifyConnectionStateChange('disconnected');
       setManuallyStopped(true); // Mark as manually stopped
       
-      // Clear image source
+      // Clear image source and timeout
       if (imgRef.current) {
         imgRef.current.src = '';
+      }
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
       }
       
       message.success('Camera stream stopped');
@@ -244,9 +249,31 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     return () => {
       if (statusIntervalRef.current) {
         clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
       }
     };
   }, [isStreaming, checkStreamStatus]);
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      // Clear all timers and intervals
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
+      }
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
+      // Clear image source to prevent memory leaks
+      if (imgRef.current) {
+        imgRef.current.src = '';
+        imgRef.current.onload = null;
+        imgRef.current.onerror = null;
+      }
+    };
+  }, []);
 
   const getConnectionStatus = () => {
     switch (connectionState) {

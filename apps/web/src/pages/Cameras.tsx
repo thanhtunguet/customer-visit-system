@@ -162,6 +162,11 @@ export const Cameras: React.FC = () => {
     setMultiStreamModalVisible(true);
   };
 
+  const handleCloseMultiStreamModal = () => {
+    // Force cleanup by resetting modal state
+    setMultiStreamModalVisible(false);
+  };
+
   const handleViewStream = async (camera: Camera) => {
     setStreamingCamera(camera);
     setStreamIntent('view');
@@ -601,9 +606,7 @@ export const Cameras: React.FC = () => {
       <Modal
         title={null}
         open={multiStreamModalVisible}
-        onCancel={() => {
-          setMultiStreamModalVisible(false);
-        }}
+        onCancel={handleCloseMultiStreamModal}
         footer={null}
         width="98%"
         style={{ maxWidth: '1920px' }}
@@ -612,6 +615,7 @@ export const Cameras: React.FC = () => {
         destroyOnClose
       >
         <MultiCameraStreamView
+          key={`multi-stream-${selectedSite}-${multiStreamModalVisible}`}
           siteId={selectedSite}
           cameras={cameras}
           streamStatuses={streamStatuses}
