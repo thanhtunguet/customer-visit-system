@@ -613,21 +613,63 @@ async def delete_staff_face_image(
         raise HTTPException(status_code=404, detail="Face image not found")
     
     try:
-        # Delete from MinIO
-        await minio_client.delete_file("faces-derived", face_image.image_path)
-        
-        # Delete embedding from Milvus 
-        # Note: Since we don't have metadata support, we delete by person_id
-        # This will delete all embeddings for this staff member
-        await milvus_client.delete_person_embeddings(user["tenant_id"], staff_id)
-        
-        # Delete from database
+        # Delete from database first (this removes the hash constraint immediately)
         await db_session.delete(face_image)
+        
+        # Clean up external resources (best effort - don't let failures block DB deletion)
+        minio_success = False
+        milvus_success = False
+        
+        try:
+            # Delete from MinIO
+            minio_success = await minio_client.delete_file("faces-derived", face_image.image_path)
+            if not minio_success:
+                logger.warning(f"Failed to delete MinIO file: {face_image.image_path}")
+        except Exception as e:
+            logger.warning(f"MinIO deletion failed: {e}")
+        
+        try:
+            # Delete embedding from Milvus 
+            await milvus_client.delete_person_embeddings(user["tenant_id"], staff_id)
+            milvus_success = True
+            
+            # Re-insert embeddings for remaining images if deletion was successful
+            remaining_images = await db_session.execute(
+                select(StaffFaceImage).where(
+                    and_(
+                        StaffFaceImage.tenant_id == user["tenant_id"],
+                        StaffFaceImage.staff_id == staff_id,
+                        StaffFaceImage.image_id != image_id  # Exclude the one being deleted
+                    )
+                )
+            )
+            
+            for remaining_image in remaining_images.scalars():
+                if remaining_image.face_embedding:
+                    embedding = json.loads(remaining_image.face_embedding)
+                    await milvus_client.insert_embedding(
+                        tenant_id=user["tenant_id"],
+                        person_id=staff_id,
+                        person_type="staff",
+                        embedding=embedding,
+                        created_at=int(remaining_image.created_at.timestamp())
+                    )
+        except Exception as e:
+            logger.warning(f"Milvus operations failed: {e}")
+        
+        # Commit the database deletion regardless of external cleanup success
         await db_session.commit()
         
-        return {"message": "Face image deleted successfully"}
+        return {
+            "message": "Face image deleted successfully",
+            "cleanup_status": {
+                "minio": minio_success,
+                "milvus": milvus_success
+            }
+        }
         
     except Exception as e:
+        await db_session.rollback()
         logger.error(f"Failed to delete face image: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete face image")
 
