@@ -91,17 +91,40 @@ class CameraStreamingService:
 
     def start_stream(self, camera_id: str, camera_type: str, rtsp_url: Optional[str] = None, device_index: Optional[int] = None) -> bool:
         """Start streaming for a camera"""
+        logger.info(f"start_stream called: camera_id={camera_id} (type={type(camera_id)}), device_index={device_index}, camera_type={camera_type}")
         with self.lock:
             if camera_id in self.streams and self.streams[camera_id].is_active:
                 logger.info(f"Stream for camera {camera_id} is already active")
                 return True
+            elif camera_id in self.streams:
+                logger.info(f"Camera {camera_id} exists in streams but is_active={self.streams[camera_id].is_active}")
             
-            # Check for device conflicts for webcam type
+            # For webcam cameras, clean up any existing locks for this camera first
             if camera_type.lower() == 'webcam' and device_index is not None:
+                # Remove any existing locks for this camera (handles restart case)
+                locks_to_remove = []
+                logger.info(f"Checking for existing locks for camera {camera_id}. Current locks: {self.device_locks}")
+                for dev_idx, locked_camera in self.device_locks.items():
+                    if locked_camera == camera_id:
+                        locks_to_remove.append(dev_idx)
+                        logger.info(f"Found existing lock for camera {camera_id} on device {dev_idx}")
+                
+                for dev_idx in locks_to_remove:
+                    del self.device_locks[dev_idx]
+                    logger.info(f"Removed existing device lock for camera {camera_id} on device {dev_idx}")
+                
+                # Stop any existing stream for this camera
+                if camera_id in self.streams:
+                    logger.info(f"Stopping existing stream for camera {camera_id} before starting new one")
+                    self.stop_stream(camera_id)
+                
+                # Now check for conflicts with other cameras
                 if device_index in self.device_locks:
                     existing_camera = self.device_locks[device_index]
                     logger.error(f"Device index {device_index} is already in use by camera {existing_camera}. Cannot start camera {camera_id}")
                     return False
+                
+                logger.info(f"Device conflict check passed for camera {camera_id} on device {device_index}. Current locks: {self.device_locks}")
             
             # Create stream info
             stream_info = StreamInfo(
@@ -155,6 +178,7 @@ class CameraStreamingService:
                 # Lock the device index if it's a webcam
                 if camera_type.lower() == 'webcam' and device_index is not None:
                     self.device_locks[device_index] = camera_id
+                    logger.info(f"Locked device index {device_index} for camera {camera_id}. Current locks: {self.device_locks}")
                 
                 # Start capture thread
                 stream_info.thread = threading.Thread(
@@ -188,6 +212,7 @@ class CameraStreamingService:
                 stream_info.device_index is not None and 
                 stream_info.device_index in self.device_locks):
                 del self.device_locks[stream_info.device_index]
+                logger.info(f"Released device lock for index {stream_info.device_index} from camera {camera_id}. Remaining locks: {self.device_locks}")
             
             # Wait for thread to finish
             if stream_info.thread and stream_info.thread.is_alive():
@@ -277,6 +302,51 @@ class CameraStreamingService:
             for camera_id in camera_ids:
                 self.stop_stream(camera_id)
             self.device_locks.clear()
+            logger.info("Cleaned up all streams and device locks")
+
+    def diagnose_device_conflicts(self) -> Dict:
+        """Diagnose potential device conflicts and provide resolution suggestions"""
+        with self.lock:
+            conflicts = []
+            suggestions = []
+            
+            # Check for duplicate device indices
+            device_usage = {}
+            for camera_id, stream_info in self.streams.items():
+                if stream_info.camera_type.lower() == 'webcam' and stream_info.device_index is not None:
+                    if stream_info.device_index in device_usage:
+                        conflicts.append({
+                            "type": "duplicate_device_index",
+                            "device_index": stream_info.device_index,
+                            "cameras": [device_usage[stream_info.device_index], camera_id],
+                            "resolution": f"Only one camera can use device index {stream_info.device_index} at a time"
+                        })
+                    else:
+                        device_usage[stream_info.device_index] = camera_id
+            
+            # Check for orphaned locks
+            for device_index, locked_camera in self.device_locks.items():
+                if locked_camera not in self.streams:
+                    conflicts.append({
+                        "type": "orphaned_lock",
+                        "device_index": device_index,
+                        "camera": locked_camera,
+                        "resolution": f"Device index {device_index} is locked by non-existent camera {locked_camera}"
+                    })
+                    suggestions.append(f"Run cleanup_all_streams() to clear orphaned locks")
+            
+            return {
+                "conflicts": conflicts,
+                "suggestions": suggestions,
+                "current_device_locks": dict(self.device_locks),
+                "active_webcam_streams": {
+                    camera_id: {
+                        "device_index": info.device_index,
+                        "is_active": info.is_active
+                    } for camera_id, info in self.streams.items() 
+                    if info.camera_type.lower() == 'webcam'
+                }
+            }
 
 
 # Global instance

@@ -157,7 +157,7 @@ class ApiClient {
     return response.data;
   }
 
-  getCameraStreamUrl(siteId: string, cameraId: string): string {
+  getCameraStreamUrl(siteId: string, cameraId: number): string {
     const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const token = this.token || localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);

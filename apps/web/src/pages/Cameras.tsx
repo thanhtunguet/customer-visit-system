@@ -251,11 +251,13 @@ export const Cameras: React.FC = () => {
       render: (text?: string) => text || <span className="text-gray-400">-</span>,
     },
     {
-      title: 'Webcam Index',
-      dataIndex: 'device_index',
+      title: 'Device Index',
+      dataIndex: 'device_index', 
       key: 'device_index',
       render: (index?: number) => index !== null && index !== undefined ? (
-        <span className="font-mono bg-gray-100 px-2 py-1 rounded">{index}</span>
+        <Tooltip title={`OpenCV device index ${index} - matches system webcam enumeration`}>
+          <span className="font-mono bg-gray-100 px-2 py-1 rounded">#{index}</span>
+        </Tooltip>
       ) : (
         <span className="text-gray-400">-</span>
       ),
@@ -501,12 +503,17 @@ export const Cameras: React.FC = () => {
                 return (
                   <Form.Item
                     name="device_index"
-                    label="Webcam"
+                    label="Webcam Device"
+                    tooltip="Select the physical webcam device. Device index matches system enumeration."
                     rules={[{ required: true, message: 'Please select a webcam!' }]}
                   >
                     <Select
                       loading={webcamsLoading}
-                      placeholder={webcamsLoading ? 'Scanning webcams...' : 'Select a webcam'}
+                      placeholder={webcamsLoading ? 'Scanning webcams...' : 'Select a webcam device'}
+                      showSearch
+                      filterOption={(input, option) => 
+                        option?.label?.toString().toLowerCase().indexOf(input.toLowerCase()) >= 0
+                      }
                       onDropdownVisibleChange={async (open) => {
                         if (open && webcams.length === 0) {
                           try {
@@ -521,7 +528,7 @@ export const Cameras: React.FC = () => {
                       options={webcams.map((w) => ({
                         value: w.device_index,
                         disabled: !w.is_working || w.in_use,
-                        label: `${w.in_use ? 'In use • ' : ''}#${w.device_index} ${w.width && w.height ? `(${w.width}x${w.height})` : ''} ${w.fps ? `${Math.round(w.fps)}fps` : ''}`.trim()
+                        label: `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim()
                       }))}
                     />
                   </Form.Item>

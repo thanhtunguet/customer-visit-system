@@ -65,7 +65,7 @@ class CameraCreate(BaseModel):
 class CameraResponse(BaseModel):
     tenant_id: str
     site_id: str
-    camera_id: str
+    camera_id: int
     name: str
     camera_type: CameraType
     rtsp_url: Optional[str]
@@ -169,7 +169,7 @@ class VisitResponse(BaseModel):
     person_id: str
     person_type: str
     site_id: str
-    camera_id: str
+    camera_id: int
     timestamp: datetime
     confidence_score: float
     image_path: Optional[str]

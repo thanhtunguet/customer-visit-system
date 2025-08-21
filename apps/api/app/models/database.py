@@ -53,7 +53,7 @@ class Camera(Base):
     
     tenant_id = Column(String(64), primary_key=True)
     site_id = Column(String(64), primary_key=True)
-    camera_id = Column(String(64), primary_key=True)
+    camera_id = Column(BigInteger, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)
     rtsp_url = Column(Text)  # For RTSP cameras
@@ -140,7 +140,7 @@ class Visit(Base):
     person_id = Column(String(64), nullable=False)
     person_type = Column(String(16), nullable=False)  # staff, customer
     site_id = Column(String(64), nullable=False)
-    camera_id = Column(Integer, nullable=False)
+    camera_id = Column(BigInteger, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     confidence_score = Column(Float, nullable=False)
     face_embedding = Column(Text)  # JSON serialized vector
