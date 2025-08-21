@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from sqlalchemy import select
 from httpx import AsyncClient
 
-from app.models.database import Staff, StaffFaceImage
-from app.services.face_processing_service import face_processing_service
+from apps.api.app.models.database import Staff, StaffFaceImage
+from apps.api.app.services.face_processing_service import face_processing_service
 
 
 @pytest.mark.asyncio

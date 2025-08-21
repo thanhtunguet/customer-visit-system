@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 from PIL import Image
 
-from app.services.face_processing_service import FaceProcessingService
+from apps.api.app.services.face_processing_service import FaceProcessingService
 
 
 @pytest.fixture

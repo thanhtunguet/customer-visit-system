@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from app.embedder import InsightFaceEmbedder, MockEmbedder, create_embedder
+from apps.worker.app.embedder import InsightFaceEmbedder, MockEmbedder, create_embedder
 
 
 def test_mock_embedder():

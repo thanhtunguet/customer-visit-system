@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import numpy as np
 
-from ..app.main import main, WorkerConfig
+from apps.worker.app.main import main, WorkerConfig
 
 
 @pytest.mark.asyncio
@@ -237,7 +237,7 @@ async def test_worker_graceful_shutdown():
         mock_client_instance.aclose = AsyncMock()
         mock_client.return_value = mock_client_instance
         
-        from ..app.main import FaceRecognitionWorker
+        from apps.worker.app.main import FaceRecognitionWorker
         
         worker = FaceRecognitionWorker(config)
         await worker.initialize()
@@ -301,7 +301,7 @@ async def test_end_to_end_face_processing():
         mock_client_instance.get.return_value = mock_staff_response
         mock_client.return_value = mock_client_instance
         
-        from ..app.main import FaceRecognitionWorker
+        from apps.worker.app.main import FaceRecognitionWorker
         
         worker = FaceRecognitionWorker(config)
         await worker.initialize()

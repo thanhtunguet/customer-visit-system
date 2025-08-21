@@ -5,9 +5,9 @@ Basic test script for face recognition worker functionality
 
 import asyncio
 import numpy as np
-from app.main import WorkerConfig, FaceRecognitionWorker
-from app.detectors import create_detector
-from app.embedder import create_embedder
+from apps.worker.app.main import WorkerConfig, FaceRecognitionWorker
+from apps.worker.app.detectors import create_detector
+from apps.worker.app.embedder import create_embedder
 
 async def test_basic_functionality():
     """Test basic worker functionality"""

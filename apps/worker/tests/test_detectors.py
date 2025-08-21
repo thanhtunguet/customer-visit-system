@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from app.detectors import YuNetDetector, MockDetector, create_detector
+from apps.worker.app.detectors import YuNetDetector, MockDetector, create_detector
 
 
 def test_mock_detector():

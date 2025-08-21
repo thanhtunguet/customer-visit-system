@@ -6,9 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
-from app.core.database import get_db_session
-from app.models.database import Base
+from apps.api.app.main import app
+from apps.api.app.core.database import get_db_session
+from apps.api.app.models.database import Base
 
 
 # Use in-memory SQLite for testing
@@ -82,7 +82,7 @@ def sample_site():
 @pytest.fixture
 def admin_token():
     """Admin token for testing"""
-    from app.core.security import mint_jwt
+    from apps.api.app.core.security import mint_jwt
     return mint_jwt(
         sub="admin", 
         role="system_admin",

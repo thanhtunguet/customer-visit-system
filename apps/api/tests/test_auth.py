@@ -1,8 +1,8 @@
 import pytest
 import jwt
 from fastapi.testclient import TestClient
-from app.main import app
-from app.core.security import mint_jwt, verify_jwt
+from apps.api.app.main import app
+from apps.api.app.core.security import mint_jwt, verify_jwt
 
 
 client = TestClient(app)

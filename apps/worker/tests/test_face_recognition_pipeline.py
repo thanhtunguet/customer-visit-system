@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import httpx
 
-from ..app.main import FaceRecognitionWorker, WorkerConfig, FaceDetectedEvent
+from apps.worker.app.main import FaceRecognitionWorker, WorkerConfig, FaceDetectedEvent
 
 
 @pytest.fixture
