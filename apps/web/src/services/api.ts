@@ -14,7 +14,7 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: `${API_BASE_URL}/v1`,
-      timeout: 10000,
+      timeout: 30000, // Increased timeout for file uploads
     });
 
     // Request interceptor to add auth token
@@ -214,6 +214,23 @@ class ApiClient {
     const response = await this.client.post<StaffFaceImage>(`/staff/${staffId}/faces`, {
       image_data: imageData,
       is_primary: isPrimary
+    }, {
+      timeout: 45000, // 45 second timeout for individual uploads
+    });
+    return response.data;
+  }
+
+  async uploadMultipleStaffFaceImages(
+    staffId: string, 
+    imageDataArray: string[]
+  ): Promise<StaffFaceImage[]> {
+    const response = await this.client.post<StaffFaceImage[]>(`/staff/${staffId}/faces/bulk`, {
+      images: imageDataArray.map((imageData, index) => ({
+        image_data: imageData,
+        is_primary: index === 0 // First image is primary if no existing images
+      }))
+    }, {
+      timeout: Math.max(60000, imageDataArray.length * 20000), // Dynamic timeout based on number of images
     });
     return response.data;
   }

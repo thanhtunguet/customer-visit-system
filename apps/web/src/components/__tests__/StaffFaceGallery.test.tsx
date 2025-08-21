@@ -10,6 +10,7 @@ import { StaffFaceImage } from '../../types/api';
 jest.mock('../../services/api', () => ({
   apiClient: {
     uploadStaffFaceImage: jest.fn(),
+    uploadMultipleStaffFaceImages: jest.fn(),
     deleteStaffFaceImage: jest.fn(),
     recalculateFaceEmbedding: jest.fn(),
   },
@@ -62,6 +63,11 @@ describe('StaffFaceGallery', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock AbortController
+    global.AbortController = jest.fn(() => ({
+      abort: jest.fn(),
+      signal: {}
+    })) as any;
   });
 
   it('renders face gallery with images', () => {

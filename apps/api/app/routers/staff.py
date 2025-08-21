@@ -15,7 +15,7 @@ from ..core.security import get_current_user
 from ..models.database import Staff, StaffFaceImage
 from ..schemas import (
     StaffCreate, StaffResponse, StaffFaceImageCreate, StaffFaceImageResponse,
-    StaffWithFacesResponse, FaceRecognitionTestRequest, FaceRecognitionTestResponse
+    StaffFaceImageBulkCreate, StaffWithFacesResponse, FaceRecognitionTestRequest, FaceRecognitionTestResponse
 )
 from ..services.face_service import staff_service
 from ..services.face_processing_service import face_processing_service
@@ -361,6 +361,176 @@ async def upload_staff_face_image(
         raise
     except Exception as e:
         logger.error(f"Failed to upload staff face image: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/staff/{staff_id}/faces/bulk", response_model=List[StaffFaceImageResponse])
+async def upload_multiple_staff_face_images(
+    staff_id: str,
+    face_data: StaffFaceImageBulkCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Upload multiple face images for a staff member with optimized processing."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    if not staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    if not face_data.images:
+        raise HTTPException(status_code=400, detail="No images provided")
+    
+    # Limit batch size to prevent timeouts
+    if len(face_data.images) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 images allowed per batch")
+    
+    uploaded_images = []
+    errors = []
+    
+    # Check if we need to reset primary flag for first image
+    has_primary = any(img.is_primary for img in face_data.images)
+    
+    try:
+        # Process images in parallel for better performance
+        import asyncio
+        
+        async def process_single_image(i: int, image_data) -> tuple[int, StaffFaceImageResponse | str]:
+            try:
+                # Process face image
+                processing_result = await face_processing_service.process_staff_face_image(
+                    base64_image=image_data.image_data,
+                    tenant_id=user["tenant_id"],
+                    staff_id=staff_id
+                )
+                
+                if not processing_result['success']:
+                    return i, f"Image {i+1}: Face processing failed - {processing_result.get('error', 'Unknown error')}"
+                
+                # Create face image record
+                face_image = StaffFaceImage(
+                    tenant_id=user["tenant_id"],
+                    image_id=processing_result['image_id'],
+                    staff_id=staff_id,
+                    image_path=processing_result['image_path'],
+                    face_landmarks=json.dumps(processing_result['landmarks']),
+                    face_embedding=json.dumps(processing_result['embedding']),
+                    is_primary=image_data.is_primary or (i == 0 and has_primary)
+                )
+                
+                return i, (face_image, processing_result['embedding'])
+                
+            except Exception as e:
+                logger.error(f"Failed to process image {i+1} for staff {staff_id}: {e}")
+                return i, f"Image {i+1}: {str(e)}"
+        
+        # Process all images concurrently
+        processing_tasks = [
+            process_single_image(i, image_data) 
+            for i, image_data in enumerate(face_data.images)
+        ]
+        
+        results = await asyncio.gather(*processing_tasks, return_exceptions=True)
+        
+        # Handle primary image updates (only once)
+        if has_primary:
+            await db_session.execute(
+                update(StaffFaceImage)
+                .where(
+                    and_(
+                        StaffFaceImage.tenant_id == user["tenant_id"],
+                        StaffFaceImage.staff_id == staff_id,
+                        StaffFaceImage.is_primary == True
+                    )
+                )
+                .values(is_primary=False)
+            )
+        
+        # Process results and add to database
+        milvus_embeddings = []
+        for index, result in results:
+            if isinstance(result, Exception):
+                errors.append(f"Image {index+1}: {str(result)}")
+                continue
+                
+            if isinstance(result, str):
+                errors.append(result)
+                continue
+            
+            face_image, embedding = result
+            db_session.add(face_image)
+            
+            # Prepare for batch Milvus insertion
+            milvus_embeddings.append({
+                'tensor_id': face_image.image_id,
+                'embedding': embedding,
+                'tenant_id': user["tenant_id"],
+                'person_id': staff_id,
+                'person_type': "staff",
+                'created_at': int(datetime.utcnow().timestamp())
+            })
+        
+        # Batch insert into Milvus for better performance
+        if milvus_embeddings:
+            try:
+                for emb_data in milvus_embeddings:
+                    await milvus_client.insert_embedding(
+                        tenant_id=emb_data['tenant_id'],
+                        person_id=emb_data['person_id'],
+                        person_type=emb_data['person_type'],
+                        embedding=emb_data['embedding'],
+                        created_at=emb_data['created_at']
+                    )
+            except Exception as e:
+                logger.error(f"Failed to batch insert embeddings: {e}")
+                # Don't fail the entire request for Milvus errors
+        
+        # Flush and get IDs
+        await db_session.flush()
+        
+        # Build response data for successful uploads
+        for index, result in results:
+            if isinstance(result, str) or isinstance(result, Exception):
+                continue
+                
+            face_image, _ = result
+            await db_session.refresh(face_image)
+            
+            response_data = {
+                "tenant_id": face_image.tenant_id,
+                "image_id": face_image.image_id,
+                "staff_id": face_image.staff_id,
+                "image_path": face_image.image_path,
+                "is_primary": face_image.is_primary,
+                "created_at": face_image.created_at,
+                "face_landmarks": json.loads(face_image.face_landmarks) if face_image.face_landmarks else None
+            }
+            
+            uploaded_images.append(StaffFaceImageResponse(**response_data))
+        
+        await db_session.commit()
+        
+        # Return results even with partial failures
+        if not uploaded_images and errors:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Failed to upload all images: {'; '.join(errors)}"
+            )
+        
+        if errors:
+            logger.warning(f"Bulk upload completed with errors for staff {staff_id}: {errors}")
+        
+        return uploaded_images
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload multiple staff face images: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

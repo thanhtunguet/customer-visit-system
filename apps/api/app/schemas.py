@@ -109,6 +109,9 @@ class StaffFaceImageCreate(BaseModel):
     image_data: str  # Base64 encoded image
     is_primary: bool = False
 
+class StaffFaceImageBulkCreate(BaseModel):
+    images: List[StaffFaceImageCreate]
+
 
 class StaffFaceImageResponse(BaseModel):
     tenant_id: str

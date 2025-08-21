@@ -12,7 +12,8 @@ import {
   Spin,
   Alert,
   Tooltip,
-  Badge
+  Badge,
+  Progress
 } from 'antd';
 import {
   UploadOutlined,
@@ -116,6 +117,13 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   onImagesChange
 }) => {
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    currentFileName?: string;
+    canCancel?: boolean;
+  } | null>(null);
+  const [uploadController, setUploadController] = useState<AbortController | null>(null);
   const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<string>('');
@@ -140,7 +148,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     return url.toString();
   };
 
-  // Handle file upload
+  // Handle single file upload
   const handleUpload = async (file: File, isPrimary: boolean = false) => {
     try {
       setUploading(true);
@@ -160,6 +168,153 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       message.error(error.response?.data?.detail || 'Failed to upload image');
     } finally {
       setUploading(false);
+    }
+  };
+
+  // Handle multiple files upload with chunked processing
+  const handleMultipleUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const CHUNK_SIZE = 3; // Process 3 images at a time to avoid timeout
+    const MAX_RETRIES = 2;
+    
+    const controller = new AbortController();
+    
+    try {
+      setUploading(true);
+      setUploadController(controller);
+      setUploadProgress({ current: 0, total: files.length, canCancel: true });
+      
+      let successCount = 0;
+      let errorCount = 0;
+      const failedFiles: string[] = [];
+      
+      // Process files in chunks
+      for (let chunkStart = 0; chunkStart < files.length; chunkStart += CHUNK_SIZE) {
+        const chunk = files.slice(chunkStart, Math.min(chunkStart + CHUNK_SIZE, files.length));
+        
+        // Convert chunk to base64 with progress tracking
+        const chunkPromises = chunk.map(async (file, index) => {
+          const globalIndex = chunkStart + index;
+          setUploadProgress({ 
+            current: globalIndex, 
+            total: files.length, 
+            currentFileName: file.name 
+          });
+          
+          return new Promise<{ data: string; name: string; originalFile: File }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ 
+              data: reader.result as string, 
+              name: file.name,
+              originalFile: file
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        });
+
+        const chunkData = await Promise.all(chunkPromises);
+        
+        // Try bulk upload for this chunk first, then fall back to individual
+        let chunkProcessed = false;
+        
+        if (chunkData.length > 1) {
+          try {
+            const bulkData = chunkData.map((img, index) => ({
+              image_data: img.data,
+              is_primary: faceImages.length === 0 && chunkStart === 0 && index === 0
+            }));
+            
+            await apiClient.uploadMultipleStaffFaceImages(
+              staffId, 
+              bulkData.map(d => d.image_data)
+            );
+            
+            successCount += chunkData.length;
+            chunkProcessed = true;
+          } catch (bulkError) {
+            console.warn('Bulk upload failed for chunk, falling back to individual uploads:', bulkError);
+          }
+        }
+        
+        // If bulk upload failed or we have only one image, process individually
+        if (!chunkProcessed) {
+          for (let i = 0; i < chunkData.length; i++) {
+            const img = chunkData[i];
+            let uploaded = false;
+            
+            // Retry logic for individual uploads with exponential backoff
+            for (let attempt = 0; attempt < MAX_RETRIES && !uploaded; attempt++) {
+              try {
+                setUploadProgress({ 
+                  current: chunkStart + i, 
+                  total: files.length, 
+                  currentFileName: `${img.name}${attempt > 0 ? ` (retry ${attempt})` : ''}` 
+                });
+                
+                const isPrimary = faceImages.length === 0 && chunkStart === 0 && i === 0;
+                await apiClient.uploadStaffFaceImage(staffId, img.data, isPrimary);
+                successCount++;
+                uploaded = true;
+              } catch (error: any) {
+                const isTimeoutError = error.code === 'ECONNABORTED' || error.message.includes('timeout');
+                const isServerError = error.response?.status >= 500;
+                
+                console.warn(`Upload attempt ${attempt + 1} failed for ${img.name}:`, error);
+                
+                if (attempt === MAX_RETRIES - 1) {
+                  errorCount++;
+                  failedFiles.push(`${img.name}${isTimeoutError ? ' (timeout)' : isServerError ? ' (server error)' : ''}`);
+                } else {
+                  // Exponential backoff: 1s, 2s, 4s...
+                  const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                }
+              }
+            }
+          }
+        }
+        
+        // Small delay between chunks to prevent overwhelming the server
+        if (chunkStart + CHUNK_SIZE < files.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      // Show final results
+      if (successCount > 0 && errorCount === 0) {
+        message.success(`All ${successCount} face images uploaded successfully`);
+      } else if (successCount > 0) {
+        message.warning(
+          `${successCount} images uploaded successfully, ${errorCount} failed${
+            failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''
+          }`
+        );
+      } else {
+        message.error(`Failed to upload all images${
+          failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''
+        }`);
+      }
+      
+      onImagesChange();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to upload images');
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+      setUploadController(null);
+    }
+  };
+
+  // Cancel upload function
+  const cancelUpload = () => {
+    if (uploadController) {
+      uploadController.abort();
+      setUploading(false);
+      setUploadProgress(null);
+      setUploadController(null);
+      message.info('Upload cancelled by user');
     }
   };
 
@@ -217,6 +372,27 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             </Button>
           </Upload>
           
+          <Upload
+            accept="image/*"
+            multiple
+            showUploadList={false}
+            beforeUpload={(file, fileList) => {
+              if (fileList.length > 1) {
+                // Handle multiple files
+                handleMultipleUpload(fileList);
+              } else {
+                // Handle single file
+                handleUpload(file, faceImages.length === 0);
+              }
+              return false; // Prevent default upload
+            }}
+            disabled={uploading}
+          >
+            <Button type="primary" icon={<UploadOutlined />} loading={uploading}>
+              Add Multiple Images
+            </Button>
+          </Upload>
+          
           {faceImages.length === 0 && (
             <Upload
               accept="image/*"
@@ -227,13 +403,50 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               }}
               disabled={uploading}
             >
-              <Button type="primary" icon={<StarOutlined />} loading={uploading}>
+              <Button icon={<StarOutlined />} loading={uploading}>
                 Add Primary Image
               </Button>
             </Upload>
           )}
         </Space>
       </div>
+
+      {/* Upload Progress Indicator */}
+      {uploadProgress && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-blue-900">
+              Uploading Images ({uploadProgress.current + 1} of {uploadProgress.total})
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-blue-700">
+                {Math.round(((uploadProgress.current + 1) / uploadProgress.total) * 100)}%
+              </span>
+              {uploadProgress.canCancel && (
+                <Button 
+                  size="small" 
+                  danger 
+                  onClick={cancelUpload}
+                  className="text-xs px-2 py-1"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </div>
+          <Progress 
+            percent={Math.round(((uploadProgress.current + 1) / uploadProgress.total) * 100)}
+            status="active"
+            strokeColor="#3b82f6"
+            className="mb-2"
+          />
+          {uploadProgress.currentFileName && (
+            <div className="text-xs text-blue-600 truncate">
+              Processing: {uploadProgress.currentFileName}
+            </div>
+          )}
+        </div>
+      )}
 
       {faceImages.length === 0 ? (
         <Alert
