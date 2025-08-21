@@ -15,7 +15,7 @@ import {
   Tooltip,
   message
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
 import { CameraStream } from '../components/CameraStream';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType } from '../types/api';
@@ -150,6 +150,18 @@ export const Cameras: React.FC = () => {
     setStreamModalVisible(true);
   };
 
+  const handleViewStream = async (camera: Camera) => {
+    setStreamingCamera(camera);
+    setStreamModalVisible(true);
+    // Check and update stream status when opening modal
+    try {
+      const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
+      setStreamStatuses(prev => ({ ...prev, [camera.camera_id]: status.stream_active }));
+    } catch (err) {
+      console.error('Failed to check stream status:', err);
+    }
+  };
+
   const handleStopStream = async (camera: Camera) => {
     try {
       await apiClient.stopCameraStream(selectedSite, camera.camera_id);
@@ -158,6 +170,11 @@ export const Cameras: React.FC = () => {
     } catch (err: any) {
       message.error(`Failed to stop stream: ${err.response?.data?.detail || err.message}`);
     }
+  };
+
+  // Callback to handle stream state changes from CameraStream component
+  const handleStreamStateChange = (cameraId: string, isActive: boolean) => {
+    setStreamStatuses(prev => ({ ...prev, [cameraId]: isActive }));
   };
 
   const columns = [
@@ -246,8 +263,18 @@ export const Cameras: React.FC = () => {
         
         return (
           <Space>
+            <Tooltip title="View camera stream">
+              <Button
+                icon={<EyeOutlined />}
+                onClick={() => handleViewStream(camera)}
+                size="small"
+                disabled={!camera.is_active}
+              >
+                View
+              </Button>
+            </Tooltip>
             {!isStreaming ? (
-              <Tooltip title="View live stream">
+              <Tooltip title="Start live stream">
                 <Button
                   icon={<PlayCircleOutlined />}
                   onClick={() => handleStartStreaming(camera)}
@@ -489,7 +516,10 @@ export const Cameras: React.FC = () => {
               setStreamModalVisible(false);
               setStreamingCamera(null);
             }}
+            onStreamStateChange={handleStreamStateChange}
             autoStart={true}
+            autoReconnect={true}
+            currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
           />
         )}
       </Modal>

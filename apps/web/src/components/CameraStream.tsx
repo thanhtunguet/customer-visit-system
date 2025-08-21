@@ -16,6 +16,9 @@ interface CameraStreamProps {
   cameraName: string;
   onClose?: () => void;
   autoStart?: boolean;
+  autoReconnect?: boolean;
+  currentStreamStatus?: boolean;
+  onStreamStateChange?: (cameraId: string, isActive: boolean) => void;
 }
 
 interface StreamStatus {
@@ -36,9 +39,12 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   cameraId,
   cameraName,
   onClose,
-  autoStart = false
+  autoStart = false,
+  autoReconnect = false,
+  currentStreamStatus = false,
+  onStreamStateChange
 }) => {
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(currentStreamStatus);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus | null>(null);
@@ -49,6 +55,13 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   
   // Get stream URL
   const streamUrl = apiClient.getCameraStreamUrl(siteId, cameraId);
+
+  // Notify parent component of stream state changes
+  const notifyStreamStateChange = useCallback((isActive: boolean) => {
+    if (onStreamStateChange) {
+      onStreamStateChange(cameraId.toString(), isActive);
+    }
+  }, [onStreamStateChange, cameraId]);
 
   // Check stream status
   const checkStreamStatus = useCallback(async () => {
@@ -71,6 +84,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       
       await apiClient.startCameraStream(siteId, cameraId);
       setIsStreaming(true);
+      notifyStreamStateChange(true);
       
       // Wait a moment for the stream to start
       setTimeout(() => {
@@ -95,6 +109,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       setLoading(true);
       await apiClient.stopCameraStream(siteId, cameraId);
       setIsStreaming(false);
+      notifyStreamStateChange(false);
       setConnectionState('disconnected');
       
       // Clear image source
@@ -127,6 +142,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
           imgRef.current.src = `${streamUrl}&t=${Date.now()}`;
         }
         setIsStreaming(true);
+        notifyStreamStateChange(true);
         message.success('Reconnected to stream');
       } else {
         // Stream is not active, need to start it
@@ -165,23 +181,35 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     }
   };
 
-  // Auto-start stream if requested
+  // Sync internal state with external currentStreamStatus
   useEffect(() => {
-    if (autoStart) {
-      checkStreamStatus().then((status) => {
+    setIsStreaming(currentStreamStatus);
+  }, [currentStreamStatus]);
+
+  // Auto-start/reconnect stream if requested
+  useEffect(() => {
+    const initializeStream = async () => {
+      if (autoStart || autoReconnect) {
+        const status = await checkStreamStatus();
         if (status?.stream_active) {
           // Stream already active, just connect
           setIsStreaming(true);
+          notifyStreamStateChange(true);
           if (imgRef.current) {
             imgRef.current.src = `${streamUrl}&t=${Date.now()}`;
           }
-        } else {
-          // Start new stream
+        } else if (autoStart) {
+          // Start new stream only if autoStart is enabled
+          handleStartStream();
+        } else if (autoReconnect && currentStreamStatus) {
+          // Auto-reconnect if we expect the stream to be active
           handleStartStream();
         }
-      });
-    }
-  }, [autoStart, streamUrl, checkStreamStatus]);
+      }
+    };
+
+    initializeStream();
+  }, [autoStart, autoReconnect, currentStreamStatus, streamUrl]); // Removed functions from deps to avoid infinite loops
 
   // Periodic status check
   useEffect(() => {
