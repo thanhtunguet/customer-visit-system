@@ -733,3 +733,190 @@ async def test_face_recognition(
     except Exception as e:
         logger.error(f"Face recognition test failed: {e}")
         raise HTTPException(status_code=500, detail="Recognition test failed")
+
+
+@router.post("/staff/{staff_id}/faces/enhanced-upload", response_model=StaffFaceImageResponse)
+async def enhanced_upload_staff_face_image(
+    staff_id: str,
+    face_data: StaffFaceImageCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Upload a staff face image using enhanced processing pipeline with detailed quality assessment."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    if not staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        # Import enhanced face processor
+        from ..services.enhanced_face_processor import enhanced_face_processor
+        
+        # Decode base64 image
+        import base64
+        image_bytes = base64.b64decode(face_data.image_data.split(',')[-1])
+        
+        # Process with enhanced pipeline
+        result = await enhanced_face_processor.process_staff_image(image_bytes, staff_id)
+        
+        if not result['success']:
+            # Return detailed error information
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    'error': result.get('error', 'Unknown error'),
+                    'quality_score': result.get('quality_score', 0.0),
+                    'issues': result.get('issues', []),
+                    'suggestions': result.get('suggestions', [])
+                }
+            )
+        
+        # Upload processed image to MinIO
+        image_filename = f"staff/{user['tenant_id']}/{staff_id}/{result['processing_info']['image_id']}.jpg"
+        
+        # Get the processed face crop for storage
+        face_crop_b64 = result.get('face_crop_b64')
+        if face_crop_b64:
+            face_crop_bytes = base64.b64decode(face_crop_b64)
+        else:
+            face_crop_bytes = image_bytes  # Fallback to original
+        
+        upload_result = await minio_client.upload_file(
+            bucket="faces-derived",
+            object_name=image_filename,
+            data=face_crop_bytes
+        )
+        
+        # If this is set as primary, update existing primary images
+        if face_data.is_primary:
+            await db_session.execute(
+                update(StaffFaceImage)
+                .where(
+                    and_(
+                        StaffFaceImage.tenant_id == user["tenant_id"],
+                        StaffFaceImage.staff_id == staff_id,
+                        StaffFaceImage.is_primary == True
+                    )
+                )
+                .values(is_primary=False)
+            )
+        
+        # Create face image record with enhanced metadata
+        face_image = StaffFaceImage(
+            tenant_id=user["tenant_id"],
+            image_id=result['processing_info']['image_id'],
+            staff_id=staff_id,
+            image_path=image_filename,
+            face_landmarks=json.dumps(result.get('face_landmarks')),
+            face_embedding=json.dumps(result['embedding']),
+            is_primary=face_data.is_primary,
+            # Store enhanced processing metadata
+            processing_metadata=json.dumps({
+                'quality_score': result['quality_score'],
+                'confidence': result['confidence'],
+                'detector_used': result.get('detector_used'),
+                'processing_notes': result.get('processing_notes', []),
+                'enhancement_applied': True,
+                'processing_version': '2.0'
+            })
+        )
+        
+        db_session.add(face_image)
+        
+        # Store embedding in Milvus
+        await milvus_client.insert_embedding(
+            tenant_id=user["tenant_id"],
+            person_id=staff_id,
+            person_type="staff",
+            embedding=result['embedding'],
+            created_at=int(datetime.utcnow().timestamp())
+        )
+        
+        await db_session.commit()
+        await db_session.refresh(face_image)
+        
+        # Build enhanced response
+        response_data = {
+            "tenant_id": face_image.tenant_id,
+            "image_id": face_image.image_id,
+            "staff_id": face_image.staff_id,
+            "image_path": face_image.image_path,
+            "is_primary": face_image.is_primary,
+            "created_at": face_image.created_at,
+            "face_landmarks": json.loads(face_image.face_landmarks) if face_image.face_landmarks else None,
+            # Add enhanced processing information
+            "processing_info": {
+                'quality_score': result['quality_score'],
+                'confidence': result['confidence'],
+                'detector_used': result.get('detector_used'),
+                'processing_notes': result.get('processing_notes', []),
+                'face_bbox': result.get('face_bbox')
+            }
+        }
+        
+        return StaffFaceImageResponse(**response_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Enhanced face image upload failed for staff {staff_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Enhanced processing failed: {str(e)}"
+        )
+
+
+@router.post("/staff/{staff_id}/quality-assessment")
+async def assess_face_image_quality(
+    staff_id: str,
+    face_data: StaffFaceImageCreate,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Assess the quality of a face image without uploading it."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify staff exists
+    staff_result = await db_session.execute(
+        select(Staff).where(
+            and_(Staff.tenant_id == user["tenant_id"], Staff.staff_id == staff_id)
+        )
+    )
+    if not staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    
+    try:
+        from ..services.enhanced_face_processor import enhanced_face_processor
+        
+        # Decode base64 image
+        import base64
+        image_bytes = base64.b64decode(face_data.image_data.split(',')[-1])
+        
+        # Assess quality only (no storage)
+        result = await enhanced_face_processor.assess_image_quality_only(image_bytes)
+        
+        return {
+            'success': result['success'],
+            'quality_score': result.get('quality_score', 0.0),
+            'issues': result.get('issues', []),
+            'suggestions': result.get('suggestions', []),
+            'processing_notes': result.get('processing_notes', []),
+            'face_detected': result.get('face_detected', False),
+            'detector_used': result.get('detector_used'),
+            'confidence': result.get('confidence', 0.0),
+            'has_landmarks': result.get('has_landmarks', False),
+            'recommended_for_upload': result.get('quality_score', 0.0) >= 0.6
+        }
+        
+    except Exception as e:
+        logger.error(f"Quality assessment failed for staff {staff_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Quality assessment failed: {str(e)}"
+        )

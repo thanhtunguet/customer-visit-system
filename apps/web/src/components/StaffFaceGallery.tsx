@@ -125,6 +125,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   } | null>(null);
   const [uploadController, setUploadController] = useState<AbortController | null>(null);
   const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
+  const [recalculatingAll, setRecalculatingAll] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewTitle, setPreviewTitle] = useState<string>('');
@@ -139,7 +140,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
 
   // Convert image path to full URL
   const getImageUrl = (imagePath: string) => {
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
     const token = localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/files/${imagePath}`);
     if (token) {
@@ -343,6 +344,63 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     }
   };
 
+  // Handle recalculating all face images
+  const handleRecalculateAll = async () => {
+    if (faceImages.length === 0) {
+      message.info('No face images to recalculate');
+      return;
+    }
+
+    try {
+      setRecalculatingAll(true);
+      
+      let successCount = 0;
+      let failureCount = 0;
+      const errors: string[] = [];
+
+      // Process each image sequentially to avoid overwhelming the server
+      for (const image of faceImages) {
+        try {
+          const result = await apiClient.recalculateFaceEmbedding(staffId, image.image_id);
+          successCount++;
+          
+          // Show progress for each successful recalculation
+          message.info(`Recalculated ${image.image_id.slice(0, 8)}... (${successCount}/${faceImages.length})`);
+        } catch (error: any) {
+          failureCount++;
+          const errorMsg = error.response?.data?.detail || 'Failed to recalculate';
+          errors.push(`${image.image_id.slice(0, 8)}: ${errorMsg}`);
+        }
+
+        // Small delay between requests to prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Show final results
+      if (successCount === faceImages.length) {
+        message.success(`Successfully recalculated all ${successCount} face images`);
+      } else if (successCount > 0) {
+        message.warning(
+          `Recalculated ${successCount} images successfully, ${failureCount} failed. ${
+            errors.length > 0 ? `Errors: ${errors.join(', ')}` : ''
+          }`
+        );
+      } else {
+        message.error(`Failed to recalculate all images. ${
+          errors.length > 0 ? `Errors: ${errors.join(', ')}` : ''
+        }`);
+      }
+
+      // Refresh the image list
+      onImagesChange();
+      
+    } catch (error: any) {
+      message.error('Failed to recalculate face images');
+    } finally {
+      setRecalculatingAll(false);
+    }
+  };
+
   // Handle image preview
   const handlePreview = (image: StaffFaceImage) => {
     setPreviewImage(getImageUrl(image.image_path));
@@ -408,6 +466,27 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               </Button>
             </Upload>
           )}
+          
+          {faceImages.length > 0 && (
+            <Tooltip title="Recalculate facial landmarks and embeddings for all images to improve accuracy">
+              <Popconfirm
+                title="Recalculate All Face Images"
+                description={`This will recalculate facial landmarks and embeddings for all ${faceImages.length} images. This may take a while. Continue?`}
+                onConfirm={handleRecalculateAll}
+                okText="Yes, Recalculate All"
+                cancelText="Cancel"
+                okButtonProps={{ danger: true }}
+              >
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  loading={recalculatingAll}
+                  disabled={uploading || recalculatingId !== null}
+                >
+                  Recalculate All ({faceImages.length})
+                </Button>
+              </Popconfirm>
+            </Tooltip>
+          )}
         </Space>
       </div>
 
@@ -445,6 +524,27 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               Processing: {uploadProgress.currentFileName}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Recalculate All Progress Indicator */}
+      {recalculatingAll && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-orange-900">
+              Recalculating Face Images and Embeddings...
+            </span>
+            <div className="flex items-center gap-2">
+              <Spin size="small" />
+              <span className="text-xs text-orange-700">
+                Processing {faceImages.length} images
+              </span>
+            </div>
+          </div>
+          <div className="text-xs text-orange-600">
+            This process will update facial landmarks and regenerate embeddings for better accuracy.
+            Please wait...
+          </div>
         </div>
       )}
 
@@ -515,6 +615,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                     type="text"
                     icon={<ReloadOutlined />}
                     loading={recalculatingId === image.image_id}
+                    disabled={recalculatingAll || uploading}
                     onClick={() => handleRecalculate(image.image_id)}
                   />
                 </Tooltip>,
@@ -541,7 +642,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                     {image.image_id.slice(0, 8)}...
                   </span>
                   {image.is_primary && (
-                    <Tag color="gold" size="small">Primary</Tag>
+                    <Tag color="gold">Primary</Tag>
                   )}
                 </div>
                 
