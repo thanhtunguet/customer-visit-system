@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
 import { CameraStream } from '../components/CameraStream';
+import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType, WebcamInfo } from '../types/api';
@@ -598,68 +599,25 @@ export const Cameras: React.FC = () => {
 
       {/* Multi Camera Streaming Modal */}
       <Modal
-        title={
-          <Space>
-            <EyeOutlined style={{ color: '#1890ff' }} />
-            <span>All Active Camera Streams ({cameras.filter(cam => streamStatuses[cam.camera_id]).length})</span>
-          </Space>
-        }
+        title={null}
         open={multiStreamModalVisible}
         onCancel={() => {
           setMultiStreamModalVisible(false);
         }}
         footer={null}
         width="98%"
-        style={{ maxWidth: '1800px' }}
-        styles={{ body: { padding: '16px' } }}
+        style={{ maxWidth: '1920px' }}
+        styles={{ body: { padding: '0' } }}
         centered
+        destroyOnClose
       >
-        <div className="grid gap-4" style={{ 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          maxHeight: '80vh',
-          overflowY: 'auto'
-        }}>
-          {cameras
-            .filter(camera => streamStatuses[camera.camera_id])
-            .map((camera) => (
-              <div key={camera.camera_id} className="border border-gray-200 rounded-lg p-4 bg-white">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    <VideoCameraOutlined className="text-blue-600" />
-                    <span className="font-medium">{camera.name}</span>
-                    <span className="text-gray-500 text-sm">#{camera.camera_id}</span>
-                    <Tag color={camera.camera_type === 'rtsp' ? 'blue' : 'green'}>
-                      {camera.camera_type === 'rtsp' ? 'RTSP' : 'Webcam'}
-                    </Tag>
-                  </div>
-                  <Button
-                    size="small"
-                    icon={<StopOutlined />}
-                    onClick={() => handleStopStream(camera)}
-                    danger
-                  >
-                    Stop
-                  </Button>
-                </div>
-                <CameraStream
-                  siteId={selectedSite}
-                  cameraId={camera.camera_id}
-                  cameraName={camera.name}
-                  onStreamStateChange={handleStreamStateChange}
-                  onConnectionStateChange={() => {}} // Individual connection states not needed here
-                  autoReconnect={true}
-                  currentStreamStatus={streamStatuses[camera.camera_id] || false}
-                />
-              </div>
-            ))}
-          {cameras.filter(cam => streamStatuses[cam.camera_id]).length === 0 && (
-            <div className="col-span-full text-center py-8 text-gray-500">
-              <VideoCameraOutlined className="text-4xl mb-4" />
-              <div className="text-lg">No Active Streams</div>
-              <div className="text-sm">Start camera streams from the main table to view them here</div>
-            </div>
-          )}
-        </div>
+        <MultiCameraStreamView
+          siteId={selectedSite}
+          cameras={cameras}
+          streamStatuses={streamStatuses}
+          onStreamStateChange={handleStreamStateChange}
+          onStopStream={handleStopStream}
+        />
       </Modal>
     </div>
   );
