@@ -11,9 +11,11 @@ import {
   Tag,
   Select,
   Radio,
-  Popconfirm
+  Popconfirm,
+  Tooltip,
+  message
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { CameraStream } from '../components/CameraStream';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType } from '../types/api';
@@ -32,6 +34,7 @@ export const Cameras: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
   const [streamModalVisible, setStreamModalVisible] = useState(false);
+  const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadSites();
@@ -42,6 +45,40 @@ export const Cameras: React.FC = () => {
       loadCameras(selectedSite);
     }
   }, [selectedSite]);
+
+  // Check stream statuses periodically
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (selectedSite && cameras.length > 0) {
+      const checkStreamStatuses = async () => {
+        const statuses: Record<string, boolean> = {};
+        
+        for (const camera of cameras) {
+          try {
+            const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
+            statuses[camera.camera_id] = status.stream_active;
+          } catch (err) {
+            statuses[camera.camera_id] = false;
+          }
+        }
+        
+        setStreamStatuses(statuses);
+      };
+      
+      // Check immediately
+      checkStreamStatuses();
+      
+      // Then check every 10 seconds
+      interval = setInterval(checkStreamStatuses, 10000);
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [selectedSite, cameras]);
 
   const loadSites = async () => {
     try {
@@ -113,6 +150,16 @@ export const Cameras: React.FC = () => {
     setStreamModalVisible(true);
   };
 
+  const handleStopStream = async (camera: Camera) => {
+    try {
+      await apiClient.stopCameraStream(selectedSite, camera.camera_id);
+      setStreamStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
+      message.success(`Stopped stream for ${camera.name}`);
+    } catch (err: any) {
+      message.error(`Failed to stop stream: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
   const columns = [
     {
       title: 'Camera ID',
@@ -170,6 +217,18 @@ export const Cameras: React.FC = () => {
       ),
     },
     {
+      title: 'Stream Status',
+      key: 'stream_status',
+      render: (_, camera: Camera) => {
+        const isStreaming = streamStatuses[camera.camera_id];
+        return (
+          <Tag color={isStreaming ? 'blue' : 'default'}>
+            {isStreaming ? 'Streaming' : 'Not Streaming'}
+          </Tag>
+        );
+      },
+    },
+    {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -182,41 +241,67 @@ export const Cameras: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, camera: Camera) => (
-        <Space>
-          <Button
-            icon={<PlayCircleOutlined />}
-            onClick={() => handleStartStreaming(camera)}
-            size="small"
-            type="primary"
-            disabled={!camera.is_active}
-          >
-            Stream
-          </Button>
-          <Button
-            icon={<EditOutlined />}
-            onClick={() => handleEditCamera(camera)}
-            size="small"
-          >
-            Edit
-          </Button>
-          <Popconfirm
-            title="Delete Camera"
-            description="Are you sure you want to delete this camera?"
-            onConfirm={() => handleDeleteCamera(camera)}
-            okText="Yes"
-            cancelText="No"
-          >
+      render: (_, camera: Camera) => {
+        const isStreaming = streamStatuses[camera.camera_id];
+        
+        return (
+          <Space>
+            {!isStreaming ? (
+              <Tooltip title="View live stream">
+                <Button
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => handleStartStreaming(camera)}
+                  size="small"
+                  type="primary"
+                  disabled={!camera.is_active}
+                >
+                  Stream
+                </Button>
+              </Tooltip>
+            ) : (
+              <Tooltip title="Stop camera stream">
+                <Popconfirm
+                  title="Stop Stream"
+                  description="Are you sure you want to stop this camera stream?"
+                  onConfirm={() => handleStopStream(camera)}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Button
+                    icon={<StopOutlined />}
+                    size="small"
+                    danger
+                  >
+                    Stop
+                  </Button>
+                </Popconfirm>
+              </Tooltip>
+            )}
             <Button
-              icon={<DeleteOutlined />}
-              danger
+              icon={<EditOutlined />}
+              onClick={() => handleEditCamera(camera)}
               size="small"
             >
-              Delete
+              Edit
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title="Delete Camera"
+              description="Are you sure you want to delete this camera?"
+              onConfirm={() => handleDeleteCamera(camera)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button
+                icon={<DeleteOutlined />}
+                danger
+                size="small"
+              >
+                Delete
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 

@@ -62,8 +62,6 @@ async def simulate_event_post(token: str, client: httpx.AsyncClient) -> None:
     print("POST /v1/events/face =>", r.status_code)
 
 
-from __future__ import annotations
-
 import asyncio
 import cv2
 import logging
@@ -367,10 +365,6 @@ async def main():
     
     finally:
         await worker.shutdown()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 
 if __name__ == "__main__":

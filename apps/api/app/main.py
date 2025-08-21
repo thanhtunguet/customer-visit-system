@@ -26,6 +26,44 @@ from .services.face_processing_service import face_processing_service
 from pkg_common.models import FaceDetectedEvent
 
 
+async def auto_start_camera_streams():
+    """Auto-start all active camera streams on API startup"""
+    try:
+        from .core.database import get_db_session
+        
+        async for db_session in get_db_session():
+            try:
+                # Get all active cameras across all tenants
+                result = await db_session.execute(
+                    select(Camera).where(Camera.is_active == True)
+                )
+                cameras = result.scalars().all()
+                
+                started_count = 0
+                for camera in cameras:
+                    success = streaming_service.start_stream(
+                        camera_id=camera.camera_id,
+                        camera_type=camera.camera_type.value,
+                        rtsp_url=camera.rtsp_url,
+                        device_index=camera.device_index
+                    )
+                    if success:
+                        started_count += 1
+                        logging.info(f"Auto-started stream for camera {camera.camera_id}")
+                    else:
+                        logging.warning(f"Failed to auto-start stream for camera {camera.camera_id}")
+                
+                logging.info(f"Auto-started {started_count} camera streams")
+                break  # Only use the first database session
+                
+            except Exception as e:
+                logging.error(f"Error auto-starting camera streams: {e}")
+                break
+                
+    except Exception as e:
+        logging.error(f"Failed to get database session for auto-start: {e}")
+
+
 # Application lifespan management
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,6 +79,13 @@ async def lifespan(app: FastAPI):
         logging.info("Connected to MinIO")
     except Exception as e:
         logging.warning(f"Failed to connect to MinIO: {e}")
+    
+    # Auto-start all active camera streams
+    try:
+        await auto_start_camera_streams()
+        logging.info("Auto-started camera streams")
+    except Exception as e:
+        logging.warning(f"Failed to auto-start camera streams: {e}")
     
     logging.info("API startup completed")
     

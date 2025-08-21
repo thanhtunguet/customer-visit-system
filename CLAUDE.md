@@ -84,6 +84,8 @@ Create a monorepo:
 Style: Keep code and prompts concise; prefer small, composable modules; rigorous typing; short, descriptive commit messages (Conventional Commits).
 Assume: No internet access at runtime; provide mock data and test assets.
 
+IMPORTANT CODE CHECKING RULE: Never run commands to check code functionality. Only compile code to fix syntax errors. Do not execute tests, dev servers, or validation commands unless explicitly requested by the user.
+
 Now generate:
 	1.	All scaffolding and configs.
 	2.	Core API, worker, and web MVP with tests.
