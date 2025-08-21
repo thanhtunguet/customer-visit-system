@@ -64,11 +64,55 @@ async def lifespan(app: FastAPI):
 from .services.camera_streaming_service import streaming_service
 
 
+tags_metadata = [
+    {
+        "name": "Health & Monitoring",
+        "description": "System health checks and monitoring endpoints",
+    },
+    {
+        "name": "Authentication",
+        "description": "User authentication and token management",
+    },
+    {
+        "name": "Tenant Management",
+        "description": "Multi-tenant administration (System Admin only)",
+    },
+    {
+        "name": "Site Management", 
+        "description": "Site locations and configuration management",
+    },
+    {
+        "name": "Camera Management",
+        "description": "Camera devices and video streaming operations",
+    },
+    {
+        "name": "Staff Management",
+        "description": "Staff member profiles and face recognition training",
+    },
+    {
+        "name": "Customer Management",
+        "description": "Customer profiles and visit history",
+    },
+    {
+        "name": "Events & Detection",
+        "description": "Real-time face detection and recognition events",
+    },
+    {
+        "name": "Visits & Analytics",
+        "description": "Visit tracking, reporting, and analytics",
+    },
+    {
+        "name": "File Management",
+        "description": "File serving and download endpoints",
+    },
+]
+
 app = FastAPI(
     title="Customer Visits API",
     version="0.1.0",
     openapi_url="/v1/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
+    openapi_tags=tags_metadata
 )
 
 app.add_middleware(
@@ -250,17 +294,17 @@ class FaceEventResponse(BaseModel):
 # Health & Auth Endpoints
 # ===============================
 
-@app.get("/v1/health")
+@app.get("/v1/health", tags=["Health & Monitoring"])
 async def health():
     return {"status": "ok", "env": settings.env, "timestamp": datetime.now(timezone.utc)}
 
-@app.get("/v1/health/milvus")
+@app.get("/v1/health/milvus", tags=["Health & Monitoring"])
 async def health_milvus():
     """Get Milvus connection health status"""
     milvus_health = await milvus_client.health_check()
     return milvus_health
 
-@app.get("/v1/health/face-processing")
+@app.get("/v1/health/face-processing", tags=["Health & Monitoring"])
 async def health_face_processing():
     """Check if face processing dependencies are available."""
     try:
@@ -278,7 +322,7 @@ async def health_face_processing():
         }
 
 
-@app.post("/v1/auth/token", response_model=TokenResponse)
+@app.post("/v1/auth/token", response_model=TokenResponse, tags=["Authentication"])
 async def issue_token(payload: TokenRequest):
     if payload.grant_type == "api_key":
         if payload.api_key != os.getenv("WORKER_API_KEY", "dev-api-key"):
@@ -296,7 +340,7 @@ async def issue_token(payload: TokenRequest):
     return TokenResponse(access_token=token)
 
 
-@app.get("/v1/me")
+@app.get("/v1/me", tags=["Authentication"])
 async def get_current_user_info(user: dict = Depends(get_current_user)):
     return user
 
@@ -305,7 +349,7 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 # Tenant Management (System Admin Only)
 # ===============================
 
-@app.get("/v1/tenants", response_model=List[TenantResponse])
+@app.get("/v1/tenants", response_model=List[TenantResponse], tags=["Tenant Management"])
 async def list_tenants(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -320,7 +364,7 @@ async def list_tenants(
     return tenants
 
 
-@app.post("/v1/tenants", response_model=TenantResponse)
+@app.post("/v1/tenants", response_model=TenantResponse, tags=["Tenant Management"])
 async def create_tenant(
     tenant: TenantCreate,
     user: dict = Depends(get_current_user),
@@ -339,7 +383,7 @@ async def create_tenant(
 # Sites Management
 # ===============================
 
-@app.get("/v1/sites", response_model=List[SiteResponse])
+@app.get("/v1/sites", response_model=List[SiteResponse], tags=["Site Management"])
 async def list_sites(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -353,7 +397,7 @@ async def list_sites(
     return sites
 
 
-@app.post("/v1/sites", response_model=SiteResponse)
+@app.post("/v1/sites", response_model=SiteResponse, tags=["Site Management"])
 async def create_site(
     site: SiteCreate,
     user: dict = Depends(get_current_user),
@@ -376,7 +420,7 @@ async def create_site(
 # Cameras Management
 # ===============================
 
-@app.get("/v1/sites/{site_id}/cameras", response_model=List[CameraResponse])
+@app.get("/v1/sites/{site_id}/cameras", response_model=List[CameraResponse], tags=["Camera Management"])
 async def list_cameras(
     site_id: str,
     user: dict = Depends(get_current_user),
@@ -393,7 +437,7 @@ async def list_cameras(
     return cameras
 
 
-@app.post("/v1/sites/{site_id}/cameras", response_model=CameraResponse)
+@app.post("/v1/sites/{site_id}/cameras", response_model=CameraResponse, tags=["Camera Management"])
 async def create_camera(
     site_id: str,
     camera: CameraCreate,
@@ -414,7 +458,7 @@ async def create_camera(
     await db_session.commit()
     return new_camera
 
-@app.get("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse, tags=["Camera Management"])
 async def get_camera(
     site_id: str,
     camera_id: str,
@@ -439,7 +483,7 @@ async def get_camera(
     return camera
 
 
-@app.put("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
+@app.put("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse, tags=["Camera Management"])
 async def update_camera(
     site_id: str,
     camera_id: str,
@@ -473,7 +517,7 @@ async def update_camera(
     return camera
 
 
-@app.delete("/v1/sites/{site_id}/cameras/{camera_id}")
+@app.delete("/v1/sites/{site_id}/cameras/{camera_id}", tags=["Camera Management"])
 async def delete_camera(
     site_id: str,
     camera_id: str,
@@ -501,7 +545,7 @@ async def delete_camera(
 
 # Camera Streaming Endpoints
 
-@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/start")
+@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/start", tags=["Camera Management"])
 async def start_camera_stream(
     site_id: str,
     camera_id: str,
@@ -554,7 +598,7 @@ async def start_camera_stream(
     }
 
 
-@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/stop")
+@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/stop", tags=["Camera Management"])
 async def stop_camera_stream(
     site_id: str,
     camera_id: str,
@@ -589,7 +633,7 @@ async def stop_camera_stream(
     }
 
 
-@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/status")
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/status", tags=["Camera Management"])
 async def get_camera_stream_status(
     site_id: str,
     camera_id: str,
@@ -625,7 +669,7 @@ async def get_camera_stream_status(
     }
 
 
-@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/feed")
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/feed", tags=["Camera Management"])
 async def get_camera_stream_feed(
     site_id: str,
     camera_id: str,
@@ -666,7 +710,7 @@ async def get_camera_stream_feed(
 # Staff Management
 # ===============================
 
-@app.get("/v1/staff", response_model=List[StaffResponse])
+@app.get("/v1/staff", response_model=List[StaffResponse], tags=["Staff Management"])
 async def list_staff(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -680,7 +724,7 @@ async def list_staff(
     return staff_members
 
 
-@app.post("/v1/staff", response_model=StaffResponse)
+@app.post("/v1/staff", response_model=StaffResponse, tags=["Staff Management"])
 async def create_staff(
     staff: StaffCreate,
     user: dict = Depends(get_current_user),
@@ -717,7 +761,7 @@ async def create_staff(
     # Return the created staff member
     return new_staff
 
-@app.get("/v1/staff/{staff_id}", response_model=StaffResponse)
+@app.get("/v1/staff/{staff_id}", response_model=StaffResponse, tags=["Staff Management"])
 async def get_staff_member(
     staff_id: str,
     user: dict = Depends(get_current_user),
@@ -737,7 +781,7 @@ async def get_staff_member(
     return staff_member
 
 
-@app.put("/v1/staff/{staff_id}", response_model=StaffResponse)
+@app.put("/v1/staff/{staff_id}", response_model=StaffResponse, tags=["Staff Management"])
 async def update_staff(
     staff_id: str,
     staff_update: StaffCreate,
@@ -777,7 +821,7 @@ async def update_staff(
     return staff_member
 
 
-@app.delete("/v1/staff/{staff_id}")
+@app.delete("/v1/staff/{staff_id}", tags=["Staff Management"])
 async def delete_staff(
     staff_id: str,
     user: dict = Depends(get_current_user),
@@ -808,7 +852,7 @@ async def delete_staff(
 # Staff Face Images API
 # ===============================
 
-@app.get("/v1/staff/{staff_id}/faces", response_model=List[StaffFaceImageResponse])
+@app.get("/v1/staff/{staff_id}/faces", response_model=List[StaffFaceImageResponse], tags=["Staff Management"])
 async def get_staff_face_images(
     staff_id: str,
     user: dict = Depends(get_current_user),
@@ -854,7 +898,7 @@ async def get_staff_face_images(
     
     return response_images
 
-@app.get("/v1/staff/{staff_id}/details", response_model=StaffWithFacesResponse)
+@app.get("/v1/staff/{staff_id}/details", response_model=StaffWithFacesResponse, tags=["Staff Management"])
 async def get_staff_with_faces(
     staff_id: str,
     user: dict = Depends(get_current_user),
@@ -911,7 +955,7 @@ async def get_staff_with_faces(
     
     return StaffWithFacesResponse(**staff_data)
 
-@app.post("/v1/staff/{staff_id}/faces", response_model=StaffFaceImageResponse)
+@app.post("/v1/staff/{staff_id}/faces", response_model=StaffFaceImageResponse, tags=["Staff Management"])
 async def upload_staff_face_image(
     staff_id: str,
     face_data: StaffFaceImageCreate,
@@ -1002,7 +1046,7 @@ async def upload_staff_face_image(
         logger.error(f"Failed to upload staff face image: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.delete("/v1/staff/{staff_id}/faces/{image_id}")
+@app.delete("/v1/staff/{staff_id}/faces/{image_id}", tags=["Staff Management"])
 async def delete_staff_face_image(
     staff_id: str,
     image_id: str,
@@ -1046,7 +1090,7 @@ async def delete_staff_face_image(
         logger.error(f"Failed to delete face image: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete face image")
 
-@app.put("/v1/staff/{staff_id}/faces/{image_id}/recalculate")
+@app.put("/v1/staff/{staff_id}/faces/{image_id}/recalculate", tags=["Staff Management"])
 async def recalculate_face_embedding(
     staff_id: str,
     image_id: str,
@@ -1126,7 +1170,7 @@ async def recalculate_face_embedding(
         logger.error(f"Failed to recalculate face embedding: {e}")
         raise HTTPException(status_code=500, detail="Failed to recalculate face embedding")
 
-@app.post("/v1/staff/{staff_id}/test-recognition", response_model=FaceRecognitionTestResponse)
+@app.post("/v1/staff/{staff_id}/test-recognition", response_model=FaceRecognitionTestResponse, tags=["Staff Management"])
 async def test_face_recognition(
     staff_id: str,
     test_data: FaceRecognitionTestRequest,
@@ -1205,7 +1249,7 @@ async def test_face_recognition(
 # Customers
 # ===============================
 
-@app.get("/v1/customers", response_model=List[CustomerResponse])
+@app.get("/v1/customers", response_model=List[CustomerResponse], tags=["Customer Management"])
 async def list_customers(
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
@@ -1224,7 +1268,7 @@ async def list_customers(
     customers = result.scalars().all()
     return customers
 
-@app.post("/v1/customers", response_model=CustomerResponse)
+@app.post("/v1/customers", response_model=CustomerResponse, tags=["Customer Management"])
 async def create_customer(
     customer: CustomerCreate,
     user: dict = Depends(get_current_user),
@@ -1251,7 +1295,7 @@ async def create_customer(
     return new_customer
 
 
-@app.get("/v1/customers/{customer_id}", response_model=CustomerResponse)
+@app.get("/v1/customers/{customer_id}", response_model=CustomerResponse, tags=["Customer Management"])
 async def get_customer(
     customer_id: str,
     user: dict = Depends(get_current_user),
@@ -1271,7 +1315,7 @@ async def get_customer(
     return customer
 
 
-@app.put("/v1/customers/{customer_id}", response_model=CustomerResponse)
+@app.put("/v1/customers/{customer_id}", response_model=CustomerResponse, tags=["Customer Management"])
 async def update_customer(
     customer_id: str,
     customer_update: CustomerUpdate,
@@ -1306,7 +1350,7 @@ async def update_customer(
     return customer
 
 
-@app.delete("/v1/customers/{customer_id}")
+@app.delete("/v1/customers/{customer_id}", tags=["Customer Management"])
 async def delete_customer(
     customer_id: str,
     user: dict = Depends(get_current_user),
@@ -1338,7 +1382,7 @@ async def delete_customer(
 # Events Processing
 # ===============================
 
-@app.post("/v1/events/face", response_model=FaceEventResponse)
+@app.post("/v1/events/face", response_model=FaceEventResponse, tags=["Events & Detection"])
 async def process_face_event(
     event: FaceDetectedEvent,
     user: dict = Depends(get_current_user),
@@ -1359,7 +1403,7 @@ async def process_face_event(
 # Visits
 # ===============================
 
-@app.get("/v1/visits", response_model=List[VisitResponse])
+@app.get("/v1/visits", response_model=List[VisitResponse], tags=["Visits & Analytics"])
 async def list_visits(
     site_id: Optional[str] = Query(None),
     person_id: Optional[str] = Query(None),
@@ -1394,7 +1438,7 @@ async def list_visits(
 # Reports
 # ===============================
 
-@app.get("/v1/reports/visitors")
+@app.get("/v1/reports/visitors", tags=["Visits & Analytics"])
 async def get_visitor_report(
     site_id: Optional[str] = Query(None),
     granularity: str = Query("day", regex="^(hour|day|week|month)$"),
@@ -1451,7 +1495,7 @@ async def get_visitor_report(
 # Files (Authenticated MinIO Proxy)
 # ===============================
 
-@app.get("/v1/files/{file_path:path}")
+@app.get("/v1/files/{file_path:path}", tags=["File Management"])
 async def serve_file(
     file_path: str,
     token: Optional[str] = Query(None),
