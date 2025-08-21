@@ -12,10 +12,11 @@ import {
   Select,
   Popconfirm
 } from 'antd';
-import { PlusOutlined, TeamOutlined, EditOutlined, DeleteOutlined, PictureOutlined } from '@ant-design/icons';
+import { PlusOutlined, TeamOutlined, PictureOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Staff, Site } from '../types/api';
 import { StaffDetailsModal } from '../components/StaffDetailsModal';
+import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -158,38 +159,24 @@ export const StaffPage: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 120,
+      fixed: 'right' as const,
       render: (_, staffMember: Staff) => (
-        <Space>
-          <Button
-            icon={<PictureOutlined />}
+        <Space size="small">
+          <ViewAction
             onClick={() => handleViewDetails(staffMember)}
-            size="small"
-            title="View Details & Manage Face Images"
-          >
-            Details
-          </Button>
-          <Button
-            icon={<EditOutlined />}
+            tooltip="View details & manage face images"
+          />
+          <EditAction
             onClick={() => handleEditStaff(staffMember)}
-            size="small"
-          >
-            Edit
-          </Button>
-          <Popconfirm
+            tooltip="Edit staff member"
+          />
+          <DeleteAction
+            onConfirm={() => handleDeleteStaff(staffMember)}
             title="Delete Staff Member"
             description="Are you sure you want to delete this staff member? This will also remove their face recognition data."
-            onConfirm={() => handleDeleteStaff(staffMember)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button
-              icon={<DeleteOutlined />}
-              danger
-              size="small"
-            >
-              Delete
-            </Button>
-          </Popconfirm>
+            tooltip="Delete staff member"
+          />
         </Space>
       ),
     },

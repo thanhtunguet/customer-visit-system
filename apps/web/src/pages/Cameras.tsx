@@ -15,8 +15,9 @@ import {
   Tooltip,
   message
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
 import { CameraStream } from '../components/CameraStream';
+import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType } from '../types/api';
 import dayjs from 'dayjs';
@@ -292,32 +293,31 @@ export const Cameras: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 160,
+      fixed: 'right' as const,
       render: (_, camera: Camera) => {
         const isStreaming = streamStatuses[camera.camera_id];
         
         return (
-          <Space>
+          <Space size="small">
             <Tooltip title="View camera stream">
               <Button
+                type="text"
                 icon={<EyeOutlined />}
                 onClick={() => handleViewStream(camera)}
                 size="small"
                 disabled={!camera.is_active}
-              >
-                View
-              </Button>
+              />
             </Tooltip>
             {!isStreaming ? (
               <Tooltip title="Start live stream">
                 <Button
+                  type="text"
                   icon={<PlayCircleOutlined />}
                   onClick={() => handleStartStreaming(camera)}
                   size="small"
-                  type="primary"
                   disabled={!camera.is_active}
-                >
-                  Stream
-                </Button>
+                />
               </Tooltip>
             ) : (
               <Tooltip title="Stop camera stream">
@@ -329,37 +329,24 @@ export const Cameras: React.FC = () => {
                   cancelText="No"
                 >
                   <Button
+                    type="text"
                     icon={<StopOutlined />}
                     size="small"
                     danger
-                  >
-                    Stop
-                  </Button>
+                  />
                 </Popconfirm>
               </Tooltip>
             )}
-            <Button
-              icon={<EditOutlined />}
+            <EditAction
               onClick={() => handleEditCamera(camera)}
-              size="small"
-            >
-              Edit
-            </Button>
-            <Popconfirm
+              tooltip="Edit camera"
+            />
+            <DeleteAction
+              onConfirm={() => handleDeleteCamera(camera)}
               title="Delete Camera"
               description="Are you sure you want to delete this camera?"
-              onConfirm={() => handleDeleteCamera(camera)}
-              okText="Yes"
-              cancelText="No"
-            >
-              <Button
-                icon={<DeleteOutlined />}
-                danger
-                size="small"
-              >
-                Delete
-              </Button>
-            </Popconfirm>
+              tooltip="Delete camera"
+            />
           </Space>
         );
       },

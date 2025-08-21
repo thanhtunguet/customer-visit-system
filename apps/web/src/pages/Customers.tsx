@@ -11,8 +11,9 @@ import {
   Select,
   Popconfirm
 } from 'antd';
-import { PlusOutlined, UserOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
+import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { Customer } from '../types/api';
 import dayjs from 'dayjs';
 
@@ -155,30 +156,20 @@ export const Customers: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 100,
+      fixed: 'right' as const,
       render: (_, customer: Customer) => (
-        <Space>
-          <Button
-            icon={<EditOutlined />}
+        <Space size="small">
+          <EditAction
             onClick={() => handleEditCustomer(customer)}
-            size="small"
-          >
-            Edit
-          </Button>
-          <Popconfirm
+            tooltip="Edit customer"
+          />
+          <DeleteAction
+            onConfirm={() => handleDeleteCustomer(customer)}
             title="Delete Customer"
             description="Are you sure you want to delete this customer? This will also remove their recognition data and visit history."
-            onConfirm={() => handleDeleteCustomer(customer)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button
-              icon={<DeleteOutlined />}
-              danger
-              size="small"
-            >
-              Delete
-            </Button>
-          </Popconfirm>
+            tooltip="Delete customer"
+          />
         </Space>
       ),
     },
