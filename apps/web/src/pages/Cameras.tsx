@@ -612,7 +612,7 @@ export const Cameras: React.FC = () => {
         style={{ maxWidth: '1920px' }}
         styles={{ body: { padding: '0' } }}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         <MultiCameraStreamView
           key={`multi-stream-${selectedSite}-${multiStreamModalVisible}`}
