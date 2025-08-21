@@ -14,7 +14,9 @@ jobs:
       - run: pip install -r apps/api/requirements.txt pytest
       - run: pip install -r apps/worker/requirements.txt
       - run: pip install -e packages/python/common/
-      - run: PYTHONPATH=. pytest -q
+      - run: cp apps/api/.env.example apps/api/.env
+      - run: cp apps/worker/.env.example apps/worker/.env
+      - run: pytest -q
 
   build-images:
     runs-on: ubuntu-latest
