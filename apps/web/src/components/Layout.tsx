@@ -142,7 +142,7 @@ export const AppLayout: React.FC = () => {
             <h1 className={`font-bold text-blue-600 transition-all ${
               collapsed ? 'text-sm' : 'text-lg'
             }`}>
-              {collapsed ? 'FR' : 'Face Recognition'}
+              {collapsed ? 'CV' : 'Customer Visits'}
             </h1>
           </div>
         </div>

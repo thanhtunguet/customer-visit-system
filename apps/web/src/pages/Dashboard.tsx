@@ -298,7 +298,7 @@ export const Dashboard: React.FC = () => {
           <Col span={8}>
             <div className="text-center">
               <div className="w-3 h-3 bg-yellow-500 rounded-full mx-auto mb-2"></div>
-              <div className="text-sm font-medium">Face Recognition</div>
+              <div className="text-sm font-medium">Customer Visits</div>
               <div className="text-xs text-gray-500">Processing</div>
             </div>
           </Col>
