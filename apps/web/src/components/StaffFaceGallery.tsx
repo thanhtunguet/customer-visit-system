@@ -227,19 +227,36 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               is_primary: faceImages.length === 0 && chunkStart === 0 && index === 0
             }));
             
-            await apiClient.uploadMultipleStaffFaceImages(
+            const bulkResult = await apiClient.uploadMultipleStaffFaceImages(
               staffId, 
               bulkData.map(d => d.image_data)
             );
             
-            successCount += chunkData.length;
-            chunkProcessed = true;
+            // Check if bulk upload actually succeeded by verifying response
+            if (bulkResult && Array.isArray(bulkResult) && bulkResult.length > 0) {
+              successCount += bulkResult.length;
+              chunkProcessed = true;
+              
+              console.log(`Bulk upload succeeded for ${bulkResult.length} out of ${chunkData.length} images`);
+              
+              // If bulk upload was partial, we need to track which ones failed
+              if (bulkResult.length < chunkData.length) {
+                const failedCount = chunkData.length - bulkResult.length;
+                errorCount += failedCount;
+                for (let i = bulkResult.length; i < chunkData.length; i++) {
+                  failedFiles.push(`${chunkData[i].name} (bulk upload partial failure)`);
+                }
+              }
+            } else {
+              console.warn('Bulk upload returned invalid or empty response, falling back to individual uploads');
+            }
           } catch (bulkError) {
             console.warn('Bulk upload failed for chunk, falling back to individual uploads:', bulkError);
+            // Don't set chunkProcessed = true here, so we fall back to individual processing
           }
         }
         
-        // If bulk upload failed or we have only one image, process individually
+        // If bulk upload failed completely or we have only one image, process individually
         if (!chunkProcessed) {
           for (let i = 0; i < chunkData.length; i++) {
             const img = chunkData[i];

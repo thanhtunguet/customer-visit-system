@@ -1,4 +1,7 @@
 import json
+import base64
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -292,6 +295,27 @@ async def upload_staff_face_image(
         raise HTTPException(status_code=404, detail="Staff member not found")
     
     try:
+        # Check for duplicate images first
+        image_bytes = base64.b64decode(face_data.image_data.split(',')[-1])
+        image_hash = hashlib.sha256(image_bytes).hexdigest()
+        
+        existing_result = await db_session.execute(
+            select(StaffFaceImage).where(
+                and_(
+                    StaffFaceImage.tenant_id == user["tenant_id"],
+                    StaffFaceImage.staff_id == staff_id,
+                    StaffFaceImage.image_hash == image_hash
+                )
+            )
+        )
+        
+        existing_image = existing_result.scalar_one_or_none()
+        if existing_image:
+            raise HTTPException(
+                status_code=409,  # Conflict status for duplicates
+                detail=f"Duplicate image detected. Existing image ID: {existing_image.image_id}"
+            )
+        
         # Process face image
         processing_result = await face_processing_service.process_staff_face_image(
             base64_image=face_data.image_data,
@@ -300,6 +324,12 @@ async def upload_staff_face_image(
         )
         
         if not processing_result['success']:
+            # Check if it's a duplicate image
+            if processing_result.get('duplicate'):
+                raise HTTPException(
+                    status_code=409,  # Conflict status for duplicates
+                    detail=f"Duplicate image detected. Existing image ID: {processing_result.get('existing_image_id', 'unknown')}"
+                )
             raise HTTPException(
                 status_code=400, 
                 detail=f"Face processing failed: {processing_result.get('error', 'Unknown error')}"
@@ -327,6 +357,7 @@ async def upload_staff_face_image(
             image_path=processing_result['image_path'],
             face_landmarks=json.dumps(processing_result['landmarks']),
             face_embedding=json.dumps(processing_result['embedding']),
+            image_hash=processing_result.get('image_hash'),
             is_primary=face_data.is_primary
         )
         
@@ -402,6 +433,24 @@ async def upload_multiple_staff_face_images(
         
         async def process_single_image(i: int, image_data) -> tuple[int, StaffFaceImageResponse | str]:
             try:
+                # Check for duplicate images first
+                image_bytes = base64.b64decode(image_data.image_data.split(',')[-1])
+                image_hash = hashlib.sha256(image_bytes).hexdigest()
+                
+                existing_result = await db_session.execute(
+                    select(StaffFaceImage).where(
+                        and_(
+                            StaffFaceImage.tenant_id == user["tenant_id"],
+                            StaffFaceImage.staff_id == staff_id,
+                            StaffFaceImage.image_hash == image_hash
+                        )
+                    )
+                )
+                
+                existing_image = existing_result.scalar_one_or_none()
+                if existing_image:
+                    return i, f"Image {i+1}: Duplicate image detected (existing ID: {existing_image.image_id[:8]}...)"
+                
                 # Process face image
                 processing_result = await face_processing_service.process_staff_face_image(
                     base64_image=image_data.image_data,
@@ -410,6 +459,9 @@ async def upload_multiple_staff_face_images(
                 )
                 
                 if not processing_result['success']:
+                    # Check if it's a duplicate image
+                    if processing_result.get('duplicate'):
+                        return i, f"Image {i+1}: Duplicate image detected (existing ID: {processing_result.get('existing_image_id', 'unknown')[:8]}...)"
                     return i, f"Image {i+1}: Face processing failed - {processing_result.get('error', 'Unknown error')}"
                 
                 # Create face image record
@@ -420,6 +472,7 @@ async def upload_multiple_staff_face_images(
                     image_path=processing_result['image_path'],
                     face_landmarks=json.dumps(processing_result['landmarks']),
                     face_embedding=json.dumps(processing_result['embedding']),
+                    image_hash=processing_result.get('image_hash'),
                     is_primary=image_data.is_primary or (i == 0 and has_primary)
                 )
                 

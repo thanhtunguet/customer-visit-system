@@ -274,6 +274,11 @@ class FaceProcessingService:
             # Decode image
             image = self.decode_base64_image(base64_image)
             
+            # Calculate image hash for duplicate detection
+            import hashlib
+            image_bytes = base64.b64decode(base64_image.split(',')[-1])
+            image_hash = hashlib.sha256(image_bytes).hexdigest()
+            
             # Detect faces
             face_results = self.detect_faces_and_landmarks(image)
             
@@ -315,6 +320,7 @@ class FaceProcessingService:
                 'success': True,
                 'image_id': image_id,
                 'image_path': image_path,
+                'image_hash': image_hash,
                 'landmarks': ensure_json_serializable(landmarks),
                 'embedding': ensure_json_serializable(embedding),
                 'face_count': int(len(face_results)),

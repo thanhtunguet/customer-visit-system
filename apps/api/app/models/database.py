@@ -96,6 +96,7 @@ class StaffFaceImage(Base):
     image_path = Column(String(500), nullable=False)
     face_landmarks = Column(Text)  # JSON serialized landmarks (5-point)
     face_embedding = Column(Text)  # JSON serialized 512-D vector  
+    image_hash = Column(String(64), nullable=True)  # SHA-256 hash for duplicate detection
     is_primary = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -107,6 +108,7 @@ class StaffFaceImage(Base):
         ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),
         Index('idx_staff_face_images_staff_id', 'tenant_id', 'staff_id'),
         Index('idx_staff_face_images_primary', 'tenant_id', 'is_primary'),
+        Index('idx_staff_face_images_hash', 'tenant_id', 'staff_id', 'image_hash', unique=True),
     )
 
 
