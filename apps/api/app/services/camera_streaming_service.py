@@ -28,15 +28,20 @@ class CameraStreamingService:
     def __init__(self):
         self.streams: Dict[str, StreamInfo] = {}
         self.lock = threading.Lock()
+        self.device_locks: Dict[int, str] = {}  # Track which camera_id is using each device index
         
     def _capture_frames(self, stream_info: StreamInfo) -> None:
         """Capture frames in a separate thread"""
+        thread_name = f"CaptureThread-{stream_info.camera_id}"
+        logger.info(f"Starting {thread_name} for device index {stream_info.device_index}")
+        
         try:
+            frame_count = 0
             while stream_info.is_active and stream_info.cap:
                 ret, frame = stream_info.cap.read()
                 
                 if not ret:
-                    logger.warning(f"Failed to read frame from camera {stream_info.camera_id}")
+                    logger.warning(f"Failed to read frame from camera {stream_info.camera_id} (device {stream_info.device_index})")
                     stream_info.error_count += 1
                     
                     if stream_info.error_count >= stream_info.max_retries:
@@ -48,6 +53,17 @@ class CameraStreamingService:
                 
                 stream_info.error_count = 0  # Reset error count on successful read
                 stream_info.last_frame_time = time.time()
+                frame_count += 1
+                
+                # Add debug info every 100 frames
+                if frame_count % 100 == 0:
+                    logger.debug(f"Camera {stream_info.camera_id} (device {stream_info.device_index}): captured {frame_count} frames")
+                
+                # Add camera ID as metadata to frame (for debugging)
+                if frame is not None:
+                    # Add small text overlay to identify the camera
+                    cv2.putText(frame, f"Cam: {stream_info.camera_id} (Dev: {stream_info.device_index})", 
+                              (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 
                 # Encode frame as JPEG
                 ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -71,6 +87,7 @@ class CameraStreamingService:
             logger.error(f"Error in capture thread for camera {stream_info.camera_id}: {e}")
         finally:
             stream_info.is_active = False
+            logger.info(f"Stopped {thread_name}")
 
     def start_stream(self, camera_id: str, camera_type: str, rtsp_url: Optional[str] = None, device_index: Optional[int] = None) -> bool:
         """Start streaming for a camera"""
@@ -78,6 +95,13 @@ class CameraStreamingService:
             if camera_id in self.streams and self.streams[camera_id].is_active:
                 logger.info(f"Stream for camera {camera_id} is already active")
                 return True
+            
+            # Check for device conflicts for webcam type
+            if camera_type.lower() == 'webcam' and device_index is not None:
+                if device_index in self.device_locks:
+                    existing_camera = self.device_locks[device_index]
+                    logger.error(f"Device index {device_index} is already in use by camera {existing_camera}. Cannot start camera {camera_id}")
+                    return False
             
             # Create stream info
             stream_info = StreamInfo(
@@ -91,23 +115,46 @@ class CameraStreamingService:
             try:
                 if camera_type.lower() == 'rtsp' and rtsp_url:
                     stream_info.cap = cv2.VideoCapture(rtsp_url)
+                    logger.info(f"Attempting to open RTSP camera {camera_id} with URL: {rtsp_url}")
                 elif camera_type.lower() == 'webcam' and device_index is not None:
+                    logger.info(f"Attempting to open webcam camera {camera_id} with device index: {device_index}")
                     stream_info.cap = cv2.VideoCapture(device_index)
                 else:
-                    logger.error(f"Invalid camera configuration for camera {camera_id}")
+                    logger.error(f"Invalid camera configuration for camera {camera_id}: type={camera_type}, rtsp_url={rtsp_url}, device_index={device_index}")
                     return False
                 
                 if not stream_info.cap or not stream_info.cap.isOpened():
-                    logger.error(f"Failed to open camera {camera_id}")
+                    logger.error(f"Failed to open camera {camera_id} - OpenCV could not initialize the camera")
+                    if stream_info.cap:
+                        stream_info.cap.release()
                     return False
                 
-                # Set some properties for better performance
+                # Test if we can read a frame
+                ret, test_frame = stream_info.cap.read()
+                if not ret:
+                    logger.error(f"Failed to read test frame from camera {camera_id}")
+                    stream_info.cap.release()
+                    return False
+                
+                # Set some properties for better performance and uniqueness
                 stream_info.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                 stream_info.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
                 stream_info.cap.set(cv2.CAP_PROP_FPS, 30)
                 stream_info.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 
+                # For webcam, try to set additional properties to ensure unique streams
+                if camera_type.lower() == 'webcam':
+                    # Flush any existing buffers
+                    for _ in range(5):
+                        stream_info.cap.read()
+                    
+                    logger.info(f"Camera {camera_id}: Final resolution {int(stream_info.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(stream_info.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
+                
                 stream_info.is_active = True
+                
+                # Lock the device index if it's a webcam
+                if camera_type.lower() == 'webcam' and device_index is not None:
+                    self.device_locks[device_index] = camera_id
                 
                 # Start capture thread
                 stream_info.thread = threading.Thread(
@@ -118,7 +165,7 @@ class CameraStreamingService:
                 stream_info.thread.start()
                 
                 self.streams[camera_id] = stream_info
-                logger.info(f"Started stream for camera {camera_id}")
+                logger.info(f"Successfully started stream for camera {camera_id} (type: {camera_type}, device_index: {device_index})")
                 return True
                 
             except Exception as e:
@@ -135,6 +182,12 @@ class CameraStreamingService:
             
             stream_info = self.streams[camera_id]
             stream_info.is_active = False
+            
+            # Release device lock if it's a webcam
+            if (stream_info.camera_type.lower() == 'webcam' and 
+                stream_info.device_index is not None and 
+                stream_info.device_index in self.device_locks):
+                del self.device_locks[stream_info.device_index]
             
             # Wait for thread to finish
             if stream_info.thread and stream_info.thread.is_alive():
@@ -203,12 +256,27 @@ class CameraStreamingService:
                 # No frame available, wait a bit
                 await asyncio.sleep(1/30)  # ~30 FPS
 
+    def get_device_status(self) -> Dict:
+        """Get status of all devices and conflicts"""
+        with self.lock:
+            return {
+                "active_streams": {camera_id: {
+                    "device_index": info.device_index,
+                    "camera_type": info.camera_type,
+                    "is_active": info.is_active,
+                    "error_count": info.error_count
+                } for camera_id, info in self.streams.items()},
+                "device_locks": dict(self.device_locks),
+                "total_active_streams": len([s for s in self.streams.values() if s.is_active])
+            }
+
     def cleanup_all_streams(self) -> None:
         """Stop all streams and cleanup resources"""
         with self.lock:
             camera_ids = list(self.streams.keys())
             for camera_id in camera_ids:
                 self.stop_stream(camera_id)
+            self.device_locks.clear()
 
 
 # Global instance
