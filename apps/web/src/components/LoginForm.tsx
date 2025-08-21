@@ -32,7 +32,7 @@ export const LoginForm: React.FC = () => {
       <Card className="w-full max-w-md shadow-lg">
         <div className="text-center mb-8">
           <Title level={2} className="text-blue-600 mb-2">
-            Face Recognition System
+            Customer Visits System
           </Title>
           <Text type="secondary">
             Sign in to your account

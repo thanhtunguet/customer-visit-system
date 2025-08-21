@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Simple E2E test script (without Docker Compose)
-echo "🚀 Face Recognition System Simple E2E Test"
+echo "🚀 Customer Visits System Simple E2E Test"
 
 # Function to check if service is healthy
 check_service() {

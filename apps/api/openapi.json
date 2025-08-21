@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Face Recognition API",
+    "title": "Customer Visits API",
     "version": "0.1.0"
   },
   "paths": {
@@ -26,6 +26,23 @@
         "summary": "Health Milvus",
         "description": "Get Milvus connection health status",
         "operationId": "health_milvus_v1_health_milvus_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health/face-processing": {
+      "get": {
+        "summary": "Health Face Processing",
+        "description": "Check if face processing dependencies are available.",
+        "operationId": "health_face_processing_v1_health_face_processing_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -646,6 +663,274 @@
         }
       }
     },
+    "/v1/sites/{site_id}/cameras/{camera_id}/stream/start": {
+      "post": {
+        "summary": "Start Camera Stream",
+        "description": "Start streaming for a specific camera",
+        "operationId": "start_camera_stream_v1_sites__site_id__cameras__camera_id__stream_start_post",
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sites/{site_id}/cameras/{camera_id}/stream/stop": {
+      "post": {
+        "summary": "Stop Camera Stream",
+        "description": "Stop streaming for a specific camera",
+        "operationId": "stop_camera_stream_v1_sites__site_id__cameras__camera_id__stream_stop_post",
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sites/{site_id}/cameras/{camera_id}/stream/status": {
+      "get": {
+        "summary": "Get Camera Stream Status",
+        "description": "Get streaming status for a specific camera",
+        "operationId": "get_camera_stream_status_v1_sites__site_id__cameras__camera_id__stream_status_get",
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sites/{site_id}/cameras/{camera_id}/stream/feed": {
+      "get": {
+        "summary": "Get Camera Stream Feed",
+        "description": "Get live video feed for a camera (MJPEG stream)",
+        "operationId": "get_camera_stream_feed_v1_sites__site_id__cameras__camera_id__stream_feed_get",
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "access_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/staff": {
       "get": {
         "summary": "List Staff",
@@ -903,6 +1188,378 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/{staff_id}/faces": {
+      "get": {
+        "summary": "Get Staff Face Images",
+        "description": "Get all face images for a staff member.",
+        "operationId": "get_staff_face_images_v1_staff__staff_id__faces_get",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StaffFaceImageResponse"
+                  },
+                  "title": "Response Get Staff Face Images V1 Staff  Staff Id  Faces Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Upload Staff Face Image",
+        "description": "Upload a new face image for a staff member.",
+        "operationId": "upload_staff_face_image_v1_staff__staff_id__faces_post",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffFaceImageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffFaceImageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/{staff_id}/details": {
+      "get": {
+        "summary": "Get Staff With Faces",
+        "description": "Get staff details with all face images.",
+        "operationId": "get_staff_with_faces_v1_staff__staff_id__details_get",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffWithFacesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/{staff_id}/faces/{image_id}": {
+      "delete": {
+        "summary": "Delete Staff Face Image",
+        "description": "Delete a staff face image.",
+        "operationId": "delete_staff_face_image_v1_staff__staff_id__faces__image_id__delete",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/{staff_id}/faces/{image_id}/recalculate": {
+      "put": {
+        "summary": "Recalculate Face Embedding",
+        "description": "Recalculate face landmarks and embedding for an existing image.",
+        "operationId": "recalculate_face_embedding_v1_staff__staff_id__faces__image_id__recalculate_put",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/{staff_id}/test-recognition": {
+      "post": {
+        "summary": "Test Face Recognition",
+        "description": "Test face recognition accuracy by uploading a test image.",
+        "operationId": "test_face_recognition_v1_staff__staff_id__test_recognition_post",
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Staff Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRecognitionTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRecognitionTestResponse"
+                }
               }
             }
           },
@@ -1512,16 +2169,98 @@
           }
         }
       }
+    },
+    "/v1/files/{file_path}": {
+      "get": {
+        "summary": "Serve File",
+        "description": "Serve files stored in MinIO with tenant-aware access control.\n\nCurrently supports staff face images under paths like:\nstaff-faces/{tenant_id}/<filename>.{jpg|png|webp|gif}",
+        "operationId": "serve_file_v1_files__file_path__get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "access_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
       "CameraCreate": {
         "properties": {
-          "camera_id": {
-            "type": "string",
-            "title": "Camera Id"
-          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -1559,7 +2298,6 @@
         },
         "type": "object",
         "required": [
-          "camera_id",
           "name"
         ],
         "title": "CameraCreate"
@@ -1641,6 +2379,71 @@
       },
       "CustomerCreate": {
         "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "estimated_age_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Age Range"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "title": "CustomerCreate"
+      },
+      "CustomerResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
           "customer_id": {
             "type": "string",
             "title": "Customer Id"
@@ -1677,25 +2480,8 @@
               }
             ],
             "title": "Estimated Age Range"
-          }
-        },
-        "type": "object",
-        "required": [
-          "customer_id"
-        ],
-        "title": "CustomerCreate"
-      },
-      "CustomerResponse": {
-        "properties": {
-          "tenant_id": {
-            "type": "string",
-            "title": "Tenant Id"
           },
-          "customer_id": {
-            "type": "string",
-            "title": "Customer Id"
-          },
-          "name": {
+          "phone": {
             "anyOf": [
               {
                 "type": "string"
@@ -1704,9 +2490,9 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Phone"
           },
-          "gender": {
+          "email": {
             "anyOf": [
               {
                 "type": "string"
@@ -1715,7 +2501,7 @@
                 "type": "null"
               }
             ],
-            "title": "Gender"
+            "title": "Email"
           },
           "first_seen": {
             "type": "string",
@@ -1745,6 +2531,9 @@
           "customer_id",
           "name",
           "gender",
+          "estimated_age_range",
+          "phone",
+          "email",
           "first_seen",
           "last_seen",
           "visit_count"
@@ -1785,6 +2574,28 @@
               }
             ],
             "title": "Estimated Age Range"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           }
         },
         "type": "object",
@@ -1867,7 +2678,7 @@
           "person_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -1904,6 +2715,51 @@
           "person_type"
         ],
         "title": "FaceEventResponse"
+      },
+      "FaceRecognitionTestRequest": {
+        "properties": {
+          "test_image": {
+            "type": "string",
+            "title": "Test Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "test_image"
+        ],
+        "title": "FaceRecognitionTestRequest"
+      },
+      "FaceRecognitionTestResponse": {
+        "properties": {
+          "matches": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Matches"
+          },
+          "best_match": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Match"
+          },
+          "processing_info": {
+            "type": "object",
+            "title": "Processing Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matches",
+          "processing_info"
+        ],
+        "title": "FaceRecognitionTestResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1990,10 +2846,6 @@
       },
       "StaffCreate": {
         "properties": {
-          "staff_id": {
-            "type": "string",
-            "title": "Staff Id"
-          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -2026,10 +2878,83 @@
         },
         "type": "object",
         "required": [
-          "staff_id",
           "name"
         ],
         "title": "StaffCreate"
+      },
+      "StaffFaceImageCreate": {
+        "properties": {
+          "image_data": {
+            "type": "string",
+            "title": "Image Data"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_data"
+        ],
+        "title": "StaffFaceImageCreate"
+      },
+      "StaffFaceImageResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "staff_id": {
+            "type": "string",
+            "title": "Staff Id"
+          },
+          "image_path": {
+            "type": "string",
+            "title": "Image Path"
+          },
+          "face_landmarks": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Landmarks"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "image_id",
+          "staff_id",
+          "image_path",
+          "is_primary",
+          "created_at"
+        ],
+        "title": "StaffFaceImageResponse"
       },
       "StaffResponse": {
         "properties": {
@@ -2076,6 +3001,60 @@
           "created_at"
         ],
         "title": "StaffResponse"
+      },
+      "StaffWithFacesResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "staff_id": {
+            "type": "string",
+            "title": "Staff Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "face_images": {
+            "items": {
+              "$ref": "#/components/schemas/StaffFaceImageResponse"
+            },
+            "type": "array",
+            "title": "Face Images",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "staff_id",
+          "name",
+          "site_id",
+          "is_active",
+          "created_at"
+        ],
+        "title": "StaffWithFacesResponse"
       },
       "TenantCreate": {
         "properties": {

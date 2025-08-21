@@ -65,7 +65,7 @@ from .services.camera_streaming_service import streaming_service
 
 
 app = FastAPI(
-    title="Face Recognition API",
+    title="Customer Visits API",
     version="0.1.0",
     openapi_url="/v1/openapi.json",
     lifespan=lifespan

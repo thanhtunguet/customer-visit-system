@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # End-to-end demonstration script
-echo "🚀 Face Recognition System E2E Demo"
+echo "🚀 Customer Visits System E2E Demo"
 
 # Function to check if service is healthy
 check_service() {

@@ -167,7 +167,7 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
       <div className="flex items-center justify-between">
         <Title level={4} className="mb-0">
           <ExperimentOutlined className="mr-2" />
-          Face Recognition Test
+          Customer Recognition Test
         </Title>
         {testImage && (
           <Button onClick={clearTest}>

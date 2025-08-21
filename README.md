@@ -1,4 +1,4 @@
-# Face Recognition System
+# Customer Visits System
 
 A multi-tenant face recognition system with real-time monitoring, visitor analytics, and secure data management.
 

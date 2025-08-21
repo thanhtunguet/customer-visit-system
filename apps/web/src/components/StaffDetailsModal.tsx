@@ -150,7 +150,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
 
           {staffData.face_images.length === 0 && (
             <Alert
-              message="Face Recognition Not Enabled"
+              message="Customer Recognition Not Enabled"
               description="This staff member has no face images uploaded. Upload face images in the Face Gallery tab to enable face recognition."
               type="warning"
               showIcon

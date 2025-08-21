@@ -1,4 +1,4 @@
-# Face Recognition System - Deployment Guide
+# Customer Visits System - Deployment Guide
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ Create `.env` files in both `apps/api/` and `apps/worker/` directories:
 
 ### apps/api/.env
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/face_rec_db
+DATABASE_URL=postgresql://user:password@localhost:5432/customer_visits_db
 MILVUS_URI=localhost:19530
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
