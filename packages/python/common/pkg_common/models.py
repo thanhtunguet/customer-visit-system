@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class FaceDetectedEvent(BaseModel):
     tenant_id: str
-    site_id: str
-    camera_id: str
+    site_id: int
+    camera_id: int
     timestamp: datetime
     embedding: List[float] = Field(min_length=512, max_length=512)
     bbox: List[float] = Field(min_length=4, max_length=4)
@@ -19,8 +19,8 @@ class FaceDetectedEvent(BaseModel):
 
 class VisitRecord(BaseModel):
     tenant_id: str
-    site_id: str
-    person_id: str
+    site_id: int
+    person_id: int
     timestamp: datetime
     confidence: float
     image_path: Optional[str] | None = None
@@ -28,7 +28,7 @@ class VisitRecord(BaseModel):
 
 class CustomerProfile(BaseModel):
     tenant_id: str
-    customer_id: str
+    customer_id: int
     name: Optional[str] | None = None
     gender: Optional[str] | None = Field(default=None)
     phone: Optional[str] | None = None

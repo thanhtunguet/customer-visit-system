@@ -49,13 +49,9 @@ async def create_staff(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
-    # Generate staff ID
-    staff_id = f"staff-{uuid.uuid4().hex[:8]}"
-    
-    # Create staff member
+    # Create staff member (ID will be auto-generated)
     new_staff = Staff(
         tenant_id=user["tenant_id"],
-        staff_id=staff_id,
         name=staff.name,
         site_id=staff.site_id
     )
@@ -78,9 +74,9 @@ async def create_staff(
     return new_staff
 
 
-@router.get("/staff/{staff_id}", response_model=StaffResponse)
+@router.get("/staff/{staff_id:int}", response_model=StaffResponse)
 async def get_staff_member(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -98,9 +94,9 @@ async def get_staff_member(
     return staff_member
 
 
-@router.put("/staff/{staff_id}", response_model=StaffResponse)
+@router.put("/staff/{staff_id:int}", response_model=StaffResponse)
 async def update_staff(
-    staff_id: str,
+    staff_id: int,
     staff_update: StaffCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -138,9 +134,9 @@ async def update_staff(
     return staff_member
 
 
-@router.delete("/staff/{staff_id}")
+@router.delete("/staff/{staff_id:int}")
 async def delete_staff(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -170,9 +166,9 @@ async def delete_staff(
 # Staff Face Images API
 # ===============================
 
-@router.get("/staff/{staff_id}/faces", response_model=List[StaffFaceImageResponse])
+@router.get("/staff/{staff_id:int}/faces", response_model=List[StaffFaceImageResponse])
 async def get_staff_face_images(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -217,9 +213,9 @@ async def get_staff_face_images(
     return response_images
 
 
-@router.get("/staff/{staff_id}/details", response_model=StaffWithFacesResponse)
+@router.get("/staff/{staff_id:int}/details", response_model=StaffWithFacesResponse)
 async def get_staff_with_faces(
-    staff_id: str,
+    staff_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -275,9 +271,9 @@ async def get_staff_with_faces(
     return StaffWithFacesResponse(**staff_data)
 
 
-@router.post("/staff/{staff_id}/faces", response_model=StaffFaceImageResponse)
+@router.post("/staff/{staff_id:int}/faces", response_model=StaffFaceImageResponse)
 async def upload_staff_face_image(
-    staff_id: str,
+    staff_id: int,
     face_data: StaffFaceImageCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -395,9 +391,9 @@ async def upload_staff_face_image(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/staff/{staff_id}/faces/bulk", response_model=List[StaffFaceImageResponse])
+@router.post("/staff/{staff_id:int}/faces/bulk", response_model=List[StaffFaceImageResponse])
 async def upload_multiple_staff_face_images(
-    staff_id: str,
+    staff_id: int,
     face_data: StaffFaceImageBulkCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -587,9 +583,9 @@ async def upload_multiple_staff_face_images(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.delete("/staff/{staff_id}/faces/{image_id}")
+@router.delete("/staff/{staff_id:int}/faces/{image_id}")
 async def delete_staff_face_image(
-    staff_id: str,
+    staff_id: int,
     image_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -674,9 +670,9 @@ async def delete_staff_face_image(
         raise HTTPException(status_code=500, detail="Failed to delete face image")
 
 
-@router.put("/staff/{staff_id}/faces/{image_id}/recalculate")
+@router.put("/staff/{staff_id:int}/faces/{image_id}/recalculate")
 async def recalculate_face_embedding(
-    staff_id: str,
+    staff_id: int,
     image_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -755,9 +751,9 @@ async def recalculate_face_embedding(
         raise HTTPException(status_code=500, detail="Failed to recalculate face embedding")
 
 
-@router.post("/staff/{staff_id}/test-recognition", response_model=FaceRecognitionTestResponse)
+@router.post("/staff/{staff_id:int}/test-recognition", response_model=FaceRecognitionTestResponse)
 async def test_face_recognition(
-    staff_id: str,
+    staff_id: int,
     test_data: FaceRecognitionTestRequest,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -830,9 +826,9 @@ async def test_face_recognition(
         raise HTTPException(status_code=500, detail="Recognition test failed")
 
 
-@router.post("/staff/{staff_id}/faces/enhanced-upload", response_model=StaffFaceImageResponse)
+@router.post("/staff/{staff_id:int}/faces/enhanced-upload", response_model=StaffFaceImageResponse)
 async def enhanced_upload_staff_face_image(
-    staff_id: str,
+    staff_id: int,
     face_data: StaffFaceImageCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -967,9 +963,9 @@ async def enhanced_upload_staff_face_image(
         )
 
 
-@router.post("/staff/{staff_id}/quality-assessment")
+@router.post("/staff/{staff_id:int}/quality-assessment")
 async def assess_face_image_quality(
-    staff_id: str,
+    staff_id: int,
     face_data: StaffFaceImageCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)

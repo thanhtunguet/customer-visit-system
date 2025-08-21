@@ -36,7 +36,6 @@ async def create_site(
     
     new_site = Site(
         tenant_id=user["tenant_id"],
-        site_id=site.site_id,
         name=site.name,
         location=site.location
     )

@@ -17,9 +17,9 @@ router = APIRouter(prefix="/v1", tags=["Camera Management"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/sites/{site_id}/cameras", response_model=List[CameraResponse])
+@router.get("/sites/{site_id:int}/cameras", response_model=List[CameraResponse])
 async def list_cameras(
-    site_id: str,
+    site_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -34,9 +34,9 @@ async def list_cameras(
     return cameras
 
 
-@router.post("/sites/{site_id}/cameras", response_model=CameraResponse)
+@router.post("/sites/{site_id:int}/cameras", response_model=CameraResponse)
 async def create_camera(
-    site_id: str,
+    site_id: int,
     camera: CameraCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -89,9 +89,9 @@ async def create_camera(
     return new_camera
 
 
-@router.get("/sites/{site_id}/cameras/{camera_id:int}", response_model=CameraResponse)
+@router.get("/sites/{site_id:int}/cameras/{camera_id:int}", response_model=CameraResponse)
 async def get_camera(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -114,9 +114,9 @@ async def get_camera(
     return camera
 
 
-@router.put("/sites/{site_id}/cameras/{camera_id:int}", response_model=CameraResponse)
+@router.put("/sites/{site_id:int}/cameras/{camera_id:int}", response_model=CameraResponse)
 async def update_camera(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     camera_update: CameraCreate,
     user: dict = Depends(get_current_user),
@@ -148,9 +148,9 @@ async def update_camera(
     return camera
 
 
-@router.delete("/sites/{site_id}/cameras/{camera_id:int}")
+@router.delete("/sites/{site_id:int}/cameras/{camera_id:int}")
 async def delete_camera(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -224,9 +224,9 @@ async def delete_camera(
 
 # Camera Streaming Endpoints
 
-@router.post("/sites/{site_id}/cameras/{camera_id:int}/stream/start")
+@router.post("/sites/{site_id:int}/cameras/{camera_id:int}/stream/start")
 async def start_camera_stream(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: Dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -277,9 +277,9 @@ async def start_camera_stream(
     }
 
 
-@router.post("/sites/{site_id}/cameras/{camera_id:int}/stream/stop")
+@router.post("/sites/{site_id:int}/cameras/{camera_id:int}/stream/stop")
 async def stop_camera_stream(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: Dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -312,9 +312,9 @@ async def stop_camera_stream(
     }
 
 
-@router.get("/sites/{site_id}/cameras/{camera_id:int}/stream/status")
+@router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/status")
 async def get_camera_stream_status(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: Dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -348,9 +348,9 @@ async def get_camera_stream_status(
     }
 
 
-@router.get("/sites/{site_id}/cameras/{camera_id:int}/stream/feed")
+@router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
 async def get_camera_stream_feed(
-    site_id: str,
+    site_id: int,
     camera_id: int,
     user: Dict = Depends(get_current_user_for_stream),
     db_session: AsyncSession = Depends(get_db_session)

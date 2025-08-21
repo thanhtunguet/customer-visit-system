@@ -44,12 +44,8 @@ async def create_customer(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
-    # Generate customer ID
-    customer_id = f"cust-{uuid.uuid4().hex[:8]}"
-    
     new_customer = Customer(
         tenant_id=user["tenant_id"],
-        customer_id=customer_id,
         name=customer.name,
         gender=customer.gender,
         estimated_age_range=customer.estimated_age_range,
@@ -62,9 +58,9 @@ async def create_customer(
     return new_customer
 
 
-@router.get("/customers/{customer_id}", response_model=CustomerResponse)
+@router.get("/customers/{customer_id:int}", response_model=CustomerResponse)
 async def get_customer(
-    customer_id: str,
+    customer_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -82,9 +78,9 @@ async def get_customer(
     return customer
 
 
-@router.put("/customers/{customer_id}", response_model=CustomerResponse)
+@router.put("/customers/{customer_id:int}", response_model=CustomerResponse)
 async def update_customer(
-    customer_id: str,
+    customer_id: int,
     customer_update: CustomerUpdate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -117,9 +113,9 @@ async def update_customer(
     return customer
 
 
-@router.delete("/customers/{customer_id}")
+@router.delete("/customers/{customer_id:int}")
 async def delete_customer(
-    customer_id: str,
+    customer_id: int,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):

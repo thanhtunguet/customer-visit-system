@@ -42,14 +42,13 @@ class TenantResponse(BaseModel):
 
 
 class SiteCreate(BaseModel):
-    site_id: str
     name: str
     location: Optional[str] = None
 
 
 class SiteResponse(BaseModel):
+    site_id: int
     tenant_id: str
-    site_id: str
     name: str
     location: Optional[str]
     created_at: datetime
@@ -63,9 +62,9 @@ class CameraCreate(BaseModel):
 
 
 class CameraResponse(BaseModel):
-    tenant_id: str
-    site_id: str
     camera_id: int
+    tenant_id: str
+    site_id: int
     name: str
     camera_type: CameraType
     rtsp_url: Optional[str]
@@ -92,15 +91,15 @@ class WebcamInfo(BaseModel):
 
 class StaffCreate(BaseModel):
     name: str
-    site_id: Optional[str] = None
+    site_id: Optional[int] = None
     face_embedding: Optional[List[float]] = None
 
 
 class StaffResponse(BaseModel):
+    staff_id: int
     tenant_id: str
-    staff_id: str
     name: str
-    site_id: Optional[str]
+    site_id: Optional[int]
     is_active: bool
     created_at: datetime
 
@@ -116,7 +115,7 @@ class StaffFaceImageBulkCreate(BaseModel):
 class StaffFaceImageResponse(BaseModel):
     tenant_id: str
     image_id: str  
-    staff_id: str
+    staff_id: int
     image_path: str
     face_landmarks: Optional[List[List[float]]] = None  # 5-point landmarks
     is_primary: bool
@@ -138,8 +137,8 @@ class FaceRecognitionTestResponse(BaseModel):
 
 
 class CustomerResponse(BaseModel):
+    customer_id: int
     tenant_id: str
-    customer_id: str
     name: Optional[str]
     gender: Optional[str]
     estimated_age_range: Optional[str]
@@ -169,9 +168,9 @@ class CustomerUpdate(BaseModel):
 class VisitResponse(BaseModel):
     tenant_id: str
     visit_id: str
-    person_id: str
+    person_id: int
     person_type: str
-    site_id: str
+    site_id: int
     camera_id: int
     timestamp: datetime
     confidence_score: float

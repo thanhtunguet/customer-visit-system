@@ -36,8 +36,8 @@ class Tenant(Base):
 class Site(Base):
     __tablename__ = "sites"
     
-    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    site_id = Column(String(64), primary_key=True)
+    site_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
     location = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -51,9 +51,9 @@ class Site(Base):
 class Camera(Base):
     __tablename__ = "cameras"
     
-    tenant_id = Column(String(64), primary_key=True)
-    site_id = Column(String(64), primary_key=True)
     camera_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(64), nullable=False)
+    site_id = Column(BigInteger, nullable=False)
     name = Column(String(255), nullable=False)
     camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)
     rtsp_url = Column(Text)  # For RTSP cameras
@@ -62,9 +62,10 @@ class Camera(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
-    # Foreign key constraint
+    # Foreign key constraints
     __table_args__ = (
-        ForeignKeyConstraint(['tenant_id', 'site_id'], ['sites.tenant_id', 'sites.site_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['tenant_id'], ['tenants.tenant_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['site_id'], ['sites.site_id'], ondelete='CASCADE'),
     )
     
     # Relationships
@@ -74,8 +75,8 @@ class Camera(Base):
 class Staff(Base):
     __tablename__ = "staff"
     
-    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    staff_id = Column(String(64), primary_key=True)
+    staff_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
     site_id = Column(String(64))
     is_active = Column(Boolean, default=True, nullable=False)
@@ -92,7 +93,7 @@ class StaffFaceImage(Base):
     
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
     image_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
-    staff_id = Column(String(64), nullable=False)
+    staff_id = Column(BigInteger, nullable=False)
     image_path = Column(String(500), nullable=False)
     face_landmarks = Column(Text)  # JSON serialized landmarks (5-point)
     face_embedding = Column(Text)  # JSON serialized 512-D vector  
@@ -105,7 +106,8 @@ class StaffFaceImage(Base):
     tenant = relationship("Tenant", overlaps="face_images")
     
     __table_args__ = (
-        ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['tenant_id'], ['tenants.tenant_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['staff_id'], ['staff.staff_id'], ondelete='CASCADE'),
         Index('idx_staff_face_images_staff_id', 'tenant_id', 'staff_id'),
         Index('idx_staff_face_images_primary', 'tenant_id', 'is_primary'),
         Index('idx_staff_face_images_hash', 'tenant_id', 'staff_id', 'image_hash', unique=True),
@@ -115,8 +117,8 @@ class StaffFaceImage(Base):
 class Customer(Base):
     __tablename__ = "customers"
     
-    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), primary_key=True)
-    customer_id = Column(String(64), primary_key=True)
+    customer_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255))
     gender = Column(String(16))  # male, female, unknown
     estimated_age_range = Column(String(32))
@@ -139,9 +141,9 @@ class Visit(Base):
     
     tenant_id = Column(String(64), primary_key=True)
     visit_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
-    person_id = Column(String(64), nullable=False)
+    person_id = Column(BigInteger, nullable=False)
     person_type = Column(String(16), nullable=False)  # staff, customer
-    site_id = Column(String(64), nullable=False)
+    site_id = Column(BigInteger, nullable=False)
     camera_id = Column(BigInteger, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     confidence_score = Column(Float, nullable=False)
