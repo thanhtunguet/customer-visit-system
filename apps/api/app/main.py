@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .core.config import settings
 from .core.database import get_db_session, db
 from .core.middleware import tenant_context_middleware
-from .core.security import mint_jwt, get_current_user, verify_jwt
+from .core.security import mint_jwt, get_current_user, verify_jwt, get_current_user_for_stream
 from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .models.database import Tenant, Site, Camera, Staff, Customer, Visit, ApiKey, CameraType, StaffFaceImage
@@ -48,11 +48,20 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     try:
+        # Cleanup camera streams
+        streaming_service.cleanup_all_streams()
+        logging.info("Cleaned up camera streams")
+    except Exception as e:
+        logging.error(f"Failed to cleanup camera streams: {e}")
+    
+    try:
         await milvus_client.disconnect()
         await db.close()
         logging.info("Successfully disconnected from services")
     except Exception as e:
         logging.error(f"Error during shutdown: {e}")
+
+from .services.camera_streaming_service import streaming_service
 
 
 app = FastAPI(
@@ -141,7 +150,7 @@ class CameraCreate(BaseModel):
 class CameraResponse(BaseModel):
     tenant_id: str
     site_id: str
-    camera_id: int
+    camera_id: str
     name: str
     camera_type: CameraType
     rtsp_url: Optional[str]
@@ -191,7 +200,7 @@ class FaceRecognitionTestResponse(BaseModel):
 
 class CustomerResponse(BaseModel):
     tenant_id: str
-    customer_id: int
+    customer_id: str
     name: Optional[str]
     gender: Optional[str]
     estimated_age_range: Optional[str]
@@ -220,10 +229,10 @@ class CustomerUpdate(BaseModel):
 class VisitResponse(BaseModel):
     tenant_id: str
     visit_id: str
-    person_id: int
+    person_id: str
     person_type: str
     site_id: str
-    camera_id: int
+    camera_id: str
     timestamp: datetime
     confidence_score: float
     image_path: Optional[str]
@@ -408,7 +417,7 @@ async def create_camera(
 @app.get("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
 async def get_camera(
     site_id: str,
-    camera_id: int,
+    camera_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -433,7 +442,7 @@ async def get_camera(
 @app.put("/v1/sites/{site_id}/cameras/{camera_id}", response_model=CameraResponse)
 async def update_camera(
     site_id: str,
-    camera_id: int,
+    camera_id: str,
     camera_update: CameraCreate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -467,7 +476,7 @@ async def update_camera(
 @app.delete("/v1/sites/{site_id}/cameras/{camera_id}")
 async def delete_camera(
     site_id: str,
-    camera_id: int,
+    camera_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -489,6 +498,168 @@ async def delete_camera(
     await db_session.delete(camera)
     await db_session.commit()
     return {"message": "Camera deleted successfully"}
+
+# Camera Streaming Endpoints
+
+@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/start")
+async def start_camera_stream(
+    site_id: str,
+    camera_id: str,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Start streaming for a specific camera"""
+    tenant_id = user["tenant_id"]
+    
+    # Debug logging
+    logger.info(f"Starting camera stream - tenant_id: {tenant_id} (type: {type(tenant_id)}), site_id: {site_id} (type: {type(site_id)}), camera_id: {camera_id} (type: {type(camera_id)})")
+    
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Invalid tenant_id from token")
+    
+    await db.set_tenant_context(db_session, str(tenant_id))
+    
+    # Get camera info
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    if not camera.is_active:
+        raise HTTPException(status_code=400, detail="Camera is not active")
+    
+    # Start streaming
+    success = streaming_service.start_stream(
+        camera_id=camera_id,
+        camera_type=camera.camera_type.value,
+        rtsp_url=camera.rtsp_url,
+        device_index=camera.device_index
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to start camera stream")
+    
+    return {
+        "message": "Camera stream started successfully",
+        "camera_id": camera_id,
+        "stream_active": True
+    }
+
+
+@app.post("/v1/sites/{site_id}/cameras/{camera_id}/stream/stop")
+async def stop_camera_stream(
+    site_id: str,
+    camera_id: str,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Stop streaming for a specific camera"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Verify camera exists
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Stop streaming
+    streaming_service.stop_stream(camera_id)
+    
+    return {
+        "message": "Camera stream stopped successfully",
+        "camera_id": camera_id,
+        "stream_active": False
+    }
+
+
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/status")
+async def get_camera_stream_status(
+    site_id: str,
+    camera_id: str,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get streaming status for a specific camera"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Verify camera exists
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Get stream info
+    stream_info = streaming_service.get_stream_info(camera_id)
+    is_active = streaming_service.is_stream_active(camera_id)
+    
+    return {
+        "camera_id": camera_id,
+        "stream_active": is_active,
+        "stream_info": stream_info
+    }
+
+
+@app.get("/v1/sites/{site_id}/cameras/{camera_id}/stream/feed")
+async def get_camera_stream_feed(
+    site_id: str,
+    camera_id: str,
+    user: Dict = Depends(get_current_user_for_stream),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get live video feed for a camera (MJPEG stream)"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Verify camera exists
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Check if stream is active
+    if not streaming_service.is_stream_active(camera_id):
+        raise HTTPException(status_code=404, detail="Camera stream is not active")
+    
+    from fastapi.responses import StreamingResponse
+    
+    return StreamingResponse(
+        streaming_service.stream_frames(camera_id),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 
 # ===============================
@@ -517,9 +688,14 @@ async def create_staff(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
-    # Create staff member first to get auto-generated ID
+    # Generate staff ID
+    import uuid
+    staff_id = f"staff-{uuid.uuid4().hex[:8]}"
+    
+    # Create staff member
     new_staff = Staff(
         tenant_id=user["tenant_id"],
+        staff_id=staff_id,
         name=staff.name,
         site_id=staff.site_id
     )
@@ -1056,8 +1232,13 @@ async def create_customer(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
+    # Generate customer ID
+    import uuid
+    customer_id = f"cust-{uuid.uuid4().hex[:8]}"
+    
     new_customer = Customer(
         tenant_id=user["tenant_id"],
+        customer_id=customer_id,
         name=customer.name,
         gender=customer.gender,
         estimated_age_range=customer.estimated_age_range,
@@ -1072,7 +1253,7 @@ async def create_customer(
 
 @app.get("/v1/customers/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
-    customer_id: int,
+    customer_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -1092,7 +1273,7 @@ async def get_customer(
 
 @app.put("/v1/customers/{customer_id}", response_model=CustomerResponse)
 async def update_customer(
-    customer_id: int,
+    customer_id: str,
     customer_update: CustomerUpdate,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
@@ -1127,7 +1308,7 @@ async def update_customer(
 
 @app.delete("/v1/customers/{customer_id}")
 async def delete_customer(
-    customer_id: int,
+    customer_id: str,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):

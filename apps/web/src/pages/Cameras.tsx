@@ -13,7 +13,8 @@ import {
   Radio,
   Popconfirm
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, VideoCameraOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CameraStream } from '../components/CameraStream';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType } from '../types/api';
 import dayjs from 'dayjs';
@@ -29,6 +30,8 @@ export const Cameras: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<string>('');
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
+  const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
+  const [streamModalVisible, setStreamModalVisible] = useState(false);
 
   useEffect(() => {
     loadSites();
@@ -105,6 +108,11 @@ export const Cameras: React.FC = () => {
     }
   };
 
+  const handleStartStreaming = (camera: Camera) => {
+    setStreamingCamera(camera);
+    setStreamModalVisible(true);
+  };
+
   const columns = [
     {
       title: 'Camera ID',
@@ -176,6 +184,15 @@ export const Cameras: React.FC = () => {
       key: 'actions',
       render: (_, camera: Camera) => (
         <Space>
+          <Button
+            icon={<PlayCircleOutlined />}
+            onClick={() => handleStartStreaming(camera)}
+            size="small"
+            type="primary"
+            disabled={!camera.is_active}
+          >
+            Stream
+          </Button>
           <Button
             icon={<EditOutlined />}
             onClick={() => handleEditCamera(camera)}
@@ -363,6 +380,33 @@ export const Cameras: React.FC = () => {
             <Input placeholder="e.g. rtsp://192.168.1.100:554/stream" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Camera Streaming Modal */}
+      <Modal
+        title="Camera Stream"
+        open={streamModalVisible}
+        onCancel={() => {
+          setStreamModalVisible(false);
+          setStreamingCamera(null);
+        }}
+        footer={null}
+        width="90%"
+        style={{ maxWidth: '800px' }}
+        centered
+      >
+        {streamingCamera && (
+          <CameraStream
+            siteId={selectedSite}
+            cameraId={streamingCamera.camera_id}
+            cameraName={streamingCamera.name}
+            onClose={() => {
+              setStreamModalVisible(false);
+              setStreamingCamera(null);
+            }}
+            autoStart={true}
+          />
+        )}
       </Modal>
     </div>
   );

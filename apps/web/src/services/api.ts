@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { 
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
   AuthUser, LoginRequest, TokenResponse, CameraType,
@@ -122,6 +123,43 @@ class ApiClient {
 
   async deleteCamera(siteId: string, cameraId: number): Promise<void> {
     await this.client.delete(`/sites/${siteId}/cameras/${cameraId}`);
+  }
+
+  // Camera Streaming
+  async startCameraStream(siteId: string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/start`);
+    return response.data;
+  }
+
+  async stopCameraStream(siteId: string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/stop`);
+    return response.data;
+  }
+
+  async getCameraStreamStatus(siteId: string, cameraId: number): Promise<{
+    camera_id: number;
+    stream_active: boolean;
+    stream_info: {
+      camera_id: number;
+      is_active: boolean;
+      camera_type: string;
+      last_frame_time: number;
+      error_count: number;
+      queue_size: number;
+    } | null;
+  }> {
+    const response = await this.client.get(`/sites/${siteId}/cameras/${cameraId}/stream/status`);
+    return response.data;
+  }
+
+  getCameraStreamUrl(siteId: string, cameraId: string): string {
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const token = this.token || localStorage.getItem('access_token');
+    const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);
+    if (token) {
+      url.searchParams.set('access_token', token);
+    }
+    return url.toString();
   }
 
   // Staff

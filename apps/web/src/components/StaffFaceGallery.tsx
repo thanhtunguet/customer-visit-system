@@ -32,6 +32,83 @@ interface StaffFaceGalleryProps {
   onImagesChange: () => void;
 }
 
+interface LandmarksOverlayProps {
+  landmarks: number[][];
+  imageWidth: number;
+  imageHeight: number;
+  naturalWidth: number;
+  naturalHeight: number;
+  showConnections?: boolean;
+}
+
+const LandmarksOverlay: React.FC<LandmarksOverlayProps> = ({
+  landmarks,
+  imageWidth,
+  imageHeight,
+  naturalWidth,
+  naturalHeight,
+  showConnections = false
+}) => {
+  const scaleX = imageWidth / naturalWidth;
+  const scaleY = imageHeight / naturalHeight;
+
+  return (
+    <svg
+      style={{ 
+        position: 'absolute', 
+        left: 0, 
+        top: 0, 
+        width: imageWidth,
+        height: imageHeight,
+        pointerEvents: 'none'
+      }}
+      viewBox={`0 0 ${imageWidth} ${imageHeight}`}
+    >
+      {landmarks.map(([x, y], idx) => {
+        const scaledX = x * scaleX;
+        const scaledY = y * scaleY;
+        
+        return (
+          <circle
+            key={idx}
+            cx={scaledX}
+            cy={scaledY}
+            r={showConnections ? 3 : 2}
+            fill="rgba(34, 197, 94, 0.8)"
+            stroke="white"
+            strokeWidth={1}
+          />
+        );
+      })}
+      {/* Draw connections between landmark points for better visualization */}
+      {showConnections && landmarks.length === 5 && (
+        <g stroke="rgba(34, 197, 94, 0.6)" strokeWidth={1} fill="none">
+          {/* Eye landmarks connection */}
+          <line 
+            x1={landmarks[0][0] * scaleX} 
+            y1={landmarks[0][1] * scaleY}
+            x2={landmarks[1][0] * scaleX} 
+            y2={landmarks[1][1] * scaleY}
+          />
+          {/* Nose to mouth connection */}
+          <line 
+            x1={landmarks[2][0] * scaleX} 
+            y1={landmarks[2][1] * scaleY}
+            x2={landmarks[3][0] * scaleX} 
+            y2={landmarks[3][1] * scaleY}
+          />
+          <line 
+            x1={landmarks[2][0] * scaleX} 
+            y1={landmarks[2][1] * scaleY}
+            x2={landmarks[4][0] * scaleX} 
+            y2={landmarks[4][1] * scaleY}
+          />
+        </g>
+      )}
+    </svg>
+  );
+};
+
 export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   staffId,
   staffName,
@@ -50,6 +127,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     naturalWidth: 0,
     naturalHeight: 0,
   });
+  const [thumbnailSizes, setThumbnailSizes] = useState<Record<string, { width: number; height: number; naturalWidth: number; naturalHeight: number }>>({});
 
   // Convert image path to full URL
   const getImageUrl = (imagePath: string) => {
@@ -180,7 +258,29 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                     preview={false}
                     onClick={() => handlePreview(image)}
                     style={{ cursor: 'pointer' }}
+                    onLoad={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      setThumbnailSizes(prev => ({
+                        ...prev,
+                        [image.image_id]: {
+                          width: img.clientWidth,
+                          height: img.clientHeight,
+                          naturalWidth: img.naturalWidth,
+                          naturalHeight: img.naturalHeight,
+                        }
+                      }));
+                    }}
                   />
+                  {image.face_landmarks && thumbnailSizes[image.image_id] && (
+                    <LandmarksOverlay
+                      landmarks={image.face_landmarks}
+                      imageWidth={thumbnailSizes[image.image_id].width}
+                      imageHeight={thumbnailSizes[image.image_id].height}
+                      naturalWidth={thumbnailSizes[image.image_id].naturalWidth}
+                      naturalHeight={thumbnailSizes[image.image_id].naturalHeight}
+                      showConnections={false}
+                    />
+                  )}
                   {image.is_primary && (
                     <Badge
                       count={<StarFilled className="text-yellow-500" />}
@@ -276,24 +376,15 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             }}
           />
 
-          {previewLandmarks && renderSize.naturalWidth > 0 && renderSize.naturalHeight > 0 && (
-            <svg
-              style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' }}
-              viewBox={`0 0 ${renderSize.naturalWidth} ${renderSize.naturalHeight}`}
-              preserveAspectRatio="xMidYMid meet"
-            >
-              {previewLandmarks.map(([x, y], idx) => (
-                <circle
-                  key={idx}
-                  cx={x}
-                  cy={y}
-                  r={6}
-                  fill="rgba(239, 68, 68, 0.9)"
-                  stroke="white"
-                  strokeWidth={2}
-                />
-              ))}
-            </svg>
+          {previewLandmarks && renderSize.width > 0 && renderSize.height > 0 && (
+            <LandmarksOverlay
+              landmarks={previewLandmarks}
+              imageWidth={renderSize.width}
+              imageHeight={renderSize.height}
+              naturalWidth={renderSize.naturalWidth}
+              naturalHeight={renderSize.naturalHeight}
+              showConnections={true}
+            />
           )}
         </div>
       </Modal>

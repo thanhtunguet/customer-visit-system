@@ -4,7 +4,7 @@ import time
 from typing import Dict, Optional
 
 import jwt
-from fastapi import HTTPException, Depends, Header
+from fastapi import HTTPException, Depends, Header, Query
 
 from .config import settings
 
@@ -55,6 +55,31 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> Dict:
         raise HTTPException(status_code=401, detail="Invalid authorization header format")
     
     token = authorization.split(" ")[1]
+    payload = verify_jwt(token)
+    
+    return {
+        "sub": payload.get("sub"),
+        "role": payload.get("role"),
+        "tenant_id": payload.get("tenant_id"),
+    }
+
+
+def get_current_user_for_stream(
+    authorization: Optional[str] = Header(None),
+    access_token: Optional[str] = Query(None)
+) -> Dict:
+    """FastAPI dependency to extract current user from JWT token (supports both header and query param)"""
+    token = None
+    
+    # Try Authorization header first
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    # Fallback to query parameter
+    elif access_token:
+        token = access_token
+    else:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+    
     payload = verify_jwt(token)
     
     return {
