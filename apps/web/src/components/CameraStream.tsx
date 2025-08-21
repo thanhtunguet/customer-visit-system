@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Card, Button, Space, Alert, Tag, Spin, Tooltip, message } from 'antd';
+import { Button, Space, Alert, Tag, Spin, Tooltip, message, Popconfirm } from 'antd';
 import { 
   PlayCircleOutlined, 
-  PauseCircleOutlined, 
-  ReloadOutlined, 
-  CloseOutlined,
+  StopOutlined,
+  ReloadOutlined,
   VideoCameraOutlined,
   InfoCircleOutlined
 } from '@ant-design/icons';
@@ -19,6 +18,7 @@ interface CameraStreamProps {
   autoReconnect?: boolean;
   currentStreamStatus?: boolean;
   onStreamStateChange?: (cameraId: string, isActive: boolean) => void;
+  onConnectionStateChange?: (state: 'disconnected' | 'connecting' | 'connected' | 'error') => void;
 }
 
 interface StreamStatus {
@@ -42,13 +42,15 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   autoStart = false,
   autoReconnect = false,
   currentStreamStatus = false,
-  onStreamStateChange
+  onStreamStateChange,
+  onConnectionStateChange
 }) => {
   const [isStreaming, setIsStreaming] = useState(currentStreamStatus);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus | null>(null);
   const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [manuallyStopped, setManuallyStopped] = useState(false);
   
   const imgRef = useRef<HTMLImageElement>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -62,6 +64,13 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       onStreamStateChange(cameraId.toString(), isActive);
     }
   }, [onStreamStateChange, cameraId]);
+
+  // Notify parent component of connection state changes
+  const notifyConnectionStateChange = useCallback((state: 'disconnected' | 'connecting' | 'connected' | 'error') => {
+    if (onConnectionStateChange) {
+      onConnectionStateChange(state);
+    }
+  }, [onConnectionStateChange]);
 
   // Check stream status
   const checkStreamStatus = useCallback(async () => {
@@ -81,10 +90,12 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       setLoading(true);
       setError(null);
       setConnectionState('connecting');
+      notifyConnectionStateChange('connecting');
       
       await apiClient.startCameraStream(siteId, cameraId);
       setIsStreaming(true);
       notifyStreamStateChange(true);
+      setManuallyStopped(false); // Reset manually stopped flag when starting
       
       // Wait a moment for the stream to start
       setTimeout(() => {
@@ -97,6 +108,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to start stream');
       setConnectionState('error');
+      notifyConnectionStateChange('error');
       message.error('Failed to start camera stream');
     } finally {
       setLoading(false);
@@ -111,6 +123,8 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
       setIsStreaming(false);
       notifyStreamStateChange(false);
       setConnectionState('disconnected');
+      notifyConnectionStateChange('disconnected');
+      setManuallyStopped(true); // Mark as manually stopped
       
       // Clear image source
       if (imgRef.current) {
@@ -171,12 +185,14 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
   // Handle image load events
   const handleImageLoad = () => {
     setConnectionState('connected');
+    notifyConnectionStateChange('connected');
     setError(null);
   };
 
   const handleImageError = () => {
     if (isStreaming) {
       setConnectionState('error');
+      notifyConnectionStateChange('error');
       setError('Stream connection lost');
     }
   };
@@ -186,30 +202,29 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     setIsStreaming(currentStreamStatus);
   }, [currentStreamStatus]);
 
-  // Auto-start/reconnect stream if requested
+  // Auto-start/reconnect stream if requested (only on initial mount)
   useEffect(() => {
     const initializeStream = async () => {
-      if (autoStart || autoReconnect) {
+      if ((autoStart || autoReconnect) && !manuallyStopped) {
         const status = await checkStreamStatus();
         if (status?.stream_active) {
-          // Stream already active, just connect
+          // Stream already active, just connect to existing stream
           setIsStreaming(true);
           notifyStreamStateChange(true);
           if (imgRef.current) {
             imgRef.current.src = `${streamUrl}&t=${Date.now()}`;
           }
         } else if (autoStart) {
-          // Start new stream only if autoStart is enabled
-          handleStartStream();
-        } else if (autoReconnect && currentStreamStatus) {
-          // Auto-reconnect if we expect the stream to be active
+          // Start new stream only if autoStart is enabled (not for reconnect)
           handleStartStream();
         }
+        // Note: No auto-restart for stopped streams
       }
     };
 
     initializeStream();
-  }, [autoStart, autoReconnect, currentStreamStatus, streamUrl]); // Removed functions from deps to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount, not on state changes
 
   // Periodic status check
   useEffect(() => {
@@ -229,47 +244,34 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
     };
   }, [isStreaming, checkStreamStatus]);
 
-  const getConnectionStatusTag = () => {
+  const getConnectionStatus = () => {
     switch (connectionState) {
       case 'connected':
-        return <Tag color="green">Connected</Tag>;
+        return 'Connected';
       case 'connecting':
-        return <Tag color="blue">Connecting...</Tag>;
+        return 'Connecting...';
       case 'error':
-        return <Tag color="red">Error</Tag>;
+        return 'Error';
       default:
-        return <Tag color="default">Disconnected</Tag>;
+        return 'Disconnected';
+    }
+  };
+
+  const getConnectionStatusColor = () => {
+    switch (connectionState) {
+      case 'connected':
+        return 'green';
+      case 'connecting':
+        return 'blue';
+      case 'error':
+        return 'red';
+      default:
+        return 'default';
     }
   };
 
   return (
-    <Card
-      title={
-        <Space>
-          <VideoCameraOutlined />
-          <span>{cameraName}</span>
-          <span className="text-gray-500 text-sm">#{cameraId}</span>
-          {getConnectionStatusTag()}
-        </Space>
-      }
-      extra={
-        <Space>
-          {streamStatus?.stream_info && (
-            <Tooltip title={`Queue: ${streamStatus.stream_info.queue_size}, Errors: ${streamStatus.stream_info.error_count}`}>
-              <Button icon={<InfoCircleOutlined />} size="small" />
-            </Tooltip>
-          )}
-          <Button
-            type="text"
-            icon={<CloseOutlined />}
-            onClick={handleClose}
-            size="small"
-          />
-        </Space>
-      }
-      className="w-full max-w-2xl"
-    >
-      <div className="space-y-4">
+    <div className="space-y-3">
         {error && (
           <Alert
             message="Stream Error"
@@ -280,7 +282,7 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
           />
         )}
 
-        <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        <div className="relative bg-gray-900 rounded-lg overflow-hidden w-full" style={{ aspectRatio: '16/9' }}>
           {isStreaming ? (
             <>
               <img
@@ -324,56 +326,58 @@ export const CameraStream: React.FC<CameraStreamProps> = ({
         </div>
 
         <div className="flex justify-center">
-          <Space size="middle">
+          <Space size="small">
             {!isStreaming ? (
               <Button
                 type="primary"
                 icon={<PlayCircleOutlined />}
                 onClick={handleStartStream}
                 loading={loading}
-                size="large"
+                size="default"
               >
                 Start Stream
               </Button>
             ) : (
               <>
-                <Button
-                  icon={<PauseCircleOutlined />}
-                  onClick={handleStopStream}
-                  loading={loading}
-                  size="large"
+                <Popconfirm
+                  title="Stop Camera Stream"
+                  description="Are you sure you want to stop this camera stream?"
+                  onConfirm={handleStopStream}
+                  okText="Yes, Stop"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true }}
                 >
-                  Stop Stream
-                </Button>
+                  <Button
+                    icon={<StopOutlined />}
+                    loading={loading}
+                    size="default"
+                    danger
+                  >
+                    Stop Stream
+                  </Button>
+                </Popconfirm>
                 <Button
                   icon={<ReloadOutlined />}
                   onClick={handleReconnect}
                   loading={loading}
-                  size="large"
+                  size="default"
                 >
                   Reconnect
                 </Button>
               </>
             )}
-            <Button
-              icon={<CloseOutlined />}
-              onClick={handleClose}
-              size="large"
-            >
-              Close
-            </Button>
+
           </Space>
         </div>
 
         {streamStatus?.stream_info && (
-          <div className="text-xs text-gray-500 text-center space-x-4">
+          <div className="text-xs text-gray-500 text-center space-x-3">
             <span>Type: {streamStatus.stream_info.camera_type.toUpperCase()}</span>
             <span>Queue: {streamStatus.stream_info.queue_size}</span>
             <span>Errors: {streamStatus.stream_info.error_count}</span>
             <span>Last Frame: {new Date(streamStatus.stream_info.last_frame_time * 1000).toLocaleTimeString()}</span>
           </div>
         )}
-      </div>
-    </Card>
+    </div>
   );
 };

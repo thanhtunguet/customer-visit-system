@@ -35,6 +35,8 @@ export const Cameras: React.FC = () => {
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
   const [streamModalVisible, setStreamModalVisible] = useState(false);
   const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
+  const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
 
   useEffect(() => {
     loadSites();
@@ -147,11 +149,13 @@ export const Cameras: React.FC = () => {
 
   const handleStartStreaming = (camera: Camera) => {
     setStreamingCamera(camera);
+    setStreamIntent('start');
     setStreamModalVisible(true);
   };
 
   const handleViewStream = async (camera: Camera) => {
     setStreamingCamera(camera);
+    setStreamIntent('view');
     setStreamModalVisible(true);
     // Check and update stream status when opening modal
     try {
@@ -175,6 +179,36 @@ export const Cameras: React.FC = () => {
   // Callback to handle stream state changes from CameraStream component
   const handleStreamStateChange = (cameraId: string, isActive: boolean) => {
     setStreamStatuses(prev => ({ ...prev, [cameraId]: isActive }));
+  };
+
+  // Callback to handle connection state changes from CameraStream component
+  const handleConnectionStateChange = (state: 'disconnected' | 'connecting' | 'connected' | 'error') => {
+    setStreamConnectionState(state);
+  };
+
+  // Generate dynamic modal title with camera info and status
+  const getStreamModalTitle = () => {
+    if (!streamingCamera) return 'Camera Stream';
+    
+    const getStatusColor = () => {
+      switch (streamConnectionState) {
+        case 'connected': return '#52c41a';
+        case 'connecting': return '#1890ff';
+        case 'error': return '#ff4d4f';
+        default: return '#d9d9d9';
+      }
+    };
+
+    return (
+      <Space>
+        <VideoCameraOutlined style={{ color: '#1890ff' }} />
+        <span>{streamingCamera.name}</span>
+        <span style={{ color: '#8c8c8c', fontSize: '14px' }}>#{streamingCamera.camera_id}</span>
+        <Tag color={getStatusColor().replace('#', '')} style={{ marginLeft: '8px' }}>
+          {streamConnectionState.charAt(0).toUpperCase() + streamConnectionState.slice(1)}
+        </Tag>
+      </Space>
+    );
   };
 
   const columns = [
@@ -496,15 +530,18 @@ export const Cameras: React.FC = () => {
 
       {/* Camera Streaming Modal */}
       <Modal
-        title="Camera Stream"
+        title={getStreamModalTitle()}
         open={streamModalVisible}
         onCancel={() => {
           setStreamModalVisible(false);
           setStreamingCamera(null);
+          setStreamConnectionState('disconnected');
+          setStreamIntent('view');
         }}
         footer={null}
-        width="90%"
-        style={{ maxWidth: '800px' }}
+        width="95%"
+        style={{ maxWidth: '1200px' }}
+        styles={{ body: { padding: '8px' } }}
         centered
       >
         {streamingCamera && (
@@ -517,8 +554,9 @@ export const Cameras: React.FC = () => {
               setStreamingCamera(null);
             }}
             onStreamStateChange={handleStreamStateChange}
-            autoStart={true}
-            autoReconnect={true}
+            onConnectionStateChange={handleConnectionStateChange}
+            autoStart={streamIntent === 'start'}
+            autoReconnect={streamIntent === 'view'}
             currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
           />
         )}
