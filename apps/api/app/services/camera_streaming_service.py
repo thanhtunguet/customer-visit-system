@@ -91,7 +91,10 @@ class CameraStreamingService:
 
     def start_stream(self, camera_id: str, camera_type: str, rtsp_url: Optional[str] = None, device_index: Optional[int] = None) -> bool:
         """Start streaming for a camera"""
+        # Ensure camera_id is string for consistent internal handling
+        camera_id = str(camera_id)
         logger.info(f"start_stream called: camera_id={camera_id} (type={type(camera_id)}), device_index={device_index}, camera_type={camera_type}")
+        
         with self.lock:
             if camera_id in self.streams and self.streams[camera_id].is_active:
                 logger.info(f"Stream for camera {camera_id} is already active")
@@ -105,7 +108,7 @@ class CameraStreamingService:
                 locks_to_remove = []
                 logger.info(f"Checking for existing locks for camera {camera_id}. Current locks: {self.device_locks}")
                 for dev_idx, locked_camera in self.device_locks.items():
-                    if locked_camera == camera_id:
+                    if str(locked_camera) == camera_id:  # Ensure string comparison
                         locks_to_remove.append(dev_idx)
                         logger.info(f"Found existing lock for camera {camera_id} on device {dev_idx}")
                 
@@ -200,6 +203,8 @@ class CameraStreamingService:
 
     def stop_stream(self, camera_id: str) -> bool:
         """Stop streaming for a camera"""
+        # Ensure camera_id is string for consistent internal handling
+        camera_id = str(camera_id)
         with self.lock:
             if camera_id not in self.streams:
                 return True
@@ -235,6 +240,7 @@ class CameraStreamingService:
 
     def get_frame(self, camera_id: str) -> Optional[bytes]:
         """Get the latest frame for a camera"""
+        camera_id = str(camera_id)
         with self.lock:
             if camera_id not in self.streams or not self.streams[camera_id].is_active:
                 return None
@@ -249,11 +255,13 @@ class CameraStreamingService:
 
     def is_stream_active(self, camera_id: str) -> bool:
         """Check if stream is active"""
+        camera_id = str(camera_id)
         with self.lock:
             return camera_id in self.streams and self.streams[camera_id].is_active
 
     def get_stream_info(self, camera_id: str) -> Optional[Dict]:
         """Get stream information"""
+        camera_id = str(camera_id)
         with self.lock:
             if camera_id not in self.streams:
                 return None
@@ -270,6 +278,7 @@ class CameraStreamingService:
 
     async def stream_frames(self, camera_id: str) -> AsyncGenerator[bytes, None]:
         """Stream frames for Server-Sent Events"""
+        camera_id = str(camera_id)
         while self.is_stream_active(camera_id):
             frame = self.get_frame(camera_id)
             if frame:
