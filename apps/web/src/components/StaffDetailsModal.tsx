@@ -201,7 +201,8 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
       onCancel={handleClose}
       width={900}
       footer={null}
-      destroyOnClose
+      destroyOnHidden={true}
+      centered
     >
       {loading && (
         <div className="flex justify-center items-center py-12">
