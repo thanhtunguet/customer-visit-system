@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user, get_current_user_for_stream
 from ..models.database import Camera
-from ..schemas import CameraCreate, CameraResponse
+from ..schemas import CameraCreate, CameraResponse, WebcamInfo
 from ..services.camera_streaming_service import streaming_service
 from ..services.camera_diagnostics import camera_diagnostics
 
@@ -330,3 +330,33 @@ async def run_camera_diagnostics(
         "diagnostic_report": report,
         "message": "This endpoint tests camera enumeration and simultaneous access capabilities"
     }
+
+
+@router.get("/devices/webcams", response_model=List[WebcamInfo])
+async def list_available_webcams(
+    user: Dict = Depends(get_current_user)
+):
+    """List available webcam devices on the API host with basic info and whether currently in use by streaming service."""
+    # Enumerate devices using diagnostics helper
+    devices = camera_diagnostics.enumerate_cameras()
+    # Overlay current usage from streaming service
+    device_status = streaming_service.get_device_status()
+    device_locks: Dict[int, str] = device_status.get("device_locks", {}) if isinstance(device_status, dict) else {}
+
+    webcams: List[WebcamInfo] = []
+    for device_index, info in devices.items():
+        webcams.append(WebcamInfo(
+            device_index=device_index,
+            width=info.get("width"),
+            height=info.get("height"),
+            fps=info.get("fps"),
+            backend=info.get("backend"),
+            is_working=bool(info.get("is_working", False)),
+            frame_captured=bool(info.get("frame_captured", False)),
+            in_use=device_index in device_locks,
+            in_use_by=device_locks.get(device_index)
+        ))
+
+    # Sort stable by working first then index
+    webcams.sort(key=lambda d: (not d.is_working, d.device_index))
+    return webcams

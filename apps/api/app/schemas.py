@@ -74,6 +74,22 @@ class CameraResponse(BaseModel):
     created_at: datetime
 
 
+# ===============================
+# Diagnostics & Device Models
+# ===============================
+
+class WebcamInfo(BaseModel):
+    device_index: int
+    width: Optional[int] = None
+    height: Optional[int] = None
+    fps: Optional[float] = None
+    backend: Optional[str] = None
+    is_working: bool
+    frame_captured: bool
+    in_use: bool = False
+    in_use_by: Optional[str] = None
+
+
 class StaffCreate(BaseModel):
     name: str
     site_id: Optional[str] = None

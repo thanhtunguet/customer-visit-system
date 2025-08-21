@@ -19,7 +19,7 @@ import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, Ey
 import { CameraStream } from '../components/CameraStream';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import { apiClient } from '../services/api';
-import { Camera, Site, CameraType } from '../types/api';
+import { Camera, Site, CameraType, WebcamInfo } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -38,6 +38,8 @@ export const Cameras: React.FC = () => {
   const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
   const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
+  const [webcams, setWebcams] = useState<WebcamInfo[]>([]);
+  const [webcamsLoading, setWebcamsLoading] = useState(false);
 
   useEffect(() => {
     loadSites();
@@ -460,7 +462,17 @@ export const Cameras: React.FC = () => {
             label="Camera Type"
             rules={[{ required: true, message: 'Please select camera type!' }]}
           >
-            <Radio.Group>
+            <Radio.Group onChange={async (e) => {
+              if (e.target.value === CameraType.WEBCAM) {
+                try {
+                  setWebcamsLoading(true);
+                  const list = await apiClient.getWebcams();
+                  setWebcams(list);
+                } finally {
+                  setWebcamsLoading(false);
+                }
+              }
+            }}>
               <Radio value={CameraType.RTSP}>RTSP Camera</Radio>
               <Radio value={CameraType.WEBCAM}>Webcam</Radio>
             </Radio.Group>
@@ -489,13 +501,28 @@ export const Cameras: React.FC = () => {
                 return (
                   <Form.Item
                     name="device_index"
-                    label="Device Index"
-                    rules={[{ required: true, message: 'Please input device index!' }]}
+                    label="Webcam"
+                    rules={[{ required: true, message: 'Please select a webcam!' }]}
                   >
-                    <Input 
-                      type="number" 
-                      placeholder="e.g. 0 for first webcam, 1 for second" 
-                      min={0}
+                    <Select
+                      loading={webcamsLoading}
+                      placeholder={webcamsLoading ? 'Scanning webcams...' : 'Select a webcam'}
+                      onDropdownVisibleChange={async (open) => {
+                        if (open && webcams.length === 0) {
+                          try {
+                            setWebcamsLoading(true);
+                            const list = await apiClient.getWebcams();
+                            setWebcams(list);
+                          } finally {
+                            setWebcamsLoading(false);
+                          }
+                        }
+                      }}
+                      options={webcams.map((w) => ({
+                        value: w.device_index,
+                        disabled: !w.is_working || w.in_use,
+                        label: `${w.in_use ? 'In use • ' : ''}#${w.device_index} ${w.width && w.height ? `(${w.width}x${w.height})` : ''} ${w.fps ? `${Math.round(w.fps)}fps` : ''}`.trim()
+                      }))}
                     />
                   </Form.Item>
                 );

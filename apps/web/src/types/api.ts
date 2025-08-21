@@ -29,6 +29,18 @@ export interface Camera {
   created_at: string;
 }
 
+export interface WebcamInfo {
+  device_index: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  backend?: string;
+  is_working: boolean;
+  frame_captured: boolean;
+  in_use: boolean;
+  in_use_by?: string;
+}
+
 export interface Staff {
   tenant_id: string;
   staff_id: string;
