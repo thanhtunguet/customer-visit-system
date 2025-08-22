@@ -20,6 +20,5 @@ exec .venv/bin/uvicorn app.main:app \
     --port "$PORT" \
     --reload \
     --reload-delay 0.25 \
-    --timeout-keep-alive 2 \
-    --graceful-timeout 3
+    --timeout-keep-alive 2
 
