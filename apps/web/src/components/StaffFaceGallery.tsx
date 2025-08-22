@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   Upload,
   Button,
@@ -13,7 +13,8 @@ import {
   Alert,
   Tooltip,
   Badge,
-  Progress
+  Progress,
+  Select
 } from 'antd';
 import {
   UploadOutlined,
@@ -21,7 +22,9 @@ import {
   ReloadOutlined,
   EyeOutlined,
   StarOutlined,
-  StarFilled
+  StarFilled,
+  CameraOutlined,
+  SwitcherOutlined
 } from '@ant-design/icons';
 import { StaffFaceImage } from '../types/api';
 import { apiClient } from '../services/api';
@@ -137,6 +140,13 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     naturalHeight: 0,
   });
   const [thumbnailSizes, setThumbnailSizes] = useState<Record<string, { width: number; height: number; naturalWidth: number; naturalHeight: number }>>({});
+  const [cameraModalVisible, setCameraModalVisible] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Convert image path to full URL
   const getImageUrl = (imagePath: string) => {
@@ -336,6 +346,129 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     }
   };
 
+  // Get available cameras
+  const getAvailableCameras = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      setAvailableCameras(cameras);
+      
+      if (cameras.length > 0 && !selectedCameraId) {
+        setSelectedCameraId(cameras[0].deviceId);
+      }
+      
+      return cameras;
+    } catch (error) {
+      console.error('Error getting cameras:', error);
+      message.error('Failed to access camera devices');
+      return [];
+    }
+  }, [selectedCameraId]);
+
+  // Start camera stream
+  const startCamera = useCallback(async (deviceId?: string) => {
+    try {
+      // Stop existing stream first
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints: MediaStreamConstraints = {
+        video: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: deviceId ? undefined : 'user'
+        },
+        audio: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setCameraStream(stream);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+
+      return stream;
+    } catch (error) {
+      console.error('Error starting camera:', error);
+      message.error('Failed to start camera. Please check camera permissions.');
+      return null;
+    }
+  }, [cameraStream]);
+
+  // Stop camera stream
+  const stopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, [cameraStream]);
+
+  // Open camera modal
+  const openCameraModal = async () => {
+    setCameraModalVisible(true);
+    await getAvailableCameras();
+    await startCamera(selectedCameraId);
+  };
+
+  // Close camera modal
+  const closeCameraModal = () => {
+    stopCamera();
+    setCameraModalVisible(false);
+    setCapturingPhoto(false);
+  };
+
+  // Switch camera
+  const switchCamera = async (deviceId: string) => {
+    setSelectedCameraId(deviceId);
+    await startCamera(deviceId);
+  };
+
+  // Capture photo from webcam
+  const capturePhoto = async (isPrimary: boolean = false) => {
+    if (!videoRef.current || !canvasRef.current) {
+      message.error('Camera not ready');
+      return;
+    }
+
+    try {
+      setCapturingPhoto(true);
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      // Set canvas size to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Draw video frame to canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Convert canvas to base64
+      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+
+      // Upload the captured image
+      await apiClient.uploadStaffFaceImage(staffId, base64, isPrimary);
+      message.success('Photo captured and uploaded successfully');
+      onImagesChange();
+      closeCameraModal();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to capture photo');
+    } finally {
+      setCapturingPhoto(false);
+    }
+  };
+
   // Handle image deletion
   const handleDelete = async (imageId: string) => {
     try {
@@ -483,6 +616,14 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               </Button>
             </Upload>
           )}
+
+          <Button 
+            icon={<CameraOutlined />}
+            onClick={openCameraModal}
+            disabled={uploading}
+          >
+            Take Photo
+          </Button>
           
           {faceImages.length > 0 && (
             <Tooltip title="Recalculate facial landmarks and embeddings for all images to improve accuracy">
@@ -677,6 +818,97 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
           ))}
         </div>
       )}
+
+      {/* Camera Capture Modal */}
+      <Modal
+        open={cameraModalVisible}
+        title="Take Photo"
+        onCancel={closeCameraModal}
+        width={800}
+        centered
+        footer={[
+          <Space key="camera-controls" className="w-full justify-center">
+            {availableCameras.length > 1 && (
+              <Select
+                value={selectedCameraId}
+                onChange={switchCamera}
+                style={{ width: 200 }}
+                placeholder="Select Camera"
+                disabled={capturingPhoto}
+              >
+                {availableCameras.map((camera, index) => (
+                  <Select.Option key={camera.deviceId} value={camera.deviceId}>
+                    {camera.label || `Camera ${index + 1}`}
+                  </Select.Option>
+                ))}
+              </Select>
+            )}
+            <Button
+              icon={<SwitcherOutlined />}
+              onClick={() => {
+                const currentIndex = availableCameras.findIndex(cam => cam.deviceId === selectedCameraId);
+                const nextIndex = (currentIndex + 1) % availableCameras.length;
+                if (availableCameras[nextIndex]) {
+                  switchCamera(availableCameras[nextIndex].deviceId);
+                }
+              }}
+              disabled={capturingPhoto || availableCameras.length <= 1}
+              title="Switch Camera"
+            >
+              Switch
+            </Button>
+            <Button 
+              type="primary" 
+              icon={<CameraOutlined />}
+              onClick={() => capturePhoto(faceImages.length === 0)}
+              loading={capturingPhoto}
+              size="large"
+            >
+              {faceImages.length === 0 ? 'Capture Primary Photo' : 'Capture Photo'}
+            </Button>
+            <Button onClick={closeCameraModal} disabled={capturingPhoto}>
+              Cancel
+            </Button>
+          </Space>
+        ]}
+      >
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative bg-black rounded-lg overflow-hidden" style={{ width: '640px', height: '480px' }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
+            />
+            {!cameraStream && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-800 text-white">
+                <div className="text-center">
+                  <Spin size="large" />
+                  <p className="mt-2">Starting camera...</p>
+                </div>
+              </div>
+            )}
+            {capturingPhoto && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="text-white text-center">
+                  <Spin size="large" />
+                  <p className="mt-2">Capturing and processing...</p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="text-sm text-gray-600 text-center">
+            <p>Position your face in the center of the frame</p>
+            <p>Make sure you have good lighting and look directly at the camera</p>
+          </div>
+        </div>
+
+        {/* Hidden canvas for image capture */}
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      </Modal>
 
       {/* Image Preview Modal */}
       <Modal
