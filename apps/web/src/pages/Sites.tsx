@@ -13,7 +13,7 @@ import {
 import { PlusOutlined, ShopOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
-import { Site } from '../types/api';
+import { Site, SiteCreate } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -43,7 +43,7 @@ export const Sites: React.FC = () => {
     }
   };
 
-  const handleCreateSite = async (values: any) => {
+  const handleCreateSite = async (values: SiteCreate) => {
     try {
       if (editingSite) {
         await apiClient.updateSite(editingSite.site_id, values);
@@ -79,14 +79,12 @@ export const Sites: React.FC = () => {
 
   const columns = [
     {
-      title: 'Site ID',
+      title: 'ID',
       dataIndex: 'site_id',
       key: 'site_id',
-      render: (text: string) => (
-        <Space>
-          <ShopOutlined className="text-blue-600" />
-          <span className="font-mono">{text}</span>
-        </Space>
+      width: 80,
+      render: (id: number) => (
+        <span className="font-mono text-gray-600">#{id}</span>
       ),
     },
     {
@@ -217,16 +215,7 @@ export const Sites: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateSite}
         >
-          <Form.Item
-            name="site_id"
-            label="Site ID"
-            rules={[
-              { required: true, message: 'Please input site ID!' },
-              { pattern: /^[a-z0-9-]+$/, message: 'Site ID can only contain lowercase letters, numbers, and hyphens' }
-            ]}
-          >
-            <Input placeholder="e.g. main-office" />
-          </Form.Item>
+
 
           <Form.Item
             name="name"

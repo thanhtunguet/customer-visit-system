@@ -78,7 +78,7 @@ class Staff(Base):
     staff_id = Column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
-    site_id = Column(String(64))
+    site_id = Column(BigInteger)
     is_active = Column(Boolean, default=True, nullable=False)
     face_embedding = Column(Text)  # Legacy field - kept for backwards compatibility
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

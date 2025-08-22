@@ -14,7 +14,7 @@ import {
 import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
-import { Customer } from '../types/api';
+import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -44,7 +44,7 @@ export const Customers: React.FC = () => {
     }
   };
 
-  const handleCreateCustomer = async (values: any) => {
+  const handleCreateCustomer = async (values: CustomerCreate) => {
     try {
       if (editingCustomer) {
         await apiClient.updateCustomer(editingCustomer.customer_id, values);
@@ -82,14 +82,12 @@ export const Customers: React.FC = () => {
 
   const columns = [
     {
-      title: 'Customer ID',
+      title: 'ID',
       dataIndex: 'customer_id',
       key: 'customer_id',
-      render: (text: string) => (
-        <Space>
-          <UserOutlined className="text-blue-600" />
-          <span className="font-mono">{text}</span>
-        </Space>
+      width: 80,
+      render: (id: number) => (
+        <span className="font-mono text-gray-600">#{id}</span>
       ),
     },
     {

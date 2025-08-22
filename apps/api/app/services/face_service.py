@@ -26,7 +26,7 @@ class FaceMatchingService:
         self, 
         event: FaceDetectedEvent, 
         db_session: AsyncSession,
-        tenant_id: str
+        tenant_id: int
     ) -> Dict:
         """Process a face detection event and return matching results"""
         
@@ -64,10 +64,8 @@ class FaceMatchingService:
             logger.info(f"Found match: {person_id} with similarity {similarity}")
         else:
             # Create new customer
-            person_id = f"c_{uuid.uuid4().hex[:8]}"
+            person_id = await self._create_new_customer(db_session, tenant_id)
             person_type = "customer"
-            
-            await self._create_new_customer(db_session, tenant_id, person_id)
             logger.info(f"Created new customer: {person_id}")
 
         # Store the embedding in Milvus
@@ -105,25 +103,24 @@ class FaceMatchingService:
     async def _create_new_customer(
         self, 
         db_session: AsyncSession, 
-        tenant_id: str, 
-        customer_id: str
-    ):
-        """Create a new customer record"""
+        tenant_id: int
+    ) -> int:
+        """Create a new customer record and return the auto-generated customer_id"""
         customer = Customer(
             tenant_id=tenant_id,
-            customer_id=customer_id,
             first_seen=datetime.now(timezone.utc),
             visit_count=0,
         )
         db_session.add(customer)
-        await db_session.commit()
+        await db_session.flush()  # This will populate the customer_id
+        return customer.customer_id
 
     async def _create_visit_record(
         self,
         db_session: AsyncSession,
-        tenant_id: str,
+        tenant_id: int,
         event: FaceDetectedEvent,
-        person_id: str,
+        person_id: int,
         person_type: str,
         confidence_score: float,
     ) -> str:
@@ -153,8 +150,8 @@ class FaceMatchingService:
     async def _update_customer_last_seen(
         self, 
         db_session: AsyncSession, 
-        tenant_id: str, 
-        customer_id: str
+        tenant_id: int, 
+        customer_id: int
     ):
         """Update customer's last seen timestamp and visit count"""
         stmt = (
@@ -173,11 +170,11 @@ class StaffService:
     async def enroll_staff_member(
         self,
         db_session: AsyncSession,
-        tenant_id: str,
-        staff_id: str,
+        tenant_id: int,
+        staff_id: int,
         name: str,
         face_embedding: List[float],
-        site_id: Optional[str] = None,
+        site_id: Optional[int] = None,
         update_existing: bool = False,
     ) -> Staff:
         """Enroll a new staff member with face embedding"""
@@ -225,8 +222,8 @@ class StaffService:
     async def get_staff_embeddings_for_site(
         self,
         db_session: AsyncSession,
-        tenant_id: str,
-        site_id: str,
+        tenant_id: int,
+        site_id: int,
     ) -> List[Dict]:
         """Get all staff embeddings for a specific site"""
         stmt = select(Staff).where(

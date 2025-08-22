@@ -14,7 +14,7 @@ import {
 } from 'antd';
 import { PlusOutlined, TeamOutlined, PictureOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
-import { Staff, Site } from '../types/api';
+import { Staff, Site, StaffCreate } from '../types/api';
 import { StaffDetailsModal } from '../components/StaffDetailsModal';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import dayjs from 'dayjs';
@@ -27,7 +27,7 @@ export const StaffPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export const StaffPage: React.FC = () => {
     }
   };
 
-  const handleCreateStaff = async (values: any) => {
+  const handleCreateStaff = async (values: StaffCreate) => {
     try {
       if (editingStaff) {
         await apiClient.updateStaff(editingStaff.staff_id, values);
@@ -83,7 +83,7 @@ export const StaffPage: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleEditFromDetails = (staffId: string) => {
+  const handleEditFromDetails = (staffId: number) => {
     const staffMember = staff.find(s => s.staff_id === staffId);
     if (staffMember) {
       setDetailsModalVisible(false);
@@ -102,14 +102,12 @@ export const StaffPage: React.FC = () => {
 
   const columns = [
     {
-      title: 'Staff ID',
+      title: 'ID',
       dataIndex: 'staff_id',
       key: 'staff_id',
-      render: (text: string) => (
-        <Space>
-          <TeamOutlined className="text-blue-600" />
-          <span className="font-mono">{text}</span>
-        </Space>
+      width: 80,
+      render: (id: number) => (
+        <span className="font-mono text-gray-600">#{id}</span>
       ),
     },
     {
@@ -130,7 +128,7 @@ export const StaffPage: React.FC = () => {
       title: 'Site',
       dataIndex: 'site_id',
       key: 'site_id',
-      render: (siteId?: string) => {
+      render: (siteId?: number) => {
         if (!siteId) return <span className="text-gray-400">All Sites</span>;
         const site = sites.find(s => s.site_id === siteId);
         return site ? site.name : siteId;

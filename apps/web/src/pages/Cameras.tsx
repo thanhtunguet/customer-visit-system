@@ -20,7 +20,7 @@ import { CameraStream } from '../components/CameraStream';
 import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
 import { apiClient } from '../services/api';
-import { Camera, Site, CameraType, WebcamInfo } from '../types/api';
+import { Camera, Site, CameraType, WebcamInfo, CameraCreate } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -31,7 +31,7 @@ export const Cameras: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
-  const [selectedSite, setSelectedSite] = useState<string>('');
+  const [selectedSite, setSelectedSite] = useState<number | null>(null);
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
@@ -103,7 +103,7 @@ export const Cameras: React.FC = () => {
     }
   };
 
-  const loadCameras = async (siteId: string) => {
+  const loadCameras = async (siteId: number) => {
     try {
       setLoading(true);
       setError(null);
@@ -116,7 +116,7 @@ export const Cameras: React.FC = () => {
     }
   };
 
-  const handleCreateCamera = async (values: any) => {
+  const handleCreateCamera = async (values: CameraCreate) => {
     try {
       if (editingCamera) {
         await apiClient.updateCamera(selectedSite, editingCamera.camera_id, values);
@@ -227,14 +227,12 @@ export const Cameras: React.FC = () => {
 
   const columns = [
     {
-      title: 'Camera ID',
+      title: 'ID',
       dataIndex: 'camera_id',
       key: 'camera_id',
-      render: (text: string) => (
-        <Space>
-          <VideoCameraOutlined className="text-blue-600" />
-          <span className="font-mono">{text}</span>
-        </Space>
+      width: 80,
+      render: (id: number) => (
+        <span className="font-mono text-gray-600">#{id}</span>
       ),
     },
     {

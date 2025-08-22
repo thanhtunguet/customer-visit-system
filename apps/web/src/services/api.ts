@@ -2,7 +2,8 @@ import axios, { AxiosInstance } from 'axios';
 import { 
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
   AuthUser, LoginRequest, TokenResponse, CameraType,
-  StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo
+  StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
+  SiteCreate, StaffCreate, CustomerCreate, CameraCreate
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -87,45 +88,45 @@ class ApiClient {
     return response.data;
   }
 
-  async createSite(site: Omit<Site, 'tenant_id' | 'created_at'>): Promise<Site> {
+  async createSite(site: SiteCreate): Promise<Site> {
     const response = await this.client.post<Site>('/sites', site);
     return response.data;
   }
 
   // Cameras
-  async getCameras(siteId: string): Promise<Camera[]> {
+  async getCameras(siteId: number): Promise<Camera[]> {
     const response = await this.client.get<Camera[]>(`/sites/${siteId}/cameras`);
     return response.data;
   }
 
   async createCamera(
-    siteId: string, 
-    camera: Omit<Camera, 'tenant_id' | 'site_id' | 'camera_id' | 'created_at' | 'is_active'>
+    siteId: number, 
+    camera: CameraCreate
   ): Promise<Camera> {
     const response = await this.client.post<Camera>(`/sites/${siteId}/cameras`, camera);
     return response.data;
   }
 
-  async getCamera(siteId: string, cameraId: number): Promise<Camera> {
+  async getCamera(siteId: number, cameraId: number): Promise<Camera> {
     const response = await this.client.get<Camera>(`/sites/${siteId}/cameras/${cameraId}`);
     return response.data;
   }
 
   async updateCamera(
-    siteId: string, 
+    siteId: number, 
     cameraId: number,
-    camera: Omit<Camera, 'tenant_id' | 'site_id' | 'created_at' | 'is_active' | 'camera_id'>
+    camera: CameraCreate
   ): Promise<Camera> {
     const response = await this.client.put<Camera>(`/sites/${siteId}/cameras/${cameraId}`, camera);
     return response.data;
   }
 
-  async deleteCamera(siteId: string, cameraId: number): Promise<void> {
+  async deleteCamera(siteId: number, cameraId: number): Promise<void> {
     await this.client.delete(`/sites/${siteId}/cameras/${cameraId}`);
   }
 
   // Camera Streaming
-  async startCameraStream(siteId: string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+  async startCameraStream(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
     const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/start`);
     return response.data;
   }
