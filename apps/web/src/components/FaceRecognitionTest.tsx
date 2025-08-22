@@ -185,7 +185,7 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
 
       {/* Upload Section */}
       <Card>
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-2">
           {!testImageUrl ? (
             <Upload.Dragger
               accept="image/*"
@@ -194,7 +194,7 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
                 handleImageUpload(file);
                 return false;
               }}
-              className="border-dashed border-2 border-gray-300 rounded-lg p-6"
+              className="rounded-lg p-6"
             >
               <p className="ant-upload-drag-icon">
                 <UploadOutlined className="text-4xl text-gray-400" />
