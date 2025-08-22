@@ -254,8 +254,8 @@ class MilvusClient:
 
     async def insert_embedding(
         self,
-        tenant_id: str,
-        person_id: str,
+        tenant_id: int,
+        person_id: int,
         person_type: str,
         embedding: List[float],
         created_at: int,
@@ -266,10 +266,11 @@ class MilvusClient:
             
         # For Milvus, data should be provided as a list of dictionaries or as column-wise data
         # Since we have auto_id=True for the 'id' field, we shouldn't include it
+        # Convert IDs to strings to match the VARCHAR schema
         data = [
             {
-                "tenant_id": tenant_id,
-                "person_id": person_id,
+                "tenant_id": str(tenant_id),
+                "person_id": str(person_id),
                 "person_type": person_type,
                 "embedding": embedding,
                 "created_at": created_at,
@@ -283,7 +284,7 @@ class MilvusClient:
 
     async def search_similar_faces(
         self,
-        tenant_id: str,
+        tenant_id: int,
         embedding: List[float],
         limit: int = 5,
         threshold: float = 0.6,
@@ -297,8 +298,8 @@ class MilvusClient:
             "params": {"nprobe": 10},
         }
 
-        # Search with tenant filter
-        expr = f'tenant_id == "{tenant_id}"'
+        # Search with tenant filter - convert tenant_id to string for VARCHAR schema
+        expr = f'tenant_id == "{str(tenant_id)}"'
         
         results = self.collection.search(
             data=[embedding],
@@ -313,8 +314,12 @@ class MilvusClient:
         if results and len(results[0]) > 0:
             for hit in results[0]:
                 if hit.score >= threshold:
+                    # Convert person_id back to int for consistency
+                    person_id_str = hit.entity.get("person_id")
+                    person_id = int(person_id_str) if person_id_str and person_id_str.isdigit() else person_id_str
+                    
                     matches.append({
-                        "person_id": hit.entity.get("person_id"),
+                        "person_id": person_id,
                         "person_type": hit.entity.get("person_type"),
                         "similarity": float(hit.score),
                         "id": str(hit.id),
@@ -322,7 +327,7 @@ class MilvusClient:
 
         return matches
 
-    async def delete_person_embeddings(self, tenant_id: str, person_id: str):
+    async def delete_person_embeddings(self, tenant_id: int, person_id: int):
         """Delete all embeddings for a person.
 
         Some Milvus deployments restrict delete operations to primary key filters only.
@@ -333,8 +338,8 @@ class MilvusClient:
             raise RuntimeError("Not connected to Milvus")
 
         try:
-            # Query for primary keys of matching records
-            query_expr = f'tenant_id == "{tenant_id}" && person_id == "{person_id}"'
+            # Query for primary keys of matching records - convert IDs to strings for VARCHAR schema
+            query_expr = f'tenant_id == "{str(tenant_id)}" && person_id == "{str(person_id)}"'
             rows = []
             try:
                 # Prefer query API to fetch primary keys
@@ -365,7 +370,7 @@ class MilvusClient:
             # Do not hard-fail embedding recalculation due to delete limitations
             logger.error(f"Failed to delete existing embeddings for tenant_id={tenant_id}, person_id={person_id}: {e}")
 
-    async def delete_embedding_by_metadata(self, tenant_id: str, metadata_filter: Dict):
+    async def delete_embedding_by_metadata(self, tenant_id: int, metadata_filter: Dict):
         """Delete embeddings by metadata filter - simplified to delete by person_id"""
         if not self.collection:
             raise RuntimeError("Not connected to Milvus")
