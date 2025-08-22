@@ -1,12 +1,13 @@
 from typing import List
 
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user
-from ..models.database import Tenant
+from ..models.database import Tenant, Site, Camera, Staff, Customer, ApiKey, Visit, StaffFaceImage
 from ..schemas import TenantCreate, TenantUpdate, TenantStatusUpdate, TenantResponse
 
 router = APIRouter(prefix="/v1", tags=["Tenant Management"])
@@ -154,9 +155,91 @@ async def delete_tenant(
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
     
-    # Check if tenant has active dependencies (sites, staff, customers)
-    # This is handled by CASCADE DELETE in the database, but we can add business logic here if needed
+    # Check if tenant has dependencies that prevent deletion
     
+    # Check for sites
+    sites_result = await db_session.execute(
+        select(Site).where(Site.tenant_id == tenant_id)
+    )
+    sites = sites_result.scalars().all()
+    
+    if sites:
+        # Check if any site has cameras, staff, or customers
+        site_ids = [site.site_id for site in sites]
+        
+        # Check for cameras in any site
+        cameras_result = await db_session.execute(
+            select(func.count(Camera.camera_id)).where(Camera.site_id.in_(site_ids))
+        )
+        camera_count = cameras_result.scalar()
+        
+        if camera_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail=f"Cannot delete tenant. Tenant has {len(sites)} site(s) with {camera_count} camera(s). Remove all cameras from sites first."
+            )
+    
+    # Check for staff directly associated with tenant
+    staff_result = await db_session.execute(
+        select(func.count(Staff.staff_id)).where(Staff.tenant_id == tenant_id)
+    )
+    staff_count = staff_result.scalar()
+    
+    if staff_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete tenant. Tenant has {staff_count} staff member(s). Remove all staff first."
+        )
+    
+    # Check for staff face images
+    staff_face_images_result = await db_session.execute(
+        select(func.count(StaffFaceImage.image_id)).where(StaffFaceImage.tenant_id == tenant_id)
+    )
+    staff_face_images_count = staff_face_images_result.scalar()
+    
+    if staff_face_images_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete tenant. Tenant has {staff_face_images_count} staff face image(s). Remove all staff face images first."
+        )
+    
+    # Check for customers
+    customers_result = await db_session.execute(
+        select(func.count(Customer.customer_id)).where(Customer.tenant_id == tenant_id)
+    )
+    customer_count = customers_result.scalar()
+    
+    if customer_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete tenant. Tenant has {customer_count} customer(s). All customer data must be removed first."
+        )
+    
+    # Check for visits
+    visits_result = await db_session.execute(
+        select(func.count(Visit.visit_id)).where(Visit.tenant_id == tenant_id)
+    )
+    visit_count = visits_result.scalar()
+    
+    if visit_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete tenant. Tenant has {visit_count} visit record(s). All visit data must be removed first."
+        )
+    
+    # Check for API keys
+    api_keys_result = await db_session.execute(
+        select(func.count(ApiKey.key_id)).where(ApiKey.tenant_id == tenant_id)
+    )
+    api_key_count = api_keys_result.scalar()
+    
+    if api_key_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete tenant. Tenant has {api_key_count} API key(s). Remove all API keys first."
+        )
+    
+    # If we reach here, tenant has no dependencies and can be safely deleted
     await db_session.delete(tenant)
     await db_session.commit()
     

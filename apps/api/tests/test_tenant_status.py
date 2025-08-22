@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.database import Tenant
+from app.models.database import Tenant, Site, Staff, Customer, Camera, ApiKey, Visit, StaffFaceImage
 from app.core.security import create_access_token
 
 
@@ -233,9 +233,8 @@ async def test_get_single_tenant(async_client: AsyncClient, db_session: AsyncSes
     assert data["is_active"] is False
 
 
-@pytest.mark.asyncio
 async def test_delete_tenant(async_client: AsyncClient, db_session: AsyncSession):
-    """Test deleting a tenant"""
+    """Test deleting an empty tenant (updated to work with validation)"""
     # Create a test tenant
     test_tenant = Tenant(
         tenant_id="test-tenant-delete",
@@ -252,7 +251,7 @@ async def test_delete_tenant(async_client: AsyncClient, db_session: AsyncSession
     
     headers = {"Authorization": f"Bearer {token}"}
     
-    # Delete tenant
+    # Delete tenant (should succeed as it's empty)
     response = await async_client.delete(
         f"/v1/tenants/test-tenant-delete",
         headers=headers
@@ -304,3 +303,341 @@ async def test_create_duplicate_tenant_fails(async_client: AsyncClient, db_sessi
     assert response.status_code == 409
     data = response.json()
     assert "already exists" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_sites_having_cameras_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with sites containing cameras fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-cameras",
+        name="Test Tenant with Cameras",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create a site for the tenant
+    test_site = Site(
+        tenant_id="test-tenant-with-cameras",
+        name="Test Site",
+        location="Test Location"
+    )
+    db_session.add(test_site)
+    await db_session.flush()
+    
+    # Create a camera for the site
+    test_camera = Camera(
+        site_id=test_site.site_id,
+        name="Test Camera",
+        rtsp_url="rtsp://test.url",
+        is_active=True
+    )
+    db_session.add(test_camera)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to cameras)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-cameras",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "camera(s)" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_staff_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with staff fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-staff",
+        name="Test Tenant with Staff",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create staff for the tenant
+    test_staff = Staff(
+        tenant_id="test-tenant-with-staff",
+        name="Test Staff",
+        site_id=1,
+        is_active=True
+    )
+    db_session.add(test_staff)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to staff)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-staff",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "staff member(s)" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_customers_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with customers fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-customers",
+        name="Test Tenant with Customers",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create customer for the tenant
+    test_customer = Customer(
+        tenant_id="test-tenant-with-customers",
+        name="Test Customer",
+        gender="unknown",
+        visit_count=1
+    )
+    db_session.add(test_customer)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to customers)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-customers",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "customer(s)" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_api_keys_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with API keys fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-api-keys",
+        name="Test Tenant with API Keys",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create API key for the tenant
+    test_api_key = ApiKey(
+        tenant_id="test-tenant-with-api-keys",
+        key_name="Test API Key",
+        key_hash="test_hash",
+        is_active=True
+    )
+    db_session.add(test_api_key)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to API keys)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-api-keys",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "API key(s)" in data["detail"]
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_visits_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with visit records fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-visits",
+        name="Test Tenant with Visits",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create visit record for the tenant
+    test_visit = Visit(
+        tenant_id="test-tenant-with-visits",
+        visit_id="test-visit-1",
+        person_id=1,
+        person_type="customer",
+        site_id=1,
+        camera_id=1,
+        confidence_score=0.95
+    )
+    db_session.add(test_visit)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to visits)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-visits",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "visit record(s)" in data["detail"]
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_staff_face_images_fails(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with staff face images fails"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-with-face-images",
+        name="Test Tenant with Face Images",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create staff face image for the tenant
+    test_face_image = StaffFaceImage(
+        tenant_id="test-tenant-with-face-images",
+        image_id="test-image-1",
+        staff_id=1,
+        image_path="/path/to/face/image.jpg",
+        is_primary=True
+    )
+    db_session.add(test_face_image)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Try to delete tenant (should fail due to face images)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-with-face-images",
+        headers=headers
+    )
+    
+    assert response.status_code == 400
+    data = response.json()
+    assert "Cannot delete tenant" in data["detail"]
+    assert "staff face image(s)" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_empty_tenant_with_empty_sites_succeeds(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a tenant with only empty sites (no cameras) succeeds"""
+    # Create a test tenant
+    test_tenant = Tenant(
+        tenant_id="test-tenant-empty-sites",
+        name="Test Tenant with Empty Sites",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.flush()
+    
+    # Create empty sites for the tenant (no cameras)
+    test_site1 = Site(
+        tenant_id="test-tenant-empty-sites",
+        name="Empty Site 1",
+        location="Location 1"
+    )
+    test_site2 = Site(
+        tenant_id="test-tenant-empty-sites",
+        name="Empty Site 2",
+        location="Location 2"
+    )
+    db_session.add_all([test_site1, test_site2])
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Delete tenant (should succeed as sites are empty)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-empty-sites",
+        headers=headers
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "deleted successfully" in data["message"]
+    
+    # Verify tenant is deleted
+    get_response = await async_client.get(
+        f"/v1/tenants/test-tenant-empty-sites",
+        headers=headers
+    )
+    assert get_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_completely_empty_tenant_succeeds(async_client: AsyncClient, db_session: AsyncSession):
+    """Test that deleting a completely empty tenant (no sites, staff, customers, API keys) succeeds"""
+    # Create a test tenant with no dependencies
+    test_tenant = Tenant(
+        tenant_id="test-tenant-completely-empty",
+        name="Test Empty Tenant",
+        is_active=True
+    )
+    db_session.add(test_tenant)
+    await db_session.commit()
+    
+    # Create system admin token
+    token = create_access_token(
+        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
+    )
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Delete tenant (should succeed)
+    response = await async_client.delete(
+        f"/v1/tenants/test-tenant-completely-empty",
+        headers=headers
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "deleted successfully" in data["message"]
