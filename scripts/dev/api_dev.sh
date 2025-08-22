@@ -14,5 +14,12 @@ export API_KEY_SECRET=${API_KEY_SECRET:-dev-secret}
 export WORKER_API_KEY=${WORKER_API_KEY:-dev-api-key}
 
 echo "Starting API on :$PORT (reload)"
-exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --reload
+# Use uvicorn with optimized settings for faster shutdown
+exec .venv/bin/uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port "$PORT" \
+    --reload \
+    --reload-delay 0.25 \
+    --timeout-keep-alive 2 \
+    --graceful-timeout 3
 

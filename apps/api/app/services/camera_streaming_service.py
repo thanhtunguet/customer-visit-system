@@ -219,20 +219,25 @@ class CameraStreamingService:
                 del self.device_locks[stream_info.device_index]
                 logger.info(f"Released device lock for index {stream_info.device_index} from camera {camera_id}. Remaining locks: {self.device_locks}")
             
-            # Wait for thread to finish
+            # Wait for thread to finish with shorter timeout to prevent hanging
             if stream_info.thread and stream_info.thread.is_alive():
-                stream_info.thread.join(timeout=5)
+                stream_info.thread.join(timeout=1.0)  # Reduced from 5 to 1 second
+                if stream_info.thread.is_alive():
+                    logger.warning(f"Thread for camera {camera_id} did not stop gracefully within timeout")
             
             # Release resources
-            if stream_info.cap:
-                stream_info.cap.release()
+            try:
+                if stream_info.cap:
+                    stream_info.cap.release()
+            except Exception as e:
+                logger.warning(f"Error releasing camera {camera_id}: {e}")
             
-            # Clear frame queue
-            while not stream_info.frame_queue.empty():
-                try:
+            # Clear frame queue without blocking
+            try:
+                while not stream_info.frame_queue.empty():
                     stream_info.frame_queue.get_nowait()
-                except Empty:
-                    break
+            except Exception:
+                pass  # Queue might be closed or empty
             
             del self.streams[camera_id]
             logger.info(f"Stopped stream for camera {camera_id}")

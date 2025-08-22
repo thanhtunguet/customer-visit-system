@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -25,8 +26,15 @@ class Database:
         )
 
     async def close(self):
+        """Close database engine with timeout to prevent hanging"""
         if self.engine:
-            await self.engine.dispose()
+            try:
+                # Use asyncio.wait_for to prevent hanging on dispose
+                await asyncio.wait_for(self.engine.dispose(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logging.warning("Database close timeout reached, forcing close")
+            except Exception as e:
+                logging.error(f"Error closing database: {e}")
 
     @asynccontextmanager
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -80,20 +81,42 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
-    try:
-        # Cleanup camera streams
-        streaming_service.cleanup_all_streams()
-        logging.info("Cleaned up camera streams")
-    except Exception as e:
-        logging.error(f"Failed to cleanup camera streams: {e}")
+    # Shutdown - execute cleanup operations concurrently with timeouts
+    logging.info("Starting graceful shutdown...")
     
+    # Create shutdown tasks with timeouts
+    async def cleanup_cameras():
+        try:
+            streaming_service.cleanup_all_streams()
+            logging.info("Cleaned up camera streams")
+        except Exception as e:
+            logging.error(f"Failed to cleanup camera streams: {e}")
+    
+    # Service cleanup task  
+    async def cleanup_services():
+        try:
+            await milvus_client.disconnect()
+            await db.close()
+            logging.info("Successfully disconnected from services")
+        except Exception as e:
+            logging.error(f"Error during service shutdown: {e}")
+    
+    # Run cleanup tasks with timeout
     try:
-        await milvus_client.disconnect()
-        await db.close()
-        logging.info("Successfully disconnected from services")
+        await asyncio.wait_for(
+            asyncio.gather(
+                cleanup_cameras(),
+                cleanup_services(),
+                return_exceptions=True
+            ),
+            timeout=3.0  # 3 second total shutdown timeout
+        )
+    except asyncio.TimeoutError:
+        logging.warning("Shutdown timeout reached, forcing exit")
     except Exception as e:
         logging.error(f"Error during shutdown: {e}")
+    
+    logging.info("Shutdown completed")
 
 
 app = FastAPI(
