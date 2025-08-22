@@ -5,6 +5,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Test environment variables
+      ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: test_db
+      DATABASE_URL: sqlite:///./test.db
+      MILVUS_HOST: localhost
+      MILVUS_PORT: 19530
+      MILVUS_COLLECTION: test_embeddings
+      MINIO_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      API_KEY_SECRET: test-secret
+      JWT_ISSUER: test
+      JWT_AUDIENCE: test
+      WORKER_API_KEY: test-api-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,10 +34,32 @@ jobs:
       - run: pip install -r apps/worker/requirements.txt
       - run: pip install -e packages/python/common/
       - run: pip install -e .
-      - run: touch apps/api/.env apps/worker/.env
+      - name: Create test .env files
+        run: |
+          cat > apps/api/.env << EOF
+          ENV=test
+          DATABASE_URL=sqlite:///./test.db
+          MILVUS_HOST=localhost
+          MILVUS_PORT=19530
+          MINIO_ENDPOINT=localhost:9000
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin
+          API_KEY_SECRET=test-secret
+          JWT_ISSUER=test
+          JWT_AUDIENCE=test
+          EOF
+          
+          cat > apps/worker/.env << EOF
+          API_URL=http://localhost:8080
+          WORKER_API_KEY=test-api-key
+          TENANT_ID=test-tenant
+          SITE_ID=test-site
+          CAMERA_ID=test-camera
+          MOCK_MODE=true
+          EOF
       - run: PYTHONPATH=$PWD pytest -q
 
-  build-images:
+  build-api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +70,48 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build API
-        run: docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/${{ github.repository }}/face-api:latest apps/api
-      - name: Build Worker
-        run: docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/${{ github.repository }}/face-worker:latest apps/worker
+      - name: Build and push API image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            -t ghcr.io/${{ github.repository }}/face-api:latest \
+            apps/api
+
+  build-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Worker image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            -t ghcr.io/${{ github.repository }}/face-worker:latest \
+            apps/worker
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Web image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            -t ghcr.io/${{ github.repository }}/face-web:latest \
+            apps/web
