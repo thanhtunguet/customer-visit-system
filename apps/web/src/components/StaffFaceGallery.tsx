@@ -568,20 +568,6 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
         <Space>
           <Upload
             accept="image/*"
-            showUploadList={false}
-            beforeUpload={(file) => {
-              handleUpload(file, false);
-              return false; // Prevent default upload
-            }}
-            disabled={uploading}
-          >
-            <Button icon={<UploadOutlined />} loading={uploading}>
-              Add Image
-            </Button>
-          </Upload>
-          
-          <Upload
-            accept="image/*"
             multiple
             showUploadList={false}
             beforeUpload={(file, fileList) => {
@@ -597,7 +583,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             disabled={uploading}
           >
             <Button type="primary" icon={<UploadOutlined />} loading={uploading}>
-              Add Multiple Images
+              Add Images
             </Button>
           </Upload>
           
