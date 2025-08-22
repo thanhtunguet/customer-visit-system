@@ -8,7 +8,9 @@ import { Tenant } from '../../types/api';
 
 // Mock the API client
 jest.mock('../../services/api');
-const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>;
+const mockedApiClient = apiClient as jest.Mocked<typeof apiClient> & {
+  toggleTenantStatus: jest.MockedFunction<typeof apiClient.toggleTenantStatus>;
+};
 
 // Mock antd message
 jest.mock('antd', () => ({
@@ -182,6 +184,67 @@ describe('TenantManagement', () => {
         expect(mockedApiClient.deleteTenant).toHaveBeenCalledWith('test-tenant-1');
       });
     });
+
+    it('should toggle tenant status successfully', async () => {
+      const updatedTenant = { ...mockTenants[1], is_active: true };
+      mockedApiClient.toggleTenantStatus.mockResolvedValue(updatedTenant);
+
+      renderWithRouter(<TenantsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('test-tenant-2')).toBeInTheDocument();
+      });
+
+      // Find and click the status switch for inactive tenant (test-tenant-2)
+      const switches = screen.getAllByRole('switch');
+      const inactiveSwitch = switches.find(s => !s.getAttribute('aria-checked') || s.getAttribute('aria-checked') === 'false');
+      
+      if (inactiveSwitch) {
+        fireEvent.click(inactiveSwitch);
+
+        // Confirm the action
+        await waitFor(() => {
+          expect(screen.getByText('Activate Tenant')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Yes, Activate' }));
+
+        await waitFor(() => {
+          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith('test-tenant-2', true);
+        });
+      }
+    });
+
+    it('should show confirmation dialog when deactivating tenant', async () => {
+      const updatedTenant = { ...mockTenants[0], is_active: false };
+      mockedApiClient.toggleTenantStatus.mockResolvedValue(updatedTenant);
+
+      renderWithRouter(<TenantsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
+      });
+
+      // Find and click the status switch for active tenant (test-tenant-1)
+      const switches = screen.getAllByRole('switch');
+      const activeSwitch = switches.find(s => s.getAttribute('aria-checked') === 'true');
+      
+      if (activeSwitch) {
+        fireEvent.click(activeSwitch);
+
+        // Check confirmation dialog content
+        await waitFor(() => {
+          expect(screen.getByText('Deactivate Tenant')).toBeInTheDocument();
+          expect(screen.getByText(/disable all operations for this tenant organization/)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Yes, Deactivate' }));
+
+        await waitFor(() => {
+          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith('test-tenant-1', false);
+        });
+      }
+    });
   });
 
   describe('Non-System Admin Access', () => {
@@ -249,6 +312,36 @@ describe('TenantManagement', () => {
       await waitFor(() => {
         expect(message.error).toHaveBeenCalledWith('Tenant already exists');
       });
+    });
+
+    it('should handle toggle tenant status error gracefully', async () => {
+      mockedApiClient.getTenants.mockResolvedValue(mockTenants);
+      mockedApiClient.toggleTenantStatus.mockRejectedValue({
+        response: { data: { detail: 'Failed to update tenant status' } },
+      });
+
+      renderWithRouter(<TenantsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
+      });
+
+      // Find and click the status switch
+      const switches = screen.getAllByRole('switch');
+      if (switches[0]) {
+        fireEvent.click(switches[0]);
+
+        // Confirm the action
+        await waitFor(() => {
+          expect(screen.getByText(/Deactivate Tenant/)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Yes, Deactivate' }));
+
+        await waitFor(() => {
+          expect(message.error).toHaveBeenCalledWith('Failed to update tenant status');
+        });
+      }
     });
   });
 });

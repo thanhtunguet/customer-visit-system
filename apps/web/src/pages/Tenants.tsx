@@ -106,6 +106,31 @@ export const TenantsPage: React.FC = () => {
     }
   };
 
+  const handleToggleStatus = async (tenantId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'activate' : 'deactivate';
+    
+    Modal.confirm({
+      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Tenant`,
+      content: `Are you sure you want to ${action} this tenant? This will ${newStatus ? 'enable' : 'disable'} all operations for this tenant organization.`,
+      okText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+      cancelText: 'Cancel',
+      okButtonProps: { 
+        danger: !newStatus,  // Red button for deactivation
+        type: newStatus ? 'primary' : 'default'
+      },
+      onOk: async () => {
+        try {
+          await apiClient.toggleTenantStatus(tenantId, newStatus);
+          message.success(`Tenant ${action}d successfully`);
+          fetchTenants();
+        } catch (error: any) {
+          message.error(error.response?.data?.detail || `Failed to ${action} tenant`);
+        }
+      }
+    });
+  };
+
   // If not system admin, show access denied
   if (!isSystemAdmin) {
     return (
@@ -155,10 +180,16 @@ export const TenantsPage: React.FC = () => {
       title: 'Status',
       dataIndex: 'is_active',
       key: 'is_active',
-      render: (isActive: boolean) => (
-        <Tag color={isActive ? 'green' : 'red'}>
-          {isActive ? 'Active' : 'Inactive'}
-        </Tag>
+      render: (isActive: boolean, record: Tenant) => (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={isActive}
+            onChange={() => handleToggleStatus(record.tenant_id, isActive)}
+            checkedChildren="Active"
+            unCheckedChildren="Inactive"
+            size="small"
+          />
+        </div>
       ),
     },
     {

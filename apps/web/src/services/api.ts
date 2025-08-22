@@ -96,6 +96,13 @@ class ApiClient {
     await this.client.delete(`/tenants/${tenantId}`);
   }
 
+  async toggleTenantStatus(tenantId: string, isActive: boolean): Promise<Tenant> {
+    const response = await this.client.patch<Tenant>(`/tenants/${tenantId}/status`, {
+      is_active: isActive
+    });
+    return response.data;
+  }
+
   // Sites
   async getSites(): Promise<Site[]> {
     const response = await this.client.get<Site[]>('/sites');

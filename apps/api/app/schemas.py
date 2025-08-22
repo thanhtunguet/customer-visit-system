@@ -33,11 +33,23 @@ class TokenResponse(BaseModel):
 class TenantCreate(BaseModel):
     tenant_id: str
     name: str
+    description: Optional[str] = None
+
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class TenantStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class TenantResponse(BaseModel):
     tenant_id: str
     name: str
+    description: Optional[str] = None
+    is_active: bool
     created_at: datetime
 
 
