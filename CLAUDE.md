@@ -86,6 +86,36 @@ Assume: No internet access at runtime; provide mock data and test assets.
 
 IMPORTANT CODE CHECKING RULE: Never run commands to check code functionality. Only compile code to fix syntax errors. Do not execute tests, dev servers, or validation commands unless explicitly requested by the user.
 
+# Daily Productivity & Tracking System
+
+WORKFLOW: Maintain daily activity logs and systematic todo tracking for enhanced productivity and project reference.
+
+DAILY LOGGING REQUIREMENTS:
+• Create/update daily log at docs/daily-logs/YYYY-MM-DD.md for each work session
+• Use TodoWrite tool proactively for all multi-step tasks 
+• Document completed tasks with impact assessment and files modified
+• Log insights, discoveries, and architectural decisions
+• Maintain running status of production blockers and WBS completion
+• Track day-by-day progress for future reference and project evolution
+
+DAILY LOG STRUCTURE:
+- Tasks Completed ✅ (with time, status, description, key activities, impact, files modified)
+- Tasks In Progress 🔄 (with current status and next steps)
+- Notes & Insights 💡 (discoveries, architectural insights, documentation value)
+- Tomorrow's Priorities 📋 (planned next steps)
+
+TODO MANAGEMENT:
+• Always use TodoWrite when starting complex or multi-step work
+• Mark todos completed immediately upon finishing (not in batches)
+• Update todo status in real-time as work progresses
+• Only one todo should be in_progress at any time
+• Break complex tasks into specific, actionable items
+
+CURRENT PROJECT STATUS (as of 2025-08-22):
+• WBS Completion: ~88% ✅
+• Production Blockers: Background jobs (APScheduler), admin merge endpoints, audit logging, MinIO purge verification
+• Architecture: Milvus & MinIO production-ready, core APIs complete, worker pipeline functional
+
 Now generate:
 	1.	All scaffolding and configs.
 	2.	Core API, worker, and web MVP with tests.
