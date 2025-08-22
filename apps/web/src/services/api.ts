@@ -3,7 +3,7 @@ import {
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
   AuthUser, LoginRequest, TokenResponse, CameraType,
   StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
-  SiteCreate, StaffCreate, CustomerCreate, CameraCreate
+  SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -77,9 +77,23 @@ class ApiClient {
     return response.data;
   }
 
-  async createTenant(tenant: Omit<Tenant, 'created_at'>): Promise<Tenant> {
+  async createTenant(tenant: TenantCreate): Promise<Tenant> {
     const response = await this.client.post<Tenant>('/tenants', tenant);
     return response.data;
+  }
+
+  async getTenant(tenantId: string): Promise<Tenant> {
+    const response = await this.client.get<Tenant>(`/tenants/${tenantId}`);
+    return response.data;
+  }
+
+  async updateTenant(tenantId: string, tenant: Partial<TenantCreate>): Promise<Tenant> {
+    const response = await this.client.put<Tenant>(`/tenants/${tenantId}`, tenant);
+    return response.data;
+  }
+
+  async deleteTenant(tenantId: string): Promise<void> {
+    await this.client.delete(`/tenants/${tenantId}`);
   }
 
   // Sites

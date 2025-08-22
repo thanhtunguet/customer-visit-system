@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ConfigProvider } from 'antd';
 import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
+import { SystemAdminRoute } from '../components/RoleBasedRoute';
 import { Dashboard } from '../pages/Dashboard';
 import { Sites } from '../pages/Sites';
 import { Cameras } from '../pages/Cameras';
@@ -10,6 +11,7 @@ import { StaffPage } from '../pages/Staff';
 import { Customers } from '../pages/Customers';
 import { VisitsPage } from '../pages/Visits';
 import { Reports } from '../pages/Reports';
+import { TenantsPage } from '../pages/Tenants';
 import '../styles.css';
 
 // Protected Route component
@@ -69,7 +71,11 @@ export function App() {
               <Route path="reports" element={<Reports />} />
               <Route 
                 path="tenants" 
-                element={<div className="p-6"><h2>Tenants - Coming Soon</h2></div>} 
+                element={
+                  <SystemAdminRoute>
+                    <TenantsPage />
+                  </SystemAdminRoute>
+                } 
               />
             </Route>
 
