@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for API service
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -28,6 +28,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 8080
 
-CMD ["python", "-m", "app.main"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 

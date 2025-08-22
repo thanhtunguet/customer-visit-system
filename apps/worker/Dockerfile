@@ -1,18 +1,22 @@
 # Multi-stage Dockerfile for Worker service
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Install system dependencies for OpenCV and face recognition
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
     libgstreamer1.0-0 \
+    libgtk-3-0 \
+    libgl1 \
+    libglu1-mesa \
     gcc \
     g++ \
     curl \
+    ca-certificates \
+    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
