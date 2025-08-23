@@ -76,11 +76,26 @@ export const AppLayout: React.FC = () => {
     if (tenantId) {
       const tenant = tenants.find(t => t.tenant_id === tenantId);
       message.success(`Switched to tenant: ${tenant?.name || tenantId}`);
+      
+      // If user is on a global page, redirect to tenant dashboard
+      const currentPath = location.pathname;
+      if (currentPath === '/tenants' || currentPath === '/users') {
+        navigate('/dashboard');
+        return;
+      }
     } else {
       message.success('Switched to global view (all tenants)');
+      
+      // If user is on a tenant-specific page, redirect to global page
+      const currentPath = location.pathname;
+      const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/staff', '/customers', '/visits', '/reports'];
+      if (tenantSpecificPaths.includes(currentPath)) {
+        navigate('/tenants');
+        return;
+      }
     }
     
-    // Optionally refresh current page data
+    // Refresh current page data for context switch
     window.location.reload();
   };
 
@@ -88,7 +103,21 @@ export const AppLayout: React.FC = () => {
     apiClient.logout();
   };
 
-  const menuItems = [
+  // Define menu items based on context
+  const globalMenuItems = [
+    {
+      key: '/tenants',
+      icon: <ShopOutlined />,
+      label: 'Tenants',
+    },
+    {
+      key: '/users',
+      icon: <UsergroupAddOutlined />,
+      label: 'Users',
+    },
+  ];
+
+  const tenantSpecificMenuItems = [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
@@ -126,27 +155,26 @@ export const AppLayout: React.FC = () => {
     },
   ];
 
-  // Filter menu items based on user role
+  // Filter menu items based on user role and tenant context
   const getFilteredMenuItems = () => {
     if (!user) return [];
     
     if (user.role === 'system_admin') {
-      return [
-        {
-          key: '/tenants',
-          icon: <ShopOutlined />,
-          label: 'Tenants',
-        },
-        {
-          key: '/users',
-          icon: <UsergroupAddOutlined />,
-          label: 'Users',
-        },
-        ...menuItems,
-      ];
+      // System admin menu depends on tenant selection
+      if (selectedTenantId) {
+        // Tenant-specific view: show both global and tenant-specific features
+        return [
+          ...globalMenuItems,
+          ...tenantSpecificMenuItems,
+        ];
+      } else {
+        // Global view: only show global management features
+        return globalMenuItems;
+      }
+    } else {
+      // Non-system admin users only see tenant-specific features
+      return tenantSpecificMenuItems;
     }
-    
-    return menuItems;
   };
 
   const userMenuItems = [
@@ -204,6 +232,19 @@ export const AppLayout: React.FC = () => {
             }`}>
               {collapsed ? 'CV' : 'Customer Visits'}
             </h1>
+            {!collapsed && user?.role === 'system_admin' && (
+              <div className="text-xs text-gray-500 mt-1">
+                {selectedTenantId ? (
+                  <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                    {tenants.find(t => t.tenant_id === selectedTenantId)?.name || 'Tenant View'}
+                  </span>
+                ) : (
+                  <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                    Global View
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         
