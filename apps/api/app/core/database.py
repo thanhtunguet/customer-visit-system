@@ -6,8 +6,8 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import text, create_engine
 
 from .config import settings
 
@@ -22,6 +22,17 @@ class Database:
         self.session_maker = sessionmaker(
             self.engine,
             class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        
+        # Synchronous engine for auth endpoints
+        self.sync_engine = create_engine(
+            settings.database_url.replace('postgresql+asyncpg://', 'postgresql://'),
+            pool_pre_ping=True,
+            pool_recycle=300,
+        )
+        self.sync_session_maker = sessionmaker(
+            self.sync_engine,
             expire_on_commit=False,
         )
 
@@ -60,3 +71,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database sessions"""
     async with db.get_session() as session:
         yield session
+
+def get_db() -> Session:
+    """FastAPI dependency for synchronous database sessions (for auth endpoints)"""
+    session = db.sync_session_maker()
+    try:
+        yield session
+    finally:
+        session.close()

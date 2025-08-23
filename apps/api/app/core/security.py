@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import time
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Dict, Optional, List
+from functools import wraps
 
 import jwt
 from fastapi import HTTPException, Depends, Header, Query
+from sqlalchemy.orm import Session
 
 from .config import settings
+from .database import get_db
+from ..models.database import User, UserRole
 
 
 def mint_jwt(sub: str, role: str, tenant_id: str, ttl_sec: int = 3600) -> str:
@@ -87,4 +92,79 @@ def get_current_user_for_stream(
         "role": payload.get("role"),
         "tenant_id": payload.get("tenant_id"),
     }
+
+
+def require_roles(allowed_roles: List[UserRole]):
+    """Decorator to require specific roles for accessing endpoints"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract user from kwargs (injected by get_current_user dependency)
+            user_info = None
+            for key, value in kwargs.items():
+                if isinstance(value, dict) and "role" in value:
+                    user_info = value
+                    break
+            
+            if not user_info:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            
+            try:
+                user_role = UserRole(user_info["role"])
+                if user_role not in allowed_roles:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail=f"Access denied. Required roles: {[role.value for role in allowed_roles]}"
+                    )
+            except ValueError:
+                raise HTTPException(status_code=401, detail="Invalid role")
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def get_current_active_user(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)) -> User:
+    """Get current authenticated user from database"""
+    if not current_user.get("sub"):
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    
+    # For API key authentication (workers), create a virtual user object
+    if current_user.get("sub") == "worker":
+        # Return a virtual user for API key authentication
+        user = User()
+        user.user_id = "worker"
+        user.username = "worker"
+        user.role = UserRole.WORKER
+        user.tenant_id = current_user.get("tenant_id")
+        user.is_active = True
+        return user
+    
+    # For regular user authentication, fetch from database
+    user = db.query(User).filter(User.username == current_user["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="User account is disabled")
+    
+    # Update last login
+    user.last_login = datetime.utcnow()
+    db.commit()
+    
+    return user
+
+
+def require_system_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    """Dependency that requires system admin role"""
+    if current_user.role != UserRole.SYSTEM_ADMIN:
+        raise HTTPException(status_code=403, detail="System administrator access required")
+    return current_user
+
+
+def require_tenant_admin_or_above(current_user: User = Depends(get_current_active_user)) -> User:
+    """Dependency that requires tenant admin or system admin role"""
+    if current_user.role not in [UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN]:
+        raise HTTPException(status_code=403, detail="Administrative access required")
+    return current_user
 

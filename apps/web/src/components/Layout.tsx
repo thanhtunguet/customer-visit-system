@@ -8,7 +8,8 @@ import {
   UserOutlined,
   BarChartOutlined,
   LogoutOutlined,
-  EyeOutlined
+  EyeOutlined,
+  UsergroupAddOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
@@ -92,6 +93,11 @@ export const AppLayout: React.FC = () => {
           key: '/tenants',
           icon: <ShopOutlined />,
           label: 'Tenants',
+        },
+        {
+          key: '/users',
+          icon: <UsergroupAddOutlined />,
+          label: 'Users',
         },
         ...menuItems,
       ];

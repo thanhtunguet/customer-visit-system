@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
-from .models.database import CameraType
+from .models.database import CameraType, UserRole
 
 
 # ===============================
@@ -24,6 +24,57 @@ class TokenRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+# ===============================
+# User Management Models
+# ===============================
+
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    first_name: str
+    last_name: str
+    password: str
+    role: UserRole
+    tenant_id: Optional[str] = None  # Required for non-system_admin roles
+    is_active: bool = True
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    tenant_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class UserPasswordUpdate(BaseModel):
+    current_password: Optional[str] = None  # Required unless admin is changing
+    new_password: str
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    username: str
+    email: str
+    first_name: str
+    last_name: str
+    full_name: str
+    role: UserRole
+    tenant_id: Optional[str]
+    is_active: bool
+    is_email_verified: bool
+    last_login: Optional[datetime]
+    password_changed_at: datetime
+    created_by: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # ===============================

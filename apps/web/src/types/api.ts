@@ -166,3 +166,58 @@ export interface CameraCreate {
   rtsp_url?: string;
   device_index?: number;
 }
+
+// ===============================
+// User Management Types
+// ===============================
+
+export enum UserRole {
+  SYSTEM_ADMIN = 'SYSTEM_ADMIN',
+  TENANT_ADMIN = 'TENANT_ADMIN',
+  SITE_MANAGER = 'SITE_MANAGER',
+  WORKER = 'WORKER'
+}
+
+export interface User {
+  user_id: string;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  role: UserRole;
+  tenant_id?: string;
+  is_active: boolean;
+  is_email_verified: boolean;
+  last_login?: string;
+  password_changed_at: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserCreate {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  password: string;
+  role: UserRole;
+  tenant_id?: string;
+  is_active?: boolean;
+}
+
+export interface UserUpdate {
+  username?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  role?: UserRole;
+  tenant_id?: string;
+  is_active?: boolean;
+}
+
+export interface UserPasswordUpdate {
+  current_password?: string;
+  new_password: string;
+}

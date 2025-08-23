@@ -9,13 +9,76 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
+from passlib.context import CryptContext
+
+# Enum definitions
+class CameraType(enum.Enum):
+    RTSP = "rtsp"
+    WEBCAM = "webcam"
+
+
+class UserRole(enum.Enum):
+    SYSTEM_ADMIN = "system_admin"
+    TENANT_ADMIN = "tenant_admin"
+    SITE_MANAGER = "site_manager"
+    WORKER = "worker"
+
+
+# Password context for hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 Base = declarative_base()
 
 
-class CameraType(enum.Enum):
-    RTSP = "rtsp"
-    WEBCAM = "webcam"
+class User(Base):
+    __tablename__ = "users"
+    
+    user_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    username = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    password_hash = Column(Text, nullable=False)
+    role = Column(Enum(UserRole), nullable=False)
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=True)  # Null for system_admin
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_email_verified = Column(Boolean, default=False, nullable=False)
+    last_login = Column(DateTime, nullable=True)
+    password_changed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by = Column(String(64), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    tenant = relationship("Tenant", backref="users")
+    creator = relationship("User", remote_side=[user_id], backref="created_users")
+    
+    __table_args__ = (
+        Index('idx_users_username', 'username'),
+        Index('idx_users_email', 'email'),
+        Index('idx_users_role', 'role'),
+        Index('idx_users_tenant_id', 'tenant_id'),
+    )
+    
+    def set_password(self, password: str) -> None:
+        """Hash and set user password"""
+        self.password_hash = pwd_context.hash(password)
+        self.password_changed_at = datetime.utcnow()
+    
+    def verify_password(self, password: str) -> bool:
+        """Verify user password"""
+        return pwd_context.verify(password, self.password_hash)
+    
+    @property
+    def full_name(self) -> str:
+        """Get full name"""
+        return f"{self.first_name} {self.last_name}"
+    
+    def can_access_tenant(self, tenant_id: str) -> bool:
+        """Check if user can access a specific tenant"""
+        if self.role == UserRole.SYSTEM_ADMIN:
+            return True
+        return self.tenant_id == tenant_id
 
 
 class Tenant(Base):

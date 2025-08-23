@@ -12,6 +12,7 @@ import { Customers } from '../pages/Customers';
 import { VisitsPage } from '../pages/Visits';
 import { Reports } from '../pages/Reports';
 import { TenantsPage } from '../pages/Tenants';
+import { Users } from '../pages/Users';
 import '../styles.css';
 
 // Protected Route component
@@ -74,6 +75,14 @@ export function App() {
                 element={
                   <SystemAdminRoute>
                     <TenantsPage />
+                  </SystemAdminRoute>
+                } 
+              />
+              <Route 
+                path="users" 
+                element={
+                  <SystemAdminRoute>
+                    <Users />
                   </SystemAdminRoute>
                 } 
               />

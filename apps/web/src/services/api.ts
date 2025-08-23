@@ -3,7 +3,8 @@ import {
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
   AuthUser, LoginRequest, TokenResponse, CameraType,
   StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
-  SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate
+  SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate,
+  User, UserCreate, UserUpdate, UserPasswordUpdate
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -335,6 +336,44 @@ class ApiClient {
   // Health check
   async getHealth(): Promise<{ status: string; env: string; timestamp: string }> {
     const response = await this.client.get('/health');
+    return response.data;
+  }
+
+  // User Management (System Admin only)
+  async getUsers(skip: number = 0, limit: number = 100): Promise<User[]> {
+    const response = await this.client.get<User[]>('/users', {
+      params: { skip, limit }
+    });
+    return response.data;
+  }
+
+  async createUser(userData: UserCreate): Promise<User> {
+    const response = await this.client.post<User>('/users', userData);
+    return response.data;
+  }
+
+  async getUser(userId: string): Promise<User> {
+    const response = await this.client.get<User>(`/users/${userId}`);
+    return response.data;
+  }
+
+  async updateUser(userId: string, userData: UserUpdate): Promise<User> {
+    const response = await this.client.put<User>(`/users/${userId}`, userData);
+    return response.data;
+  }
+
+  async changeUserPassword(userId: string, passwordData: UserPasswordUpdate): Promise<{ message: string }> {
+    const response = await this.client.put<{ message: string }>(`/users/${userId}/password`, passwordData);
+    return response.data;
+  }
+
+  async deleteUser(userId: string): Promise<{ message: string }> {
+    const response = await this.client.delete<{ message: string }>(`/users/${userId}`);
+    return response.data;
+  }
+
+  async toggleUserStatus(userId: string): Promise<User> {
+    const response = await this.client.put<User>(`/users/${userId}/toggle-status`);
     return response.data;
   }
 
