@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space, Select, message } from 'antd';
+import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space, Select, App } from 'antd';
 import { 
   DashboardOutlined, 
   TeamOutlined, 
@@ -23,6 +23,7 @@ const { Text } = Typography;
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { message } = App.useApp();
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);

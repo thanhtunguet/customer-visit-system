@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
 import { SystemAdminRoute } from '../components/RoleBasedRoute';
@@ -36,7 +36,8 @@ export function App() {
         },
       }}
     >
-      <Router>
+      <AntApp>
+        <Router>
         <div className="min-h-screen bg-gray-50">
           <Routes>
             {/* Public Routes */}
@@ -93,6 +94,7 @@ export function App() {
           </Routes>
         </div>
       </Router>
+      </AntApp>
     </ConfigProvider>
   );
 }
