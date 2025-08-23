@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space } from 'antd';
+import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space, Select, message } from 'antd';
 import { 
   DashboardOutlined, 
   TeamOutlined, 
@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import { AuthUser } from '../types/api';
+import { AuthUser, Tenant } from '../types/api';
 
 const { Header, Sider, Content } = AntLayout;
 const { Text } = Typography;
@@ -24,21 +24,64 @@ export const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCurrentUser();
   }, []);
 
+  useEffect(() => {
+    if (user?.role === 'system_admin') {
+      loadTenants();
+    }
+  }, [user]);
+
   const loadCurrentUser = async () => {
     try {
       const userData = await apiClient.getCurrentUser();
       setUser(userData);
+      
+      // For system admin, use stored tenant context or default to null (global view)
+      if (userData.role === 'system_admin') {
+        const storedTenantId = apiClient.getCurrentTenant();
+        setSelectedTenantId(storedTenantId);
+      } else {
+        // For non-system admins, use their assigned tenant
+        setSelectedTenantId(userData.tenant_id || null);
+        apiClient.setCurrentTenant(userData.tenant_id || null);
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
       navigate('/login');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadTenants = async () => {
+    try {
+      const tenantsData = await apiClient.getTenants();
+      setTenants(tenantsData);
+    } catch (error) {
+      console.error('Failed to load tenants:', error);
+      message.error('Failed to load tenants');
+    }
+  };
+
+  const handleTenantChange = (tenantId: string | null) => {
+    setSelectedTenantId(tenantId);
+    apiClient.setCurrentTenant(tenantId);
+    
+    if (tenantId) {
+      const tenant = tenants.find(t => t.tenant_id === tenantId);
+      message.success(`Switched to tenant: ${tenant?.name || tenantId}`);
+    } else {
+      message.success('Switched to global view (all tenants)');
+    }
+    
+    // Optionally refresh current page data
+    window.location.reload();
   };
 
   const handleLogout = () => {
@@ -113,6 +156,17 @@ export const AppLayout: React.FC = () => {
       label: `${user?.sub || 'User'} (${user?.role})`,
       disabled: true,
     },
+    ...(user?.role === 'system_admin' && selectedTenantId ? [{
+      key: 'tenant-context',
+      icon: <ShopOutlined />,
+      label: `Context: ${tenants.find(t => t.tenant_id === selectedTenantId)?.name || selectedTenantId}`,
+      disabled: true,
+    }] : user?.role === 'system_admin' ? [{
+      key: 'tenant-context',
+      icon: <ShopOutlined />,
+      label: 'Context: Global View',
+      disabled: true,
+    }] : []),
     {
       type: 'divider' as const,
     },
@@ -173,9 +227,30 @@ export const AppLayout: React.FC = () => {
               {collapsed ? '→' : '←'}
             </Button>
             
-            <Text strong className="text-gray-700">
-              Tenant: {user?.tenant_id}
-            </Text>
+            {user?.role === 'system_admin' ? (
+              <Space>
+                <Text strong className="text-gray-700">Tenant:</Text>
+                <Select
+                  value={selectedTenantId}
+                  onChange={handleTenantChange}
+                  placeholder="Select tenant"
+                  style={{ minWidth: 200 }}
+                  loading={tenants.length === 0}
+                  allowClear
+                  options={[
+                    { value: null, label: 'All Tenants (Global View)' },
+                    ...tenants.map(tenant => ({
+                      value: tenant.tenant_id,
+                      label: `${tenant.name} (${tenant.tenant_id})`,
+                    }))
+                  ]}
+                />
+              </Space>
+            ) : (
+              <Text strong className="text-gray-700">
+                Tenant: {user?.tenant_id || 'N/A'}
+              </Text>
+            )}
           </Space>
           
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">

@@ -12,6 +12,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
+  private currentTenantId: string | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -19,11 +20,14 @@ class ApiClient {
       timeout: 30000, // Increased timeout for file uploads
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and tenant context
     this.client.interceptors.request.use(
       (config) => {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
+        }
+        if (this.currentTenantId) {
+          config.headers['X-Tenant-ID'] = this.currentTenantId;
         }
         return config;
       },
@@ -41,11 +45,12 @@ class ApiClient {
       }
     );
 
-    // Load token from localStorage
+    // Load token and tenant context from localStorage
     const savedToken = localStorage.getItem('access_token');
     if (savedToken) {
       this.token = savedToken;
     }
+    this.initializeTenantContext();
   }
 
   // Auth methods
@@ -63,8 +68,33 @@ class ApiClient {
 
   logout(): void {
     this.token = null;
+    this.currentTenantId = null;
     localStorage.removeItem('access_token');
+    localStorage.removeItem('current_tenant_id');
     window.location.href = '/login';
+  }
+
+  // Tenant context management
+  setCurrentTenant(tenantId: string | null): void {
+    this.currentTenantId = tenantId;
+    // Store in localStorage for persistence
+    if (tenantId) {
+      localStorage.setItem('current_tenant_id', tenantId);
+    } else {
+      localStorage.removeItem('current_tenant_id');
+    }
+  }
+
+  getCurrentTenant(): string | null {
+    return this.currentTenantId;
+  }
+
+  // Initialize tenant from localStorage
+  private initializeTenantContext(): void {
+    const storedTenantId = localStorage.getItem('current_tenant_id');
+    if (storedTenantId) {
+      this.currentTenantId = storedTenantId;
+    }
   }
 
   async getCurrentUser(): Promise<AuthUser> {
