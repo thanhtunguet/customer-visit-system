@@ -68,6 +68,27 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
 async def get_current_user_info(user: User = Depends(get_current_active_user)):
     return user
 
+@router.put("/me/password")
+async def change_my_password(
+    password_data: UserPasswordUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    """Change current user's password (requires current password)"""
+    # Verify current password
+    if not password_data.current_password:
+        raise HTTPException(status_code=400, detail="Current password is required")
+    
+    if not user.verify_password(password_data.current_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Set new password
+    user.set_password(password_data.new_password)
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Password changed successfully"}
+
 
 # ===============================
 # User Management Endpoints (System Admin Only)

@@ -102,6 +102,11 @@ class ApiClient {
     return response.data;
   }
 
+  async changeMyPassword(passwordData: { current_password: string; new_password: string }): Promise<{ message: string }> {
+    const response = await this.client.put<{ message: string }>('/me/password', passwordData);
+    return response.data;
+  }
+
   // Tenants (system admin only)
   async getTenants(): Promise<Tenant[]> {
     const response = await this.client.get<Tenant[]>('/tenants');

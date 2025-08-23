@@ -9,11 +9,13 @@ import {
   BarChartOutlined,
   LogoutOutlined,
   EyeOutlined,
-  UsergroupAddOutlined
+  UsergroupAddOutlined,
+  KeyOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { AuthUser, Tenant } from '../types/api';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 const { Header, Sider, Content } = AntLayout;
 const { Text } = Typography;
@@ -26,6 +28,7 @@ export const AppLayout: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -162,11 +165,8 @@ export const AppLayout: React.FC = () => {
     if (user.role === 'system_admin') {
       // System admin menu depends on tenant selection
       if (selectedTenantId) {
-        // Tenant-specific view: show both global and tenant-specific features
-        return [
-          ...globalMenuItems,
-          ...tenantSpecificMenuItems,
-        ];
+        // Tenant-specific view: only show tenant-specific features
+        return tenantSpecificMenuItems;
       } else {
         // Global view: only show global management features
         return globalMenuItems;
@@ -197,6 +197,12 @@ export const AppLayout: React.FC = () => {
     }] : []),
     {
       type: 'divider' as const,
+    },
+    {
+      key: 'change-password',
+      icon: <KeyOutlined />,
+      label: 'Change Password',
+      onClick: () => setChangePasswordModalOpen(true),
     },
     {
       key: 'logout',
@@ -306,6 +312,11 @@ export const AppLayout: React.FC = () => {
           <Outlet />
         </Content>
       </AntLayout>
+      
+      <ChangePasswordModal
+        open={changePasswordModalOpen}
+        onClose={() => setChangePasswordModalOpen(false)}
+      />
     </AntLayout>
   );
 };
