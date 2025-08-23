@@ -72,34 +72,46 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  const handleTenantChange = (tenantId: string | null) => {
-    setSelectedTenantId(tenantId);
-    apiClient.setCurrentTenant(tenantId);
-    
-    if (tenantId) {
-      const tenant = tenants.find(t => t.tenant_id === tenantId);
-      message.success(`Switched to tenant: ${tenant?.name || tenantId}`);
-      
-      // If user is on a global page, redirect to tenant dashboard
-      const currentPath = location.pathname;
-      if (currentPath === '/tenants' || currentPath === '/users') {
-        navigate('/dashboard');
+  const handleTenantChange = async (tenantId: string | null) => {
+    try {
+      // Only system admins can switch views
+      if (user?.role !== 'system_admin') {
+        message.error('Only system admins can switch views');
         return;
       }
-    } else {
-      message.success('Switched to global view (all tenants)');
+
+      // Use the switchView API to get new token
+      await apiClient.switchView(tenantId);
+      setSelectedTenantId(tenantId);
       
-      // If user is on a tenant-specific page, redirect to global page
-      const currentPath = location.pathname;
-      const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/staff', '/customers', '/visits', '/reports'];
-      if (tenantSpecificPaths.includes(currentPath)) {
-        navigate('/tenants');
-        return;
+      if (tenantId) {
+        const tenant = tenants.find(t => t.tenant_id === tenantId);
+        message.success(`Switched to tenant: ${tenant?.name || tenantId}`);
+        
+        // If user is on a global page, redirect to tenant dashboard
+        const currentPath = location.pathname;
+        if (currentPath === '/tenants' || currentPath === '/users') {
+          navigate('/dashboard');
+          return;
+        }
+      } else {
+        message.success('Switched to global view (all tenants)');
+        
+        // If user is on a tenant-specific page, redirect to global page
+        const currentPath = location.pathname;
+        const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/staff', '/customers', '/visits', '/reports'];
+        if (tenantSpecificPaths.includes(currentPath)) {
+          navigate('/tenants');
+          return;
+        }
       }
+      
+      // Refresh current page data for context switch
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to switch view:', error);
+      message.error('Failed to switch view');
     }
-    
-    // Refresh current page data for context switch
-    window.location.reload();
   };
 
   const handleLogout = () => {
@@ -285,7 +297,7 @@ export const AppLayout: React.FC = () => {
                   loading={tenants.length === 0}
                   allowClear
                   options={[
-                    { value: null, label: 'All Tenants (Global View)' },
+                    { value: undefined, label: 'All Tenants (Global View)' },
                     ...tenants.map(tenant => ({
                       value: tenant.tenant_id,
                       label: `${tenant.name} (${tenant.tenant_id})`,

@@ -6,6 +6,7 @@ import {
   SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate,
   User, UserCreate, UserUpdate, UserPasswordUpdate
 } from '../types/api';
+import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -45,12 +46,15 @@ class ApiClient {
       }
     );
 
-    // Load token and tenant context from localStorage
+    // Load token and sync tenant context from token
     const savedToken = localStorage.getItem('access_token');
-    if (savedToken) {
+    if (savedToken && !isTokenExpired(savedToken)) {
       this.token = savedToken;
+      this.syncTenantContextFromToken();
+    } else if (savedToken) {
+      // Token expired, clean up
+      this.logout();
     }
-    this.initializeTenantContext();
   }
 
   // Auth methods
@@ -62,6 +66,22 @@ class ApiClient {
     
     this.token = response.data.access_token;
     localStorage.setItem('access_token', this.token);
+    
+    // Sync tenant context from token (more reliable than credentials)
+    this.syncTenantContextFromToken();
+    
+    return response.data;
+  }
+
+  async switchView(targetTenantId: string | null): Promise<TokenResponse> {
+    const response = await this.client.post<TokenResponse>('/auth/switch-view', {
+      target_tenant_id: targetTenantId,
+    });
+    
+    // Update token and sync tenant context from new token
+    this.token = response.data.access_token;
+    localStorage.setItem('access_token', this.token);
+    this.syncTenantContextFromToken();
     
     return response.data;
   }
@@ -89,11 +109,21 @@ class ApiClient {
     return this.currentTenantId;
   }
 
-  // Initialize tenant from localStorage
-  private initializeTenantContext(): void {
-    const storedTenantId = localStorage.getItem('current_tenant_id');
-    if (storedTenantId) {
-      this.currentTenantId = storedTenantId;
+  // Sync tenant context from JWT token
+  private syncTenantContextFromToken(): void {
+    if (!this.token) {
+      this.currentTenantId = null;
+      localStorage.removeItem('current_tenant_id');
+      return;
+    }
+    
+    const tenantId = getTenantIdFromToken(this.token);
+    this.currentTenantId = tenantId;
+    
+    if (tenantId) {
+      localStorage.setItem('current_tenant_id', tenantId);
+    } else {
+      localStorage.removeItem('current_tenant_id');
     }
   }
 

@@ -100,8 +100,12 @@ export interface AuthUser {
 export interface LoginRequest {
   username: string;
   password: string;
-  tenant_id: string;
+  tenant_id?: string;
   role?: string;
+}
+
+export interface ViewSwitchRequest {
+  target_tenant_id?: string | null;
 }
 
 export interface TokenResponse {

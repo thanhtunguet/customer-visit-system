@@ -17,8 +17,12 @@ class TokenRequest(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     api_key: Optional[str] = None
-    tenant_id: str
+    tenant_id: Optional[str] = None
     role: str = "worker"
+
+
+class ViewSwitchRequest(BaseModel):
+    target_tenant_id: Optional[str] = None  # None for global view, string for tenant view
 
 
 class TokenResponse(BaseModel):

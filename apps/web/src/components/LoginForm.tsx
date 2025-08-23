@@ -12,13 +12,19 @@ export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string>('tenant_admin');
 
   const handleSubmit = async (values: LoginRequest) => {
     setLoading(true);
     setError(null);
 
     try {
-      await apiClient.login(values);
+      // For system admin, don't require tenant_id
+      const loginData = selectedRole === 'system_admin' 
+        ? { ...values, tenant_id: undefined } 
+        : values;
+      
+      await apiClient.login(loginData);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed');
@@ -55,49 +61,38 @@ export const LoginForm: React.FC = () => {
           layout="vertical"
           size="large"
           initialValues={{
-            tenant_id: 't-dev',
-            role: 'tenant_admin'
+            role: 'tenant_admin',
+            tenant_id: 't-dev'
           }}
         >
-          <Form.Item
-            name="username"
-            label="Username"
-            rules={[{ required: true, message: 'Please input your username!' }]}
-          >
-            <Input 
-              prefix={<UserOutlined />} 
-              placeholder="Enter your username" 
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="password"
-            label="Password"
-            rules={[{ required: true, message: 'Please input your password!' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder="Enter your password"
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="tenant_id"
-            label="Tenant ID"
-            rules={[{ required: true, message: 'Please input tenant ID!' }]}
-          >
-            <Input
-              prefix={<ShopOutlined />}
-              placeholder="Enter tenant ID"
-            />
-          </Form.Item>
+          {selectedRole !== 'system_admin' && (
+            <Form.Item
+              name="tenant_id"
+              label="Tenant ID"
+              rules={[{ required: true, message: 'Please input tenant ID!' }]}
+            >
+              <Input
+                prefix={<ShopOutlined />}
+                placeholder="Enter tenant ID"
+              />
+            </Form.Item>
+          )}
 
           <Form.Item
             name="role"
             label="Role"
             rules={[{ required: true, message: 'Please select role!' }]}
           >
-            <Select placeholder="Select your role">
+            <Select 
+              placeholder="Select your role"
+              onChange={(value) => {
+                setSelectedRole(value);
+                // Clear tenant_id when switching to system admin
+                if (value === 'system_admin') {
+                  form.setFieldValue('tenant_id', undefined);
+                }
+              }}
+            >
               <Select.Option value="system_admin">System Admin</Select.Option>
               <Select.Option value="tenant_admin">Tenant Admin</Select.Option>
               <Select.Option value="site_manager">Site Manager</Select.Option>

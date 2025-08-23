@@ -16,6 +16,7 @@ from ..models.database import User, UserRole
 from ..schemas import (
     TokenRequest, 
     TokenResponse, 
+    ViewSwitchRequest,
     UserCreate, 
     UserUpdate, 
     UserPasswordUpdate, 
@@ -56,12 +57,41 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
         user.last_login = datetime.utcnow()
         db.commit()
         
+        # For system admins, allow optional tenant_id (global vs tenant view)
+        # For tenant users, use their assigned tenant_id
+        effective_tenant_id = user.tenant_id
+        if user.role.value == "system_admin":
+            effective_tenant_id = payload.tenant_id  # Can be None for global view
+        elif payload.tenant_id and payload.tenant_id != user.tenant_id:
+            raise HTTPException(status_code=403, detail="Cannot access different tenant")
+        
         token = mint_jwt(
             sub=user.username,
             role=user.role.value,
-            tenant_id=user.tenant_id or payload.tenant_id
+            tenant_id=effective_tenant_id
         )
         return TokenResponse(access_token=token)
+
+@router.post("/auth/switch-view", response_model=TokenResponse)
+async def switch_view(
+    payload: ViewSwitchRequest, 
+    user: User = Depends(get_current_active_user)
+):
+    """Switch view for system admins (global vs tenant view)"""
+    # Only system admins can switch views
+    if user.role.value != "system_admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Only system admins can switch views"
+        )
+    
+    # Generate new token with target tenant context
+    token = mint_jwt(
+        sub=user.username,
+        role=user.role.value,
+        tenant_id=payload.target_tenant_id
+    )
+    return TokenResponse(access_token=token)
 
 
 @router.get("/me", response_model=UserResponse)
