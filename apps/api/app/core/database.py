@@ -25,9 +25,10 @@ class Database:
             expire_on_commit=False,
         )
         
-        # Synchronous engine for auth endpoints
+        # Synchronous engine for auth endpoints  
+        sync_url = settings.database_url.replace('postgresql+asyncpg://', 'postgresql+psycopg2://')
         self.sync_engine = create_engine(
-            settings.database_url.replace('postgresql+asyncpg://', 'postgresql://'),
+            sync_url,
             pool_pre_ping=True,
             pool_recycle=300,
         )
