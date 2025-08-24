@@ -15,6 +15,7 @@ from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .models.database import Camera
 from .services.camera_streaming_service import streaming_service
+from .services.worker_monitor_service import worker_monitor_service
 from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers
 
 
@@ -77,6 +78,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Failed to auto-start camera streams: {e}")
     
+    # Start worker monitoring service
+    try:
+        await worker_monitor_service.start()
+        logging.info("Started worker monitoring service")
+    except Exception as e:
+        logging.warning(f"Failed to start worker monitoring service: {e}")
+    
     logging.info("API startup completed")
     
     yield
@@ -95,6 +103,7 @@ async def lifespan(app: FastAPI):
     # Service cleanup task  
     async def cleanup_services():
         try:
+            await worker_monitor_service.stop()
             await milvus_client.disconnect()
             await db.close()
             logging.info("Successfully disconnected from services")

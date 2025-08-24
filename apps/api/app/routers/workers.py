@@ -107,6 +107,14 @@ class WorkerConnectionManager:
             "timestamp": datetime.utcnow().isoformat()
         }
         await self.broadcast_to_tenant(tenant_id, message)
+    
+    async def broadcast_worker_list_update(self, tenant_id: str):
+        """Broadcast complete worker list update for major changes"""
+        message = {
+            "type": "worker_list_refresh",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_tenant(tenant_id, message)
 
 # Global connection manager
 connection_manager = WorkerConnectionManager()
@@ -192,7 +200,11 @@ def get_client_ip(request: Request) -> str:
 
 def is_worker_healthy(worker: Worker) -> bool:
     """Check if worker is considered healthy based on last heartbeat"""
-    if not worker.last_heartbeat or worker.status != "online":
+    if not worker.last_heartbeat:
+        return False
+    
+    # Worker must be in active status
+    if worker.status not in ["idle", "processing", "online"]:
         return False
     
     # Consider worker unhealthy if no heartbeat for 2 minutes
@@ -661,7 +673,7 @@ async def cleanup_stale_workers(
     stale_workers = db.query(Worker).filter(
         and_(
             Worker.tenant_id == current_user.tenant_id,
-            Worker.status == "online",
+            Worker.status.in_(["idle", "processing", "online"]),
             Worker.last_heartbeat < threshold_time
         )
     ).all()
@@ -669,6 +681,7 @@ async def cleanup_stale_workers(
     updated_count = 0
     for worker in stale_workers:
         worker.status = "offline"
+        worker.camera_id = None  # Release camera assignment
         worker.updated_at = datetime.utcnow()
         updated_count += 1
     
@@ -679,6 +692,39 @@ async def cleanup_stale_workers(
         "threshold_minutes": minutes_threshold,
         "updated_count": updated_count
     }
+
+
+@router.post("/workers/force-cleanup")
+async def force_worker_cleanup(
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Force cleanup of stale workers using the monitoring service"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only system admins can force cleanup
+    if current_user.role != "system_admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only system admins can force worker cleanup"
+        )
+    
+    try:
+        # Import here to avoid circular imports
+        from ..services.worker_monitor_service import worker_monitor_service
+        
+        updated_count = await worker_monitor_service.cleanup_stale_workers(minutes_threshold=1)
+        
+        return {
+            "message": f"Force cleaned up {updated_count} stale workers",
+            "updated_count": updated_count
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to force cleanup workers: {str(e)}"
+        )
 
 
 @router.websocket("/workers/ws/{tenant_id}")
