@@ -16,7 +16,8 @@ from .core.minio_client import minio_client
 from .models.database import Camera
 from .services.camera_streaming_service import streaming_service
 from .services.worker_monitor_service import worker_monitor_service
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers
+from .services.worker_registry import worker_registry
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router
 
 
 async def auto_start_camera_streams():
@@ -85,6 +86,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Failed to start worker monitoring service: {e}")
     
+    # Start worker registry service
+    try:
+        await worker_registry.start()
+        logging.info("Started worker registry service")
+    except Exception as e:
+        logging.warning(f"Failed to start worker registry service: {e}")
+    
     logging.info("API startup completed")
     
     yield
@@ -104,6 +112,7 @@ async def lifespan(app: FastAPI):
     async def cleanup_services():
         try:
             await worker_monitor_service.stop()
+            await worker_registry.stop()
             await milvus_client.disconnect()
             await db.close()
             logging.info("Successfully disconnected from services")
@@ -156,6 +165,7 @@ app.include_router(customers.router)
 app.include_router(events.router)
 app.include_router(files.router)
 app.include_router(workers.router)
+app.include_router(worker_registry_router.router)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

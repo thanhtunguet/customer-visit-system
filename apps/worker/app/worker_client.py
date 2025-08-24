@@ -4,12 +4,18 @@ import asyncio
 import json
 import logging
 import socket
+import sys
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional, Any
+import os
 
 import httpx
 from pydantic import BaseModel
+
+# Add shared packages to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../packages/python/common'))
+from enums import WorkerStatus
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +99,7 @@ class WorkerClient:
         # Send final offline status
         if self.worker_id:
             try:
-                await self._send_heartbeat(status="offline")
+                await self._send_heartbeat(status=WorkerStatus.OFFLINE)
                 logger.info("Sent offline status to backend")
             except Exception as e:
                 logger.warning(f"Failed to send offline status: {e}")
@@ -152,7 +158,7 @@ class WorkerClient:
                 }
                 
                 response = await self.http_client.post(
-                    f"{self.config.api_url}/v1/workers/register",
+                    f"{self.config.api_url}/v1/registry/workers/register",
                     json=registration_data,
                     headers={"Authorization": f"Bearer {self.access_token}"}
                 )
@@ -162,10 +168,9 @@ class WorkerClient:
                 self.worker_id = result["worker_id"]
                 
                 # Capture camera assignment
-                if "assigned_camera_id" in result:
+                if "assigned_camera_id" in result and result["assigned_camera_id"]:
                     self.assigned_camera_id = int(result["assigned_camera_id"])
-                    self.assigned_camera_name = result.get("assigned_camera_name")
-                    logger.info(f"Worker registered and assigned camera {self.assigned_camera_id} ({self.assigned_camera_name})")
+                    logger.info(f"Worker registered and assigned camera {self.assigned_camera_id}")
                 else:
                     logger.info(f"Worker registered but no camera assigned")
                 
@@ -181,7 +186,7 @@ class WorkerClient:
         
         logger.error("Failed to register worker after all attempts")
     
-    async def _send_heartbeat(self, status: str = "idle", error_message: Optional[str] = None):
+    async def _send_heartbeat(self, status: WorkerStatus = WorkerStatus.IDLE, error_message: Optional[str] = None):
         """Send heartbeat to backend and check for shutdown signals"""
         if not self.worker_id:
             logger.warning("Cannot send heartbeat - worker not registered")
@@ -194,20 +199,20 @@ class WorkerClient:
             await self._check_shutdown_signal()
             
             heartbeat_data = {
-                "status": status,
+                "status": status.value,
                 "faces_processed_count": self.faces_processed_since_heartbeat,
                 "capabilities": self.capabilities
             }
             
             # Include current camera if processing
-            if status == "processing" and self.assigned_camera_id:
+            if status == WorkerStatus.PROCESSING and self.assigned_camera_id:
                 heartbeat_data["current_camera_id"] = self.assigned_camera_id
             
             if error_message:
                 heartbeat_data["error_message"] = error_message
             
             response = await self.http_client.post(
-                f"{self.config.api_url}/v1/workers/{self.worker_id}/heartbeat",
+                f"{self.config.api_url}/v1/registry/workers/{self.worker_id}/heartbeat",
                 json=heartbeat_data,
                 headers={"Authorization": f"Bearer {self.access_token}"}
             )
@@ -260,19 +265,19 @@ class WorkerClient:
     
     async def report_error(self, error_message: str):
         """Report error status to backend"""
-        await self._send_heartbeat(status="error", error_message=error_message)
+        await self._send_heartbeat(status=WorkerStatus.ERROR, error_message=error_message)
     
     async def report_maintenance(self):
         """Report maintenance status to backend"""
-        await self._send_heartbeat(status="maintenance")
+        await self._send_heartbeat(status=WorkerStatus.MAINTENANCE)
     
     async def report_processing(self):
         """Report that worker is currently processing faces"""
-        await self._send_heartbeat(status="processing")
+        await self._send_heartbeat(status=WorkerStatus.PROCESSING)
     
     async def report_idle(self):
         """Report that worker is idle and ready for work"""
-        await self._send_heartbeat(status="idle")
+        await self._send_heartbeat(status=WorkerStatus.IDLE)
     
     async def request_camera_assignment(self):
         """Request camera assignment from backend"""

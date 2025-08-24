@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import type { ColumnsType } from 'antd/es/table';
+import { WorkerStatus, WorkerStatusHelper } from '@shared/common';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -42,7 +43,7 @@ interface Worker {
   worker_name: string;
   worker_version?: string;
   capabilities?: Record<string, any>;
-  status: 'online' | 'offline' | 'error' | 'maintenance';
+  status: WorkerStatus;
   site_id?: number;
   camera_id?: number;
   last_heartbeat?: string;
@@ -60,6 +61,7 @@ interface WorkersResponse {
   online_count: number;
   offline_count: number;
   error_count: number;
+  processing_count: number;
 }
 
 const Workers: React.FC = () => {
@@ -105,7 +107,7 @@ const Workers: React.FC = () => {
     }
 
     try {
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/v1/workers/ws/${currentTenant}?token=${token}`;
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/v1/registry/workers/ws/${currentTenant}?token=${token}`;
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
@@ -121,9 +123,9 @@ const Workers: React.FC = () => {
             setWorkers(message.data);
             // Update summary stats
             const total = message.data.length;
-            const online = message.data.filter((w: Worker) => w.status === 'online' && w.is_healthy).length;
-            const offline = message.data.filter((w: Worker) => w.status === 'offline' || !w.is_healthy).length;
-            const error = message.data.filter((w: Worker) => w.status === 'error').length;
+            const online = message.data.filter((w: Worker) => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
+            const offline = message.data.filter((w: Worker) => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
+            const error = message.data.filter((w: Worker) => w.status === WorkerStatus.ERROR).length;
             
             setSummaryStats({
               total_count: total,
@@ -132,7 +134,7 @@ const Workers: React.FC = () => {
               error_count: error
             });
             
-          } else if (message.type === 'worker_update') {
+          } else if (message.type === 'worker_registered' || message.type === 'worker_updated' || message.type === 'worker_status_changed') {
             const updatedWorker = message.data;
             
             setWorkers(prev => {
@@ -147,9 +149,30 @@ const Workers: React.FC = () => {
               
               // Update summary stats
               const total = newWorkers.length;
-              const online = newWorkers.filter(w => w.status === 'online' && w.is_healthy).length;
-              const offline = newWorkers.filter(w => w.status === 'offline' || !w.is_healthy).length;
-              const error = newWorkers.filter(w => w.status === 'error').length;
+              const online = newWorkers.filter(w => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
+              const offline = newWorkers.filter(w => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
+              const error = newWorkers.filter(w => w.status === WorkerStatus.ERROR).length;
+              
+              setSummaryStats({
+                total_count: total,
+                online_count: online,
+                offline_count: offline,
+                error_count: error
+              });
+              
+              return newWorkers;
+            });
+          } else if (message.type === 'worker_removed') {
+            const removedWorkerId = message.data.worker_id;
+            
+            setWorkers(prev => {
+              const newWorkers = prev.filter(w => w.worker_id !== removedWorkerId);
+              
+              // Update summary stats
+              const total = newWorkers.length;
+              const online = newWorkers.filter(w => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
+              const offline = newWorkers.filter(w => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
+              const error = newWorkers.filter(w => w.status === WorkerStatus.ERROR).length;
               
               setSummaryStats({
                 total_count: total,
@@ -215,7 +238,7 @@ const Workers: React.FC = () => {
 
   const handleCleanupStaleWorkers = async () => {
     try {
-      const response = await apiClient.cleanupStaleWorkers(5);
+      const response = await apiClient.cleanupStaleWorkers(300); // 5 minutes in seconds
       message.success(response.message);
       await loadWorkers();
     } catch (error) {
@@ -243,19 +266,19 @@ const Workers: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: string, isHealthy: boolean) => {
-    if (status === 'online' && isHealthy) return 'success';
-    if (status === 'online' && !isHealthy) return 'warning';
-    if (status === 'error') return 'error';
-    if (status === 'maintenance') return 'processing';
+  const getStatusColor = (status: WorkerStatus, isHealthy: boolean) => {
+    if (WorkerStatusHelper.isActive(status) && isHealthy) return 'success';
+    if (WorkerStatusHelper.isActive(status) && !isHealthy) return 'warning';
+    if (status === WorkerStatus.ERROR) return 'error';
+    if (status === WorkerStatus.MAINTENANCE) return 'processing';
     return 'default';
   };
 
-  const getStatusIcon = (status: string, isHealthy: boolean) => {
-    if (status === 'online' && isHealthy) return <CheckCircleOutlined />;
-    if (status === 'online' && !isHealthy) return <ExclamationCircleOutlined />;
-    if (status === 'error') return <CloseCircleOutlined />;
-    if (status === 'maintenance') return <SyncOutlined spin />;
+  const getStatusIcon = (status: WorkerStatus, isHealthy: boolean) => {
+    if (WorkerStatusHelper.isActive(status) && isHealthy) return <CheckCircleOutlined />;
+    if (WorkerStatusHelper.isActive(status) && !isHealthy) return <ExclamationCircleOutlined />;
+    if (status === WorkerStatus.ERROR) return <CloseCircleOutlined />;
+    if (status === WorkerStatus.MAINTENANCE) return <SyncOutlined spin />;
     return <CloseCircleOutlined />;
   };
 
@@ -287,7 +310,7 @@ const Workers: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status: string, record: Worker) => (
+      render: (status: WorkerStatus, record: Worker) => (
         <div className="text-center">
           <Badge 
             status={getStatusColor(status, record.is_healthy) as any}
@@ -295,13 +318,13 @@ const Workers: React.FC = () => {
               <Space size={4}>
                 {getStatusIcon(status, record.is_healthy)}
                 <span className={`font-medium ${
-                  status === 'online' && record.is_healthy ? 'text-green-600' :
-                  status === 'online' && !record.is_healthy ? 'text-orange-500' :
-                  status === 'error' ? 'text-red-600' :
-                  status === 'maintenance' ? 'text-blue-600' :
+                  WorkerStatusHelper.isActive(status) && record.is_healthy ? 'text-green-600' :
+                  WorkerStatusHelper.isActive(status) && !record.is_healthy ? 'text-orange-500' :
+                  status === WorkerStatus.ERROR ? 'text-red-600' :
+                  status === WorkerStatus.MAINTENANCE ? 'text-blue-600' :
                   'text-gray-500'
                 }`}>
-                  {status === 'online' && !record.is_healthy ? 'Stale' : status}
+                  {WorkerStatusHelper.isActive(status) && !record.is_healthy ? 'Stale' : WorkerStatusHelper.getDisplayLabel(status)}
                 </span>
               </Space>
             }
@@ -467,12 +490,7 @@ const Workers: React.FC = () => {
               style={{ width: 150 }}
               value={statusFilter}
               onChange={setStatusFilter}
-              options={[
-                { value: 'online', label: 'Online' },
-                { value: 'offline', label: 'Offline' },
-                { value: 'error', label: 'Error' },
-                { value: 'maintenance', label: 'Maintenance' },
-              ]}
+              options={WorkerStatusHelper.getStatusOptions()}
             />
           </Space>
           <Space>
@@ -569,7 +587,7 @@ const Workers: React.FC = () => {
                     text={
                       <Space size={4}>
                         {getStatusIcon(selectedWorker.status, selectedWorker.is_healthy)}
-                        <span>{selectedWorker.status === 'online' && !selectedWorker.is_healthy ? 'Stale' : selectedWorker.status}</span>
+                        <span>{WorkerStatusHelper.isActive(selectedWorker.status) && !selectedWorker.is_healthy ? 'Stale' : WorkerStatusHelper.getDisplayLabel(selectedWorker.status)}</span>
                       </Space>
                     }
                   />

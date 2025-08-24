@@ -473,7 +473,7 @@ class ApiClient {
     offline_count: number;
     error_count: number;
   }> {
-    const response = await this.client.get('/workers', { params });
+    const response = await this.client.get('/registry/workers', { params });
     return response.data;
   }
 
@@ -496,21 +496,21 @@ class ApiClient {
     registration_time: string;
     is_healthy: boolean;
   }> {
-    const response = await this.client.get(`/workers/${workerId}`);
+    const response = await this.client.get(`/registry/workers/${workerId}`);
     return response.data;
   }
 
   async deleteWorker(workerId: string): Promise<{ message: string }> {
-    const response = await this.client.delete(`/workers/${workerId}`);
+    const response = await this.client.delete(`/registry/workers/${workerId}`);
     return response.data;
   }
 
-  async cleanupStaleWorkers(minutesThreshold: number = 5): Promise<{ 
+  async cleanupStaleWorkers(ttlSeconds: number = 300): Promise<{ 
     message: string; 
-    threshold_minutes: number; 
-    updated_count: number 
+    ttl_seconds: number; 
+    removed_count: number 
   }> {
-    const response = await this.client.post('/workers/cleanup-stale', { minutes_threshold: minutesThreshold });
+    const response = await this.client.post('/registry/workers/cleanup-stale', { ttl_seconds: ttlSeconds });
     return response.data;
   }
 

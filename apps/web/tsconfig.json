@@ -7,8 +7,11 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@shared/common": ["../../packages/ts/common"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../packages/ts/common"]
 }
 
