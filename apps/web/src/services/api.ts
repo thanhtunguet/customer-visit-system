@@ -39,7 +39,8 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
+        // Don't auto-logout on login endpoint 401s - let the login form handle it
+        if (error.response?.status === 401 && !error.config?.url?.includes('/auth/token')) {
           this.logout();
         }
         return Promise.reject(error);
