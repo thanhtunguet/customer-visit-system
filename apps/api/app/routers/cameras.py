@@ -462,6 +462,171 @@ async def get_camera_stream_status(
     
     return status
 
+@router.get("/sites/{site_id:int}/streaming/status")
+async def get_site_streaming_status(
+    site_id: int,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get comprehensive streaming status for all cameras in a site"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Get all cameras in the site
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id
+            )
+        )
+    )
+    cameras = result.scalars().all()
+    
+    streaming_status = {
+        "site_id": site_id,
+        "total_cameras": len(cameras),
+        "cameras": [],
+        "workers": {},
+        "streaming_summary": {
+            "total_active_streams": 0,
+            "total_assigned_cameras": 0,
+            "cameras_without_workers": 0,
+            "workers_with_issues": 0
+        }
+    }
+    
+    # Get worker registry for worker status
+    from ..services.worker_registry import worker_registry
+    from ..services.camera_delegation_service import camera_delegation_service
+    
+    for camera in cameras:
+        # Get streaming status for this camera
+        camera_status = await camera_proxy_service.get_camera_stream_status(camera.camera_id)
+        
+        # Get worker assignment
+        worker_id = camera_delegation_service.get_camera_worker(camera.camera_id)
+        worker_info = worker_registry.get_worker(worker_id) if worker_id else None
+        
+        camera_info = {
+            "camera_id": camera.camera_id,
+            "camera_name": camera.name,
+            "camera_type": camera.camera_type.value,
+            "is_active": camera.is_active,
+            "stream_active": camera_status.get("stream_active", False),
+            "assigned_worker_id": worker_id,
+            "worker_status": camera_status.get("worker_status", "unassigned"),
+            "worker_healthy": camera_status.get("worker_healthy", False),
+            "last_status_check": camera_status.get("streaming_status_updated"),
+            "source": camera_status.get("source", "api_call")
+        }
+        
+        streaming_status["cameras"].append(camera_info)
+        
+        # Update summary counts
+        if camera_status.get("stream_active"):
+            streaming_status["streaming_summary"]["total_active_streams"] += 1
+        if worker_id:
+            streaming_status["streaming_summary"]["total_assigned_cameras"] += 1
+        else:
+            streaming_status["streaming_summary"]["cameras_without_workers"] += 1
+        
+        # Add worker info to workers dict
+        if worker_info:
+            if worker_id not in streaming_status["workers"]:
+                worker_streaming_info = {
+                    "worker_id": worker_id,
+                    "worker_name": worker_info.worker_name,
+                    "hostname": worker_info.hostname,
+                    "status": worker_info.status.value,
+                    "is_healthy": worker_info.is_healthy,
+                    "last_heartbeat": worker_info.last_heartbeat.isoformat(),
+                    "assigned_cameras": [],
+                    "active_camera_streams": [],
+                    "total_active_streams": 0
+                }
+                
+                # Get streaming info from worker capabilities
+                if (worker_info.capabilities and 
+                    "active_camera_streams" in worker_info.capabilities):
+                    worker_streaming_info["active_camera_streams"] = worker_info.capabilities["active_camera_streams"]
+                    worker_streaming_info["total_active_streams"] = worker_info.capabilities.get("total_active_streams", 0)
+                
+                streaming_status["workers"][worker_id] = worker_streaming_info
+            
+            # Add this camera to worker's assigned cameras list
+            streaming_status["workers"][worker_id]["assigned_cameras"].append(camera.camera_id)
+            
+            # Check for worker issues
+            if not worker_info.is_healthy or worker_info.status not in ["idle", "processing", "online"]:
+                streaming_status["streaming_summary"]["workers_with_issues"] += 1
+    
+    return streaming_status
+
+
+@router.get("/streaming/status-overview")
+async def get_streaming_overview(
+    user: Dict = Depends(get_current_user)
+):
+    """Get tenant-wide streaming status overview"""
+    tenant_id = user["tenant_id"]
+    
+    # Get all workers for this tenant
+    from ..services.worker_registry import worker_registry
+    from ..services.camera_delegation_service import camera_delegation_service
+    
+    tenant_workers = worker_registry.list_workers(tenant_id=tenant_id)
+    
+    overview = {
+        "tenant_id": tenant_id,
+        "total_workers": len(tenant_workers),
+        "workers": [],
+        "camera_assignments": camera_delegation_service.list_assignments(tenant_id=tenant_id),
+        "summary": {
+            "healthy_workers": 0,
+            "active_workers": 0,
+            "total_assigned_cameras": 0,
+            "total_active_streams": 0,
+            "workers_with_active_streams": 0
+        }
+    }
+    
+    for worker in tenant_workers:
+        worker_info = {
+            "worker_id": worker.worker_id,
+            "worker_name": worker.worker_name,
+            "hostname": worker.hostname,
+            "status": worker.status.value,
+            "is_healthy": worker.is_healthy,
+            "last_heartbeat": worker.last_heartbeat.isoformat(),
+            "site_id": worker.site_id,
+            "assigned_camera_id": worker.camera_id,
+            "active_camera_streams": [],
+            "total_active_streams": 0
+        }
+        
+        # Get streaming info from worker capabilities
+        if (worker.capabilities and 
+            "active_camera_streams" in worker.capabilities):
+            worker_info["active_camera_streams"] = worker.capabilities["active_camera_streams"]
+            worker_info["total_active_streams"] = worker.capabilities.get("total_active_streams", 0)
+            
+            if worker_info["total_active_streams"] > 0:
+                overview["summary"]["workers_with_active_streams"] += 1
+                overview["summary"]["total_active_streams"] += worker_info["total_active_streams"]
+        
+        overview["workers"].append(worker_info)
+        
+        # Update summary counts
+        if worker.is_healthy:
+            overview["summary"]["healthy_workers"] += 1
+        if worker.status in ["idle", "processing", "online"]:
+            overview["summary"]["active_workers"] += 1
+        if worker.camera_id:
+            overview["summary"]["total_assigned_cameras"] += 1
+    
+    return overview
+
 
 @router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
 async def get_camera_stream_feed(

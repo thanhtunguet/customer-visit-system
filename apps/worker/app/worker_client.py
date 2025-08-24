@@ -51,6 +51,29 @@ class WorkerClient:
             "fps": config.worker_fps,
             "camera_source": "rtsp" if config.rtsp_url else "usb"
         }
+        
+        # Streaming service reference (set from parent worker)
+        self.streaming_service = None
+    
+    def set_streaming_service(self, streaming_service):
+        """Set reference to streaming service for status checks"""
+        self.streaming_service = streaming_service
+        
+    def _get_current_worker_status(self) -> WorkerStatus:
+        """Determine current worker status based on streaming and processing activity"""
+        # Check if we have active camera streams
+        if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
+            active_cameras = self.streaming_service.get_active_cameras()
+            if active_cameras:
+                # Worker is actively streaming cameras
+                return WorkerStatus.PROCESSING
+        
+        # Check if assigned camera but no active streams
+        if self.assigned_camera_id:
+            return WorkerStatus.IDLE
+            
+        # No camera assigned
+        return WorkerStatus.IDLE
     
     def _parse_site_id(self) -> Optional[int]:
         """Parse site_id from config, handling both integer strings and s-prefixed values"""
@@ -184,7 +207,7 @@ class WorkerClient:
         
         logger.error("Failed to register worker after all attempts")
     
-    async def _send_heartbeat(self, status: WorkerStatus = WorkerStatus.IDLE, error_message: Optional[str] = None):
+    async def _send_heartbeat(self, status: Optional[WorkerStatus] = None, error_message: Optional[str] = None):
         """Send heartbeat to backend and check for shutdown signals"""
         if not self.worker_id:
             logger.warning("Cannot send heartbeat - worker not registered")
@@ -197,15 +220,32 @@ class WorkerClient:
             await self._check_shutdown_signal()
             await self._check_pending_commands()
             
+            # Determine current status if not explicitly provided
+            if status is None:
+                status = self._get_current_worker_status()
+            
             heartbeat_data = {
                 "status": status.value,
                 "faces_processed_count": self.faces_processed_since_heartbeat,
                 "capabilities": self.capabilities
             }
             
-            # Include current camera if processing
-            if status == WorkerStatus.PROCESSING and self.assigned_camera_id:
-                heartbeat_data["current_camera_id"] = self.assigned_camera_id
+            # Include streaming status information
+            if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
+                active_cameras = self.streaming_service.get_active_cameras()
+                heartbeat_data["active_camera_streams"] = active_cameras
+                heartbeat_data["total_active_streams"] = len(active_cameras)
+                
+                # Include current camera if processing/streaming
+                if status in [WorkerStatus.PROCESSING, WorkerStatus.ONLINE] and active_cameras:
+                    # Use first active camera or assigned camera
+                    current_camera = self.assigned_camera_id if self.assigned_camera_id else (int(active_cameras[0]) if active_cameras else None)
+                    if current_camera:
+                        heartbeat_data["current_camera_id"] = current_camera
+            
+            # Include assigned camera even if not streaming
+            if self.assigned_camera_id:
+                heartbeat_data["assigned_camera_id"] = self.assigned_camera_id
             
             if error_message:
                 heartbeat_data["error_message"] = error_message
@@ -231,7 +271,7 @@ class WorkerClient:
             
             # Reset counter after successful heartbeat
             self.faces_processed_since_heartbeat = 0
-            logger.debug(f"Heartbeat sent successfully - status: {status}, camera: {self.assigned_camera_id}")
+            logger.debug(f"Heartbeat sent successfully - status: {status.value}, camera: {self.assigned_camera_id}")
             
         except Exception as e:
             logger.error(f"Failed to send heartbeat: {e}")
@@ -242,6 +282,7 @@ class WorkerClient:
         
         while True:
             try:
+                # Send heartbeat with dynamic status detection
                 await self._send_heartbeat()
                 
                 # Check if shutdown was requested
@@ -472,14 +513,16 @@ class WorkerClient:
     async def _complete_command(self, command_id: str, result: Optional[Dict[str, Any]], error_message: Optional[str]):
         """Complete command execution"""
         try:
+            completion_data = {
+                "worker_id": self.worker_id,
+                "result": result or {},
+                "error_message": error_message
+            }
+            
             response = await self.http_client.post(
                 f"{self.config.api_url}/v1/worker-management/commands/{command_id}/complete",
                 headers={"Authorization": f"Bearer {self.access_token}"},
-                json={
-                    "worker_id": self.worker_id,
-                    "result": result,
-                    "error_message": error_message
-                }
+                json=completion_data
             )
             response.raise_for_status()
             logger.debug(f"Command {command_id} completed")
@@ -487,72 +530,73 @@ class WorkerClient:
             logger.error(f"Failed to complete command {command_id}: {e}")
     
     async def _handle_assign_camera_command(self, parameters: dict) -> Dict[str, Any]:
-        """Handle camera assignment command"""
+        """Handle assign camera command"""
         camera_id = parameters.get("camera_id")
-        camera_name = parameters.get("camera_name")
+        camera_type = parameters.get("camera_type", "webcam")
         rtsp_url = parameters.get("rtsp_url")
         device_index = parameters.get("device_index")
-        camera_type = parameters.get("camera_type", "webcam")
         
         if not camera_id:
             raise ValueError("camera_id is required for camera assignment")
         
-        # Update camera configuration
+        # Update assigned camera
         self.assigned_camera_id = int(camera_id)
-        self.assigned_camera_name = camera_name
-        self.camera_config = {
-            "camera_id": camera_id,
-            "camera_name": camera_name,
-            "rtsp_url": rtsp_url,
-            "device_index": device_index,
-            "camera_type": camera_type
-        }
+        self.assigned_camera_name = parameters.get("camera_name")
         
-        # If we have a callback to the main worker, notify it of camera assignment
+        # Call assignment callback if set (implemented by enhanced worker)
         if hasattr(self, '_camera_assignment_callback') and self._camera_assignment_callback:
             try:
-                success = await self._camera_assignment_callback(camera_id, self.camera_config)
-                if success:
-                    logger.info(f"Camera assigned and streaming started: {camera_id} ({camera_name})")
-                    return {"camera_id": camera_id, "camera_name": camera_name, "streaming": True}
-                else:
-                    logger.error(f"Failed to start streaming for assigned camera: {camera_id}")
-                    return {"camera_id": camera_id, "camera_name": camera_name, "streaming": False}
+                await self._camera_assignment_callback(camera_id, camera_type, rtsp_url, device_index)
+                logger.info(f"Camera {camera_id} assigned via callback")
             except Exception as e:
-                logger.error(f"Error in camera assignment callback: {e}")
-                return {"camera_id": camera_id, "camera_name": camera_name, "error": str(e)}
+                logger.error(f"Camera assignment callback failed: {e}")
+                raise
         
-        logger.info(f"Camera assigned: {camera_id} ({camera_name})")
-        return {"camera_id": camera_id, "camera_name": camera_name}
+        # Update status to indicate we're processing
+        await self._send_heartbeat(WorkerStatus.PROCESSING)
+        
+        return {
+            "status": "camera_assigned",
+            "camera_id": camera_id,
+            "camera_type": camera_type,
+            "message": f"Camera {camera_id} assigned successfully"
+        }
     
-    async def _handle_release_camera_command(self, _parameters: dict) -> Dict[str, Any]:
-        """Handle camera release command"""
-        old_camera_id = self.assigned_camera_id
-        old_camera_name = self.assigned_camera_name
+    async def _handle_release_camera_command(self, parameters: dict) -> Dict[str, Any]:
+        """Handle release camera command"""
+        camera_id = parameters.get("camera_id", self.assigned_camera_id)
         
-        # If we have a callback to the main worker, notify it of camera release
-        if hasattr(self, '_camera_release_callback') and self._camera_release_callback and old_camera_id:
+        if not camera_id:
+            logger.warning("No camera ID provided and no camera currently assigned")
+            return {"status": "no_camera_to_release"}
+        
+        # Call release callback if set (implemented by enhanced worker)
+        if hasattr(self, '_camera_release_callback') and self._camera_release_callback:
             try:
-                success = await self._camera_release_callback(str(old_camera_id))
-                if success:
-                    logger.info(f"Camera released and streaming stopped: {old_camera_id} ({old_camera_name})")
-                else:
-                    logger.warning(f"Issues releasing camera: {old_camera_id}")
+                await self._camera_release_callback(camera_id)
+                logger.info(f"Camera {camera_id} released via callback")
             except Exception as e:
-                logger.error(f"Error in camera release callback: {e}")
+                logger.error(f"Camera release callback failed: {e}")
+                # Continue with release even if callback fails
         
-        # Clear camera configuration
+        # Clear assigned camera
+        old_camera_id = self.assigned_camera_id
         self.assigned_camera_id = None
         self.assigned_camera_name = None
-        self.camera_config = None
         
-        logger.info(f"Camera released: {old_camera_id} ({old_camera_name})")
-        return {"released_camera_id": old_camera_id, "released_camera_name": old_camera_name}
+        # Update status to idle
+        await self._send_heartbeat(WorkerStatus.IDLE)
+        
+        return {
+            "status": "camera_released",
+            "camera_id": old_camera_id,
+            "message": f"Camera {old_camera_id} released successfully"
+        }
     
-    async def _handle_start_processing_command(self, _parameters: dict) -> Dict[str, Any]:
+    async def _handle_start_processing_command(self, parameters: dict) -> Dict[str, Any]:
         """Handle start processing command"""
         if not self.assigned_camera_id:
-            raise ValueError("No camera assigned for processing")
+            raise ValueError("Cannot start processing - no camera assigned")
         
         # Update status to processing
         await self._send_heartbeat(WorkerStatus.PROCESSING)
@@ -581,16 +625,34 @@ class WorkerClient:
     
     async def _handle_status_report_command(self, _parameters: dict) -> Dict[str, Any]:
         """Handle status report command"""
-        return {
+        current_status = self._get_current_worker_status()
+        
+        status_info = {
             "worker_id": self.worker_id,
             "assigned_camera_id": self.assigned_camera_id,
             "assigned_camera_name": self.assigned_camera_name,
-            "status": "idle",  # This would be dynamic in real implementation
+            "status": current_status.value,
             "faces_processed": self.faces_processed_since_heartbeat
         }
+        
+        # Include streaming information if available
+        if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
+            active_cameras = self.streaming_service.get_active_cameras()
+            status_info["active_camera_streams"] = active_cameras
+            status_info["total_active_streams"] = len(active_cameras)
+        
+        return status_info
     
-    async def _handle_restart_command(self, _parameters: dict) -> Dict[str, Any]:
+    async def _handle_restart_command(self, parameters: dict) -> Dict[str, Any]:
         """Handle restart command"""
-        logger.warning("Restart command received - setting restart flag")
-        # This would be implemented in the main worker loop
-        return {"status": "restart_requested"}
+        restart_type = parameters.get("restart_type", "graceful")
+        logger.warning(f"Restart command received: {restart_type}")
+        
+        # This would trigger the main worker restart logic
+        self.shutdown_requested = True
+        
+        return {
+            "status": "restart_initiated",
+            "restart_type": restart_type,
+            "message": "Worker restart initiated"
+        }

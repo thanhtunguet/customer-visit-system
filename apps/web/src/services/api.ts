@@ -525,6 +525,80 @@ class ApiClient {
     return response.data;
   }
 
+  // Enhanced Streaming Status APIs
+  async getSiteStreamingStatus(siteId: number): Promise<{
+    site_id: number;
+    total_cameras: number;
+    cameras: Array<{
+      camera_id: number;
+      camera_name: string;
+      camera_type: string;
+      is_active: boolean;
+      stream_active: boolean;
+      assigned_worker_id?: string;
+      worker_status: string;
+      worker_healthy: boolean;
+      last_status_check?: string;
+      source: string;
+    }>;
+    workers: Record<string, {
+      worker_id: string;
+      worker_name: string;
+      hostname: string;
+      status: string;
+      is_healthy: boolean;
+      last_heartbeat: string;
+      assigned_cameras: number[];
+      active_camera_streams: string[];
+      total_active_streams: number;
+    }>;
+    streaming_summary: {
+      total_active_streams: number;
+      total_assigned_cameras: number;
+      cameras_without_workers: number;
+      workers_with_issues: number;
+    };
+  }> {
+    const response = await this.client.get(`/sites/${siteId}/streaming/status`);
+    return response.data;
+  }
+
+  async getStreamingOverview(): Promise<{
+    tenant_id: string;
+    total_workers: number;
+    workers: Array<{
+      worker_id: string;
+      worker_name: string;
+      hostname: string;
+      status: string;
+      is_healthy: boolean;
+      last_heartbeat: string;
+      site_id?: number;
+      assigned_camera_id?: number;
+      active_camera_streams: string[];
+      total_active_streams: number;
+    }>;
+    camera_assignments: Record<string, {
+      camera_id: number;
+      worker_id: string;
+      worker_name: string;
+      worker_status: string;
+      is_healthy: boolean;
+      site_id: number;
+      assigned_at: string;
+    }>;
+    summary: {
+      healthy_workers: number;
+      active_workers: number;
+      total_assigned_cameras: number;
+      total_active_streams: number;
+      workers_with_active_streams: number;
+    };
+  }> {
+    const response = await this.client.get('/streaming/status-overview');
+    return response.data;
+  }
+
   // Generic HTTP methods for flexibility
   async get<T = any>(url: string, params?: any): Promise<T> {
     const response = await this.client.get(url, { params });

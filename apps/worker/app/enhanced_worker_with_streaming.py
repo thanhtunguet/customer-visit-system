@@ -70,6 +70,9 @@ class EnhancedFaceRecognitionWorker:
         # Initialize worker client for registration and heartbeat
         await self.worker_client.initialize()
         
+        # Set streaming service reference for status checks
+        self.worker_client.set_streaming_service(self.streaming_service)
+        
         # Set callbacks for camera assignment/release commands
         self.worker_client.set_camera_assignment_callback(self.assign_camera)
         self.worker_client.set_camera_release_callback(self.release_camera)
@@ -438,13 +441,9 @@ class EnhancedFaceRecognitionWorker:
     
     # Camera Management Methods (called by worker command handlers)
     
-    async def assign_camera(self, camera_id: str, camera_config: Dict[str, Any]) -> bool:
+    async def assign_camera(self, camera_id: str, camera_type: str = "webcam", rtsp_url: str = None, device_index: int = None) -> bool:
         """Assign and start streaming for a camera"""
         try:
-            camera_type = camera_config.get("camera_type", "webcam")
-            rtsp_url = camera_config.get("rtsp_url")
-            device_index = camera_config.get("device_index")
-            
             # Start streaming with face processing
             success = self.streaming_service.start_stream(
                 camera_id=camera_id,

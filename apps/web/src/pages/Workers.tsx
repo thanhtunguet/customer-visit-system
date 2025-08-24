@@ -414,13 +414,27 @@ const Workers: React.FC = () => {
       ),
     },
     {
-      title: 'Camera',
+      title: 'Camera & Streaming',
       key: 'camera',
-      width: 120,
+      width: 160,
       render: (_, record: Worker) => (
         <div>
           {record.camera_id ? (
-            <span className="font-medium">{getCameraName(record.camera_id)}</span>
+            <div>
+              <span className="font-medium">{getCameraName(record.camera_id)}</span>
+              {/* Show streaming status from worker capabilities */}
+              {record.capabilities && record.capabilities.active_camera_streams && (
+                <div className="text-xs mt-1">
+                  {record.capabilities.total_active_streams > 0 ? (
+                    <Tag color="green" size="small">
+                      Streaming ({record.capabilities.total_active_streams})
+                    </Tag>
+                  ) : (
+                    <Tag color="gray" size="small">Not streaming</Tag>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <span className="text-gray-400 text-sm">Unassigned</span>
           )}
@@ -678,6 +692,35 @@ const Workers: React.FC = () => {
                 <Descriptions.Item label="Camera Assignment">
                   {selectedWorker.camera_id ? getCameraName(selectedWorker.camera_id) : 'Unassigned'}
                 </Descriptions.Item>
+                {selectedWorker.capabilities && selectedWorker.capabilities.active_camera_streams && (
+                  <>
+                    <Descriptions.Item label="Active Streams">
+                      <Space>
+                        <Tag color={selectedWorker.capabilities.total_active_streams > 0 ? "success" : "default"}>
+                          {selectedWorker.capabilities.total_active_streams || 0} cameras streaming
+                        </Tag>
+                        {selectedWorker.capabilities.streaming_status_updated && (
+                          <span className="text-xs text-gray-500">
+                            Updated: {new Date(selectedWorker.capabilities.streaming_status_updated).toLocaleString()}
+                          </span>
+                        )}
+                      </Space>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Streaming Cameras" span={2}>
+                      {selectedWorker.capabilities.active_camera_streams.length > 0 ? (
+                        <Space wrap>
+                          {selectedWorker.capabilities.active_camera_streams.map((cameraId: string) => (
+                            <Tag key={cameraId} color="blue">
+                              Camera {cameraId}
+                            </Tag>
+                          ))}
+                        </Space>
+                      ) : (
+                        <span className="text-gray-500">No cameras currently streaming</span>
+                      )}
+                    </Descriptions.Item>
+                  </>
+                )}
                 <Descriptions.Item label="Faces Processed">
                   {selectedWorker.total_faces_processed.toLocaleString()}
                 </Descriptions.Item>

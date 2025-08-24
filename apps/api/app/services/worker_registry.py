@@ -258,6 +258,8 @@ class WorkerRegistry:
         error_message: Optional[str] = None,
         capabilities: Optional[Dict[str, Any]] = None,
         current_camera_id: Optional[int] = None,
+        active_camera_streams: Optional[List[str]] = None,
+        total_active_streams: Optional[int] = None,
     ) -> Optional[WorkerInfo]:
         """Update worker heartbeat"""
         
@@ -274,6 +276,21 @@ class WorkerRegistry:
             capabilities=capabilities,
             current_camera_id=current_camera_id,
         )
+        
+        # Store streaming status in capabilities for frontend access
+        if active_camera_streams is not None or total_active_streams is not None:
+            streaming_info = {
+                "active_camera_streams": active_camera_streams or [],
+                "total_active_streams": total_active_streams or 0,
+                "streaming_status_updated": datetime.utcnow().isoformat()
+            }
+            
+            # Update capabilities with streaming info
+            if not worker.capabilities:
+                worker.capabilities = {}
+            worker.capabilities.update(streaming_info)
+            
+            logger.debug(f"Updated streaming status for worker {worker_id}: {total_active_streams} active streams")
         
         # Notify callbacks if status changed or if it's an error
         if old_status != status or status == WorkerStatus.ERROR:

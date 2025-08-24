@@ -54,24 +54,50 @@ export const Cameras: React.FC = () => {
     }
   }, [selectedSite]);
 
-  // Check stream statuses periodically
+  // Check stream statuses periodically using new comprehensive API
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
     if (selectedSite && cameras.length > 0) {
       const checkStreamStatuses = async () => {
-        const statuses: Record<string, boolean> = {};
-        
-        for (const camera of cameras) {
-          try {
-            const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
-            statuses[camera.camera_id] = status.stream_active;
-          } catch (err) {
-            statuses[camera.camera_id] = false;
+        try {
+          // Use the new comprehensive streaming status endpoint
+          const response = await apiClient.get(`/sites/${selectedSite}/streaming/status`);
+          const streamingData = response;
+          
+          const statuses: Record<string, boolean> = {};
+          
+          // Update stream statuses from comprehensive API response
+          if (streamingData.cameras && Array.isArray(streamingData.cameras)) {
+            streamingData.cameras.forEach((cameraInfo: any) => {
+              statuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
+            });
           }
+          
+          setStreamStatuses(statuses);
+          
+          // Log worker streaming info for debugging
+          if (streamingData.workers) {
+            console.log('Worker streaming status:', streamingData.workers);
+          }
+          
+        } catch (err) {
+          console.error('Failed to get comprehensive streaming status:', err);
+          
+          // Fallback to individual camera status checks
+          const statuses: Record<string, boolean> = {};
+          
+          for (const camera of cameras) {
+            try {
+              const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
+              statuses[camera.camera_id] = status.stream_active;
+            } catch (err) {
+              statuses[camera.camera_id] = false;
+            }
+          }
+          
+          setStreamStatuses(statuses);
         }
-        
-        setStreamStatuses(statuses);
       };
       
       // Check immediately

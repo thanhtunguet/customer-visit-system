@@ -39,6 +39,9 @@ class WorkerHeartbeatRequest(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if status is error")
     capabilities: Optional[Dict[str, Any]] = Field(None, description="Updated worker capabilities")
     current_camera_id: Optional[int] = Field(None, description="Camera currently being processed by worker")
+    assigned_camera_id: Optional[int] = Field(None, description="Camera assigned to worker")
+    active_camera_streams: Optional[List[str]] = Field(None, description="List of actively streaming camera IDs")
+    total_active_streams: Optional[int] = Field(None, description="Total number of active camera streams")
     
     def get_status_enum(self) -> WorkerStatus:
         """Convert string status to WorkerStatus enum"""
@@ -217,6 +220,8 @@ async def send_heartbeat(
         error_message=heartbeat.error_message,
         capabilities=heartbeat.capabilities,
         current_camera_id=heartbeat.current_camera_id,
+        active_camera_streams=heartbeat.active_camera_streams,
+        total_active_streams=heartbeat.total_active_streams,
     )
     
     if not worker:

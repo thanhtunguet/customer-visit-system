@@ -9,7 +9,7 @@ from typing import Dict, Optional, Any, AsyncGenerator
 from datetime import datetime, timedelta
 
 from .camera_delegation_service import camera_delegation_service
-from .worker_registry import worker_registry
+from .worker_registry import worker_registry, WorkerInfo
 from .worker_command_service import worker_command_service
 from common.enums.worker import WorkerStatus
 from common.enums.commands import WorkerCommand
@@ -222,54 +222,74 @@ class CameraProxyService:
                 "worker_id": worker_id
             }
         
-        endpoint = self._get_worker_endpoint(worker_id)
-        if not endpoint or not self.http_client:
-            return {
-                "camera_id": camera_id,
-                "stream_active": False,
-                "error": "Worker endpoint not available",
-                "worker_id": worker_id,
-                "worker_status": worker.status.value
-            }
+        # First check worker's reported streaming status from heartbeat
+        streaming_status = self._get_streaming_status_from_worker(worker, camera_id)
         
-        try:
-            response = await self.http_client.get(
-                f"{endpoint}/cameras/{camera_id}/stream/status",
-                timeout=5.0
-            )
-            if response.status_code == 200:
-                result = response.json()
-                result.update({
-                    "worker_id": worker_id,
-                    "worker_status": worker.status.value,
-                    "worker_healthy": worker.is_healthy
+        # Try direct HTTP call to worker as fallback
+        endpoint = self._get_worker_endpoint(worker_id)
+        if endpoint and self.http_client:
+            try:
+                response = await self.http_client.get(
+                    f"{endpoint}/cameras/{camera_id}/stream/status",
+                    timeout=5.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    result.update({
+                        "worker_id": worker_id,
+                        "worker_status": worker.status.value,
+                        "worker_healthy": worker.is_healthy
+                    })
+                    return result
+                else:
+                    # Use streaming status from heartbeat if HTTP call fails
+                    streaming_status.update({
+                        "error": f"Worker HTTP status {response.status_code}, using heartbeat data"
+                    })
+                    return streaming_status
+                    
+            except httpx.TimeoutException:
+                # Use streaming status from heartbeat on timeout
+                streaming_status.update({
+                    "error": "Worker request timeout, using heartbeat data"
                 })
-                return result
-            else:
-                return {
-                    "camera_id": camera_id,
-                    "stream_active": False,
-                    "error": f"Worker returned status {response.status_code}",
-                    "worker_id": worker_id,
-                    "worker_status": worker.status.value
-                }
-                
-        except httpx.TimeoutException:
-            return {
-                "camera_id": camera_id,
-                "stream_active": False,
-                "error": "Worker request timeout",
-                "worker_id": worker_id,
-                "worker_status": worker.status.value
-            }
-        except Exception as e:
-            return {
-                "camera_id": camera_id,
-                "stream_active": False,
-                "error": f"Worker communication error: {str(e)}",
-                "worker_id": worker_id,
-                "worker_status": worker.status.value if worker else "unknown"
-            }
+                return streaming_status
+            except Exception as e:
+                # Use streaming status from heartbeat on error
+                streaming_status.update({
+                    "error": f"Worker communication error: {str(e)}, using heartbeat data"
+                })
+                return streaming_status
+        else:
+            # No endpoint available, use heartbeat data
+            streaming_status.update({
+                "error": "Worker endpoint not available, using heartbeat data"
+            })
+            return streaming_status
+    
+    def _get_streaming_status_from_worker(self, worker: WorkerInfo, camera_id: int) -> Dict[str, Any]:
+        """Get streaming status from worker's heartbeat data"""
+        camera_id_str = str(camera_id)
+        
+        # Check if worker has streaming capabilities info
+        streaming_active = False
+        if (worker.capabilities and 
+            "active_camera_streams" in worker.capabilities and
+            isinstance(worker.capabilities["active_camera_streams"], list)):
+            
+            active_streams = worker.capabilities["active_camera_streams"]
+            streaming_active = camera_id_str in active_streams
+        
+        return {
+            "camera_id": camera_id,
+            "stream_active": streaming_active,
+            "worker_id": worker.worker_id,
+            "worker_status": worker.status.value,
+            "worker_healthy": worker.is_healthy,
+            "source": "heartbeat",
+            "total_active_streams": worker.capabilities.get("total_active_streams", 0) if worker.capabilities else 0,
+            "streaming_status_updated": worker.capabilities.get("streaming_status_updated") if worker.capabilities else None
+        }
     
     async def proxy_camera_stream(self, camera_id: int) -> AsyncGenerator[bytes, None]:
         """Proxy MJPEG stream from worker to client"""
