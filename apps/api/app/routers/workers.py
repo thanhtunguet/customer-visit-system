@@ -1061,3 +1061,119 @@ async def websocket_endpoint(
         pass
     finally:
         connection_manager.disconnect(websocket, tenant_id)
+
+
+# Worker Management Commands - moved from missing worker_management router
+
+@router.get("/worker-management/commands/{worker_id}/pending")
+async def get_pending_commands(
+    worker_id: str,
+    limit: int = 10,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Get pending commands for a worker"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers and admins can check pending commands
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can check pending commands"
+        )
+    
+    try:
+        # Import command service here to avoid circular imports
+        from ..services.worker_command_service import worker_command_service
+        
+        commands = worker_command_service.get_pending_commands(worker_id, limit=limit)
+        
+        return {
+            "worker_id": worker_id,
+            "pending_commands": commands,
+            "count": len(commands)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting pending commands for worker {worker_id}: {e}")
+        return {
+            "worker_id": worker_id,
+            "pending_commands": [],
+            "count": 0
+        }
+
+
+@router.post("/worker-management/commands/{command_id}/acknowledge")
+async def acknowledge_command(
+    command_id: str,
+    worker_id: str,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Acknowledge receipt of a command"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers can acknowledge commands
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can acknowledge commands"
+        )
+    
+    try:
+        from ..services.worker_command_service import worker_command_service
+        
+        success = worker_command_service.acknowledge_command(command_id, worker_id)
+        
+        if success:
+            return {"message": "Command acknowledged"}
+        else:
+            raise HTTPException(status_code=404, detail="Command not found")
+            
+    except Exception as e:
+        logger.error(f"Error acknowledging command {command_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to acknowledge command")
+
+
+@router.post("/worker-management/commands/{command_id}/complete")
+async def complete_command(
+    command_id: str,
+    completion_data: dict,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Mark a command as completed with optional result data"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers can complete commands
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can complete commands"
+        )
+    
+    worker_id = completion_data.get("worker_id")
+    result = completion_data.get("result")
+    error_message = completion_data.get("error_message")
+    
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="worker_id is required")
+    
+    try:
+        from ..services.worker_command_service import worker_command_service
+        
+        success = worker_command_service.complete_command(
+            command_id=command_id,
+            worker_id=worker_id,
+            result=result,
+            error_message=error_message
+        )
+        
+        if success:
+            return {"message": "Command completed"}
+        else:
+            raise HTTPException(status_code=404, detail="Command not found")
+            
+    except Exception as e:
+        logger.error(f"Error completing command {command_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to complete command")
