@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import socket
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Set
@@ -14,6 +15,8 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.database import Worker, UserRole, Camera
 from ..services.worker_shutdown_service import worker_shutdown_service, ShutdownSignal
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, Field
 
