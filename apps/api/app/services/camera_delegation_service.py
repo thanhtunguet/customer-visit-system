@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Set
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, select
 
 from common.enums.worker import WorkerStatus
 from ..models.database import Camera, Worker
@@ -26,7 +27,7 @@ class CameraDelegationService:
         self.cleanup_interval = 60  # seconds - check every minute
         self.auto_assign_interval = 30  # seconds - check for auto-assignments every 30 seconds
         
-    def assign_camera_to_worker(self, db: Session, tenant_id: str, worker_id: str, site_id: int) -> Optional[Camera]:
+    async def assign_camera_to_worker(self, db: AsyncSession, tenant_id: str, worker_id: str, site_id: int) -> Optional[Camera]:
         """
         Assign an available camera to a worker in the registry system.
         Only one camera per worker, and one worker per camera.
@@ -48,22 +49,28 @@ class CameraDelegationService:
             current_camera_id = self.worker_cameras[worker_id]
             logger.info(f"Worker {worker_id} already has camera {current_camera_id} assigned")
             # Return the currently assigned camera
-            return db.query(Camera).filter(
-                and_(
-                    Camera.tenant_id == tenant_id,
-                    Camera.camera_id == current_camera_id,
-                    Camera.is_active == True
+            result = await db.execute(
+                select(Camera).where(
+                    and_(
+                        Camera.tenant_id == tenant_id,
+                        Camera.camera_id == current_camera_id,
+                        Camera.is_active == True
+                    )
                 )
-            ).first()
+            )
+            return result.scalar_one_or_none()
         
         # Find available cameras in the site
-        available_cameras = db.query(Camera).filter(
-            and_(
-                Camera.tenant_id == tenant_id,
-                Camera.site_id == site_id,
-                Camera.is_active == True
+        result = await db.execute(
+            select(Camera).where(
+                and_(
+                    Camera.tenant_id == tenant_id,
+                    Camera.site_id == site_id,
+                    Camera.is_active == True
+                )
             )
-        ).all()
+        )
+        available_cameras = result.scalars().all()
         
         logger.info(f"Found {len(available_cameras)} cameras in site {site_id} for tenant {tenant_id}")
         for cam in available_cameras:
@@ -88,6 +95,8 @@ class CameraDelegationService:
         
         logger.info(f"All cameras in site {site_id} are already assigned")
         return None
+
+
     
     def release_camera_from_worker(self, worker_id: str) -> Optional[int]:
         """Release camera assignment from a worker"""
@@ -165,7 +174,7 @@ class CameraDelegationService:
         
         return cleanup_count
     
-    def reassign_cameras_automatically(self, db: Session, tenant_id: str) -> int:
+    async def reassign_cameras_automatically(self, db: AsyncSession, tenant_id: str) -> int:
         """Automatically assign cameras to idle workers that don't have assignments"""
         assignments_made = 0
         
@@ -174,7 +183,7 @@ class CameraDelegationService:
         unassigned_workers = [w for w in idle_workers if w.worker_id not in self.worker_cameras and w.site_id]
         
         for worker in unassigned_workers:
-            camera = self.assign_camera_to_worker(db, tenant_id, worker.worker_id, worker.site_id)
+            camera = await self.assign_camera_to_worker(db, tenant_id, worker.worker_id, worker.site_id)
             if camera:
                 assignments_made += 1
                 logger.info(f"Auto-assigned camera {camera.camera_id} to idle worker {worker.worker_id}")
@@ -233,11 +242,9 @@ class CameraDelegationService:
             try:
                 await asyncio.sleep(self.auto_assign_interval)
                 
-                # Get database session
-                from ..database import SessionLocal
-                db = SessionLocal()
-                
-                try:
+                # Get database session  
+                from ..core.database import db
+                async with db.get_session() as db_session:
                     # Get all unique tenant IDs from active workers
                     active_tenants = set()
                     for worker in worker_registry.workers.values():
@@ -247,7 +254,7 @@ class CameraDelegationService:
                     total_assigned = 0
                     for tenant_id in active_tenants:
                         try:
-                            assigned_count = self.reassign_cameras_automatically(db, tenant_id)
+                            assigned_count = await self.reassign_cameras_automatically(db_session, tenant_id)
                             total_assigned += assigned_count
                             if assigned_count > 0:
                                 logger.info(f"Auto-assigned {assigned_count} cameras for tenant {tenant_id}")
@@ -256,9 +263,6 @@ class CameraDelegationService:
                     
                     if total_assigned > 0:
                         logger.info(f"Background auto-assignment: assigned {total_assigned} cameras total")
-                        
-                finally:
-                    db.close()
                     
             except asyncio.CancelledError:
                 logger.info("Camera delegation auto-assignment loop cancelled")

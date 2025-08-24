@@ -311,6 +311,126 @@ async def stop_camera_stream(
         "success": result.get("success")
     }
 
+@router.post("/sites/{site_id:int}/cameras/{camera_id:int}/processing/start")
+async def start_camera_processing(
+    site_id: int,
+    camera_id: int,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Start face recognition processing for a specific camera"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Verify camera exists
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    if not camera.is_active:
+        raise HTTPException(status_code=400, detail="Camera is not active")
+    
+    # Find worker assigned to this camera
+    from app.services.camera_delegation_service import camera_delegation_service
+    from app.services.worker_command_service import worker_command_service
+    from common.enums.commands import WorkerCommand, CommandPriority
+    
+    worker_id = camera_delegation_service.get_camera_worker(camera_id)
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="No worker assigned to camera")
+    
+    try:
+        # Send start processing command to worker
+        command_id = worker_command_service.send_command(
+            worker_id=worker_id,
+            command=WorkerCommand.START_PROCESSING,
+            parameters={"camera_id": camera_id},
+            priority=CommandPriority.NORMAL,
+            requested_by=user.get("sub", "system")
+        )
+        
+        return {
+            "message": "Face recognition processing started",
+            "camera_id": camera_id,
+            "worker_id": worker_id,
+            "command_id": command_id,
+            "processing_active": True
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting camera processing: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start processing: {str(e)}")
+
+
+@router.post("/sites/{site_id:int}/cameras/{camera_id:int}/processing/stop")
+async def stop_camera_processing(
+    site_id: int,
+    camera_id: int,
+    user: Dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Stop face recognition processing for a specific camera"""
+    tenant_id = user["tenant_id"]
+    await db.set_tenant_context(db_session, tenant_id)
+    
+    # Verify camera exists
+    result = await db_session.execute(
+        select(Camera).where(
+            and_(
+                Camera.tenant_id == tenant_id,
+                Camera.site_id == site_id,
+                Camera.camera_id == camera_id
+            )
+        )
+    )
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Find worker assigned to this camera
+    from app.services.camera_delegation_service import camera_delegation_service
+    from app.services.worker_command_service import worker_command_service
+    from common.enums.commands import WorkerCommand, CommandPriority
+    
+    worker_id = camera_delegation_service.get_camera_worker(camera_id)
+    if not worker_id:
+        return {
+            "message": "No worker assigned to camera",
+            "camera_id": camera_id,
+            "processing_active": False
+        }
+    
+    try:
+        # Send stop processing command to worker
+        command_id = worker_command_service.send_command(
+            worker_id=worker_id,
+            command=WorkerCommand.STOP_PROCESSING,
+            parameters={"camera_id": camera_id},
+            priority=CommandPriority.NORMAL,
+            requested_by=user.get("sub", "system")
+        )
+        
+        return {
+            "message": "Face recognition processing stopped",
+            "camera_id": camera_id,
+            "worker_id": worker_id,
+            "command_id": command_id,
+            "processing_active": False
+        }
+        
+    except Exception as e:
+        logger.error(f"Error stopping camera processing: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop processing: {str(e)}")
+
 
 @router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/status")
 async def get_camera_stream_status(

@@ -7,8 +7,9 @@ from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.database import get_db
+from ..core.database import get_db, get_db_session
 from ..core.security import get_current_user
 from ..services.camera_delegation_service import camera_delegation_service
 from ..services.worker_command_service import worker_command_service, WorkerCommandMessage
@@ -75,7 +76,7 @@ router = APIRouter(prefix="/v1/worker-management", tags=["worker-camera-manageme
 @router.post("/assign-camera", response_model=CameraAssignmentResponse)
 async def assign_camera_to_worker(
     request: CameraAssignmentRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Assign an available camera to a worker"""
@@ -100,7 +101,7 @@ async def assign_camera_to_worker(
     
     # Assign camera
     try:
-        camera = camera_delegation_service.assign_camera_to_worker(
+        camera = await camera_delegation_service.assign_camera_to_worker(
             db=db,
             tenant_id=current_user.tenant_id,
             worker_id=request.worker_id,

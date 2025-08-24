@@ -230,7 +230,7 @@ class WorkerRegistry:
                 # Import here to avoid circular import
                 from .camera_delegation_service import camera_delegation_service
                 
-                camera = camera_delegation_service.assign_camera_to_worker(
+                camera = await camera_delegation_service.assign_camera_to_worker(
                     db=db_session,
                     tenant_id=tenant_id,
                     worker_id=worker_id,

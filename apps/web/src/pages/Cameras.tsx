@@ -15,7 +15,7 @@ import {
   Tooltip,
   message
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined, RobotOutlined, PauseOutlined } from '@ant-design/icons';
 import { CameraStream } from '../components/CameraStream';
 import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
@@ -42,6 +42,7 @@ export const Cameras: React.FC = () => {
   const [multiStreamModalVisible, setMultiStreamModalVisible] = useState(false);
   const [webcams, setWebcams] = useState<WebcamInfo[]>([]);
   const [webcamsLoading, setWebcamsLoading] = useState(false);
+  const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadSites();
@@ -190,6 +191,26 @@ export const Cameras: React.FC = () => {
     }
   };
 
+  const handleStartProcessing = async (camera: Camera) => {
+    try {
+      await apiClient.startCameraProcessing(selectedSite!, camera.camera_id);
+      setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: true }));
+      message.success(`Started face recognition processing for ${camera.name}`);
+    } catch (err: any) {
+      message.error(`Failed to start processing: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const handleStopProcessing = async (camera: Camera) => {
+    try {
+      await apiClient.stopCameraProcessing(selectedSite!, camera.camera_id);
+      setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
+      message.success(`Stopped face recognition processing for ${camera.name}`);
+    } catch (err: any) {
+      message.error(`Failed to stop processing: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
   // Callback to handle stream state changes from CameraStream component
   const handleStreamStateChange = (cameraId: string, isActive: boolean) => {
     setStreamStatuses(prev => ({ ...prev, [cameraId]: isActive }));
@@ -294,6 +315,18 @@ export const Cameras: React.FC = () => {
       },
     },
     {
+      title: 'Processing Status',
+      key: 'processing_status',
+      render: (_, camera: Camera) => {
+        const isProcessing = processingStatuses[camera.camera_id];
+        return (
+          <Tag color={isProcessing ? 'orange' : 'default'}>
+            {isProcessing ? 'Processing Faces' : 'Not Processing'}
+          </Tag>
+        );
+      },
+    },
+    {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -306,10 +339,11 @@ export const Cameras: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 160,
+      width: 220,
       fixed: 'right' as const,
       render: (_, camera: Camera) => {
         const isStreaming = streamStatuses[camera.camera_id];
+        const isProcessing = processingStatuses[camera.camera_id];
         
         return (
           <Space size="small">
@@ -346,6 +380,35 @@ export const Cameras: React.FC = () => {
                     icon={<StopOutlined />}
                     size="small"
                     danger
+                  />
+                </Popconfirm>
+              </Tooltip>
+            )}
+            {!isProcessing ? (
+              <Tooltip title="Start face recognition processing">
+                <Button
+                  type="text"
+                  icon={<RobotOutlined />}
+                  onClick={() => handleStartProcessing(camera)}
+                  size="small"
+                  disabled={!camera.is_active}
+                  style={{ color: '#52c41a' }}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip title="Stop face recognition processing">
+                <Popconfirm
+                  title="Stop Processing"
+                  description="Are you sure you want to stop face recognition processing?"
+                  onConfirm={() => handleStopProcessing(camera)}
+                  okText="Yes"
+                  cancelText="No"
+                >
+                  <Button
+                    type="text"
+                    icon={<PauseOutlined />}
+                    size="small"
+                    style={{ color: '#fa8c16' }}
                   />
                 </Popconfirm>
               </Tooltip>

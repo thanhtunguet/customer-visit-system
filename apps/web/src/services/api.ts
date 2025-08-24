@@ -256,6 +256,17 @@ class ApiClient {
     return url.toString();
   }
 
+  // Camera Processing Control
+  async startCameraProcessing(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; worker_id: string; command_id: string; processing_active: boolean }> {
+    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/processing/start`);
+    return response.data;
+  }
+
+  async stopCameraProcessing(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; worker_id: string; command_id: string; processing_active: boolean }> {
+    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/processing/stop`);
+    return response.data;
+  }
+
   // Staff
   async getStaff(): Promise<Staff[]> {
     const response = await this.client.get<Staff[]>('/staff');
