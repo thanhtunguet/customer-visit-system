@@ -711,6 +711,17 @@ async def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Check if we should use enhanced worker (default: yes)
+    use_enhanced_worker = os.getenv("USE_ENHANCED_WORKER", "true").lower() == "true"
+    
+    if use_enhanced_worker:
+        # Use the enhanced worker with streaming
+        from .enhanced_worker_with_streaming import run_enhanced_worker
+        logger.info("Starting enhanced worker with streaming capabilities")
+        await run_enhanced_worker()
+        return
+    
+    # Fallback to basic worker
     worker = FaceRecognitionWorker(config)
     
     # Set up signal handlers for graceful shutdown

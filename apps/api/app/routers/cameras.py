@@ -10,7 +10,7 @@ from ..core.database import get_db_session, db
 from ..core.security import get_current_user, get_current_user_for_stream
 from ..models.database import Camera
 from ..schemas import CameraCreate, CameraResponse, WebcamInfo
-from ..services.camera_streaming_service import streaming_service
+from ..services.camera_proxy_service import camera_proxy_service
 from ..services.camera_diagnostics import camera_diagnostics
 
 router = APIRouter(prefix="/v1", tags=["Camera Management"])
@@ -173,26 +173,20 @@ async def delete_camera(
     # Stop all running jobs for this camera before deletion
     logger.info(f"Stopping all jobs for camera {camera_id} before deletion")
     
-    camera_id_str = str(camera_id)
     stopped_services = []
     
-    # 1. Stop camera streaming if active
-    if streaming_service.is_stream_active(camera_id_str):
-        logger.info(f"Stopping active stream for camera {camera_id}")
-        success = streaming_service.stop_stream(camera_id_str)
-        if success:
-            stopped_services.append("camera_streaming")
-        else:
-            logger.warning(f"Failed to stop stream for camera {camera_id}")
-    
-    # 2. Clean up device locks for webcam cameras
-    device_status = streaming_service.get_device_status()
-    device_locks = device_status.get("device_locks", {})
-    for device_index, locked_camera in device_locks.items():
-        if str(locked_camera) == camera_id_str:
-            streaming_service.device_locks.pop(device_index, None)
-            stopped_services.append(f"device_lock_{device_index}")
-            logger.info(f"Cleaned up device lock {device_index} for camera {camera_id}")
+    # 1. Stop camera streaming via proxy service (delegates to worker)
+    try:
+        if camera_proxy_service.is_camera_streaming(camera_id):
+            logger.info(f"Stopping active stream for camera {camera_id} via worker")
+            stop_result = await camera_proxy_service.stop_camera_stream(camera_id)
+            if stop_result.get("success"):
+                stopped_services.append("camera_streaming")
+                logger.info(f"Successfully stopped stream for camera {camera_id}")
+            else:
+                logger.warning(f"Failed to stop stream for camera {camera_id}: {stop_result.get('error')}")
+    except Exception as e:
+        logger.warning(f"Error stopping camera stream: {e}")
     
     # 3. Future: Notify worker processes to stop processing this camera
     # When workers support dynamic camera management, this would send
@@ -259,20 +253,24 @@ async def start_camera_stream(
     if not camera.is_active:
         raise HTTPException(status_code=400, detail="Camera is not active")
     
-    # Start streaming
-    success = streaming_service.start_stream(
-        camera_id=str(camera_id),
+    # Start streaming via proxy service (delegates to worker)
+    result = await camera_proxy_service.start_camera_stream(
+        camera_id=camera_id,
         camera_type=camera.camera_type.value,
         rtsp_url=camera.rtsp_url,
         device_index=camera.device_index
     )
     
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to start camera stream")
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to start camera stream: {result.get('error', 'Unknown error')}"
+        )
     
     return {
-        "message": "Camera stream started successfully",
+        "message": result.get("message", "Camera stream started successfully"),
         "camera_id": camera_id,
+        "worker_id": result.get("worker_id"),
         "stream_active": True
     }
 
@@ -302,13 +300,15 @@ async def stop_camera_stream(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Stop streaming
-    streaming_service.stop_stream(str(camera_id))
+    # Stop streaming via proxy service
+    result = await camera_proxy_service.stop_camera_stream(camera_id)
     
     return {
-        "message": "Camera stream stopped successfully",
+        "message": result.get("message", "Camera stream stopped"),
         "camera_id": camera_id,
-        "stream_active": False
+        "worker_id": result.get("worker_id"),
+        "stream_active": False,
+        "success": result.get("success")
     }
 
 
@@ -337,15 +337,10 @@ async def get_camera_stream_status(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Get stream info
-    stream_info = streaming_service.get_stream_info(str(camera_id))
-    is_active = streaming_service.is_stream_active(str(camera_id))
+    # Get stream status via proxy service
+    status = await camera_proxy_service.get_camera_stream_status(camera_id)
     
-    return {
-        "camera_id": camera_id,
-        "stream_active": is_active,
-        "stream_info": stream_info
-    }
+    return status
 
 
 @router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
@@ -373,27 +368,25 @@ async def get_camera_stream_feed(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Check if stream is active
-    if not streaming_service.is_stream_active(str(camera_id)):
-        raise HTTPException(status_code=404, detail="Camera stream is not active")
-    
-    return StreamingResponse(
-        streaming_service.stream_frames(str(camera_id)),
-        media_type="multipart/x-mixed-replace; boundary=frame"
-    )
+    # Proxy stream from worker
+    try:
+        return StreamingResponse(
+            camera_proxy_service.proxy_camera_stream(camera_id),
+            media_type="multipart/x-mixed-replace; boundary=frame"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/streaming/debug")
 async def get_streaming_debug_info(
     user: Dict = Depends(get_current_user)
 ):
-    """Get debug information about camera streaming service"""
-    device_status = streaming_service.get_device_status()
-    conflicts = streaming_service.diagnose_device_conflicts()
+    """Get debug information about camera proxy service and worker streaming"""
+    debug_info = await camera_proxy_service.get_streaming_debug_info()
     return {
-        "streaming_service_status": device_status,
-        "conflict_analysis": conflicts,
-        "message": "This endpoint helps debug camera streaming conflicts and device usage"
+        "proxy_service_status": debug_info,
+        "message": "This endpoint shows camera streaming status across all workers"
     }
 
 
@@ -401,10 +394,14 @@ async def get_streaming_debug_info(
 async def cleanup_all_streams(
     user: Dict = Depends(get_current_user)
 ):
-    """Force cleanup all streams and device locks (emergency use)"""
-    streaming_service.cleanup_all_streams()
+    """Force cleanup all camera assignments and notify workers (emergency use)"""
+    # Clean up camera assignments
+    from ..services.camera_delegation_service import camera_delegation_service
+    cleanup_count = camera_delegation_service.cleanup_stale_assignments()
+    
     return {
-        "message": "All streams and device locks have been cleaned up"
+        "message": f"Cleaned up {cleanup_count} stale camera assignments",
+        "cleanup_count": cleanup_count
     }
 
 @router.post("/cameras/{camera_id:int}/stop-all-jobs")
@@ -413,28 +410,25 @@ async def stop_all_camera_jobs(
     user: Dict = Depends(get_current_user)
 ):
     """Stop all running jobs (streaming, face recognition, etc.) for a specific camera"""
-    camera_id_str = str(camera_id)
     stopped_services = []
     
-    # Stop camera streaming
-    if streaming_service.is_stream_active(camera_id_str):
-        logger.info(f"Stopping stream for camera {camera_id}")
-        success = streaming_service.stop_stream(camera_id_str)
-        if success:
-            stopped_services.append("camera_streaming")
+    # Stop camera streaming via proxy service
+    try:
+        if camera_proxy_service.is_camera_streaming(camera_id):
+            logger.info(f"Stopping stream for camera {camera_id} via worker")
+            stop_result = await camera_proxy_service.stop_camera_stream(camera_id)
+            if stop_result.get("success"):
+                stopped_services.append("camera_streaming")
+        else:
+            logger.info(f"Camera {camera_id} is not currently streaming")
+    except Exception as e:
+        logger.error(f"Error stopping camera stream: {e}")
     
-    # Future: Stop face recognition workers
-    # This endpoint can be extended to notify worker processes
-    # that they should stop processing this camera
-    
-    # Clean up device locks
-    device_status = streaming_service.get_device_status()
-    device_locks = device_status.get("device_locks", {})
-    for device_index, locked_camera in device_locks.items():
-        if str(locked_camera) == camera_id_str:
-            streaming_service.device_locks.pop(device_index, None)
-            stopped_services.append(f"device_lock_{device_index}")
-            logger.info(f"Cleaned up device lock {device_index} for camera {camera_id}")
+    # Clean up any stale assignments
+    from ..services.camera_delegation_service import camera_delegation_service
+    cleanup_count = camera_delegation_service.cleanup_stale_assignments()
+    if cleanup_count > 0:
+        stopped_services.append(f"cleaned_{cleanup_count}_stale_assignments")
     
     return {
         "message": f"Stopped all jobs for camera {camera_id}",

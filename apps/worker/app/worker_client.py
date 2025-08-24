@@ -374,6 +374,14 @@ class WorkerClient:
     def get_camera_config(self) -> Optional[Dict[str, Any]]:
         """Get current camera configuration"""
         return self.camera_config
+
+    def set_camera_assignment_callback(self, callback):
+        """Set callback for camera assignment events"""
+        self._camera_assignment_callback = callback
+    
+    def set_camera_release_callback(self, callback):
+        """Set callback for camera release events"""  
+        self._camera_release_callback = callback
     
     async def _check_pending_commands(self):
         """Check for pending commands from backend"""
@@ -500,6 +508,20 @@ class WorkerClient:
             "camera_type": camera_type
         }
         
+        # If we have a callback to the main worker, notify it of camera assignment
+        if hasattr(self, '_camera_assignment_callback') and self._camera_assignment_callback:
+            try:
+                success = await self._camera_assignment_callback(camera_id, self.camera_config)
+                if success:
+                    logger.info(f"Camera assigned and streaming started: {camera_id} ({camera_name})")
+                    return {"camera_id": camera_id, "camera_name": camera_name, "streaming": True}
+                else:
+                    logger.error(f"Failed to start streaming for assigned camera: {camera_id}")
+                    return {"camera_id": camera_id, "camera_name": camera_name, "streaming": False}
+            except Exception as e:
+                logger.error(f"Error in camera assignment callback: {e}")
+                return {"camera_id": camera_id, "camera_name": camera_name, "error": str(e)}
+        
         logger.info(f"Camera assigned: {camera_id} ({camera_name})")
         return {"camera_id": camera_id, "camera_name": camera_name}
     
@@ -507,6 +529,17 @@ class WorkerClient:
         """Handle camera release command"""
         old_camera_id = self.assigned_camera_id
         old_camera_name = self.assigned_camera_name
+        
+        # If we have a callback to the main worker, notify it of camera release
+        if hasattr(self, '_camera_release_callback') and self._camera_release_callback and old_camera_id:
+            try:
+                success = await self._camera_release_callback(str(old_camera_id))
+                if success:
+                    logger.info(f"Camera released and streaming stopped: {old_camera_id} ({old_camera_name})")
+                else:
+                    logger.warning(f"Issues releasing camera: {old_camera_id}")
+            except Exception as e:
+                logger.error(f"Error in camera release callback: {e}")
         
         # Clear camera configuration
         self.assigned_camera_id = None

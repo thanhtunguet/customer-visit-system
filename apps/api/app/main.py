@@ -14,7 +14,7 @@ from .core.middleware import tenant_context_middleware
 from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .models.database import Camera
-from .services.camera_streaming_service import streaming_service
+from .services.camera_proxy_service import camera_proxy_service
 from .services.worker_monitor_service import worker_monitor_service
 from .services.worker_registry import worker_registry
 from .services.worker_command_service import worker_command_service
@@ -22,10 +22,13 @@ from .services.camera_delegation_service import camera_delegation_service
 from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management
 
 
-async def auto_start_camera_streams():
-    """Auto-start disabled - cameras are now managed by workers"""
-    logging.info("Camera streaming disabled - cameras are now managed by workers")
-    pass
+async def initialize_camera_proxy():
+    """Initialize camera proxy service for worker delegation"""
+    try:
+        await camera_proxy_service.initialize()
+        logging.info("Camera proxy service initialized - cameras are managed by workers")
+    except Exception as e:
+        logging.error(f"Failed to initialize camera proxy service: {e}")
 
 
 # Application lifespan management
@@ -44,8 +47,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Failed to connect to MinIO: {e}")
     
-    # Camera streaming is now handled by workers
-    await auto_start_camera_streams()
+    # Initialize camera proxy service
+    await initialize_camera_proxy()
     
     # Start worker monitoring service
     try:
@@ -85,10 +88,10 @@ async def lifespan(app: FastAPI):
     # Create shutdown tasks with timeouts
     async def cleanup_cameras():
         try:
-            streaming_service.cleanup_all_streams()
-            logging.info("Cleaned up camera streams")
+            await camera_proxy_service.shutdown()
+            logging.info("Cleaned up camera proxy service")
         except Exception as e:
-            logging.error(f"Failed to cleanup camera streams: {e}")
+            logging.error(f"Failed to cleanup camera proxy service: {e}")
     
     # Service cleanup task  
     async def cleanup_services():
