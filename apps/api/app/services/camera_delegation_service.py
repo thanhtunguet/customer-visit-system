@@ -90,6 +90,28 @@ class CameraDelegationService:
                 # Update worker info in registry
                 worker.camera_id = camera.camera_id
                 
+                # Send ASSIGN_CAMERA command to worker to start processing
+                try:
+                    from .worker_command_service import worker_command_service
+                    from common.enums.commands import WorkerCommand, CommandPriority
+                    
+                    command_id = worker_command_service.send_command(
+                        worker_id=worker_id,
+                        command=WorkerCommand.ASSIGN_CAMERA,
+                        parameters={
+                            "camera_id": camera.camera_id,
+                            "camera_name": camera.name,
+                            "rtsp_url": camera.rtsp_url,
+                            "device_index": camera.device_index,
+                            "camera_type": camera.camera_type.value if camera.camera_type else "webcam"
+                        },
+                        priority=CommandPriority.HIGH,
+                        requested_by="system_auto_assignment"
+                    )
+                    logger.info(f"Sent ASSIGN_CAMERA command {command_id} to worker {worker_id} for camera {camera.camera_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send ASSIGN_CAMERA command to worker {worker_id}: {e}")
+                
                 logger.info(f"Assigned camera {camera.camera_id} to worker {worker_id}")
                 return camera
         
