@@ -93,7 +93,7 @@ export interface VisitorReport {
 
 export interface AuthUser {
   sub: string;
-  role: string;
+  role: UserRole;
   tenant_id: string;
 }
 
@@ -176,10 +176,10 @@ export interface CameraCreate {
 // ===============================
 
 export enum UserRole {
-  SYSTEM_ADMIN = 'SYSTEM_ADMIN',
-  TENANT_ADMIN = 'TENANT_ADMIN',
-  SITE_MANAGER = 'SITE_MANAGER',
-  WORKER = 'WORKER'
+  SYSTEM_ADMIN = 'system_admin',
+  TENANT_ADMIN = 'tenant_admin',
+  SITE_MANAGER = 'site_manager',
+  WORKER = 'worker'
 }
 
 export interface User {

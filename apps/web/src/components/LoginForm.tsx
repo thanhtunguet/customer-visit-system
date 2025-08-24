@@ -3,7 +3,7 @@ import { Form, Input, Button, Card, Typography, Space, Select, Alert } from 'ant
 import { UserOutlined, LockOutlined, ShopOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import { LoginRequest } from '../types/api';
+import { LoginRequest, UserRole } from '../types/api';
 
 const { Title, Text } = Typography;
 
@@ -12,7 +12,7 @@ export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [selectedRole, setSelectedRole] = useState<string>('tenant_admin');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.TENANT_ADMIN);
 
   const handleSubmit = async (values: LoginRequest) => {
     setLoading(true);
@@ -20,7 +20,7 @@ export const LoginForm: React.FC = () => {
 
     try {
       // For system admin, don't require tenant_id
-      const loginData = selectedRole === 'system_admin' 
+      const loginData = selectedRole === UserRole.SYSTEM_ADMIN 
         ? { ...values, tenant_id: undefined } 
         : values;
       
@@ -108,11 +108,11 @@ export const LoginForm: React.FC = () => {
           layout="vertical"
           size="large"
           initialValues={{
-            role: 'tenant_admin',
+            role: UserRole.TENANT_ADMIN,
             tenant_id: 't-dev'
           }}
         >
-          {selectedRole !== 'system_admin' && (
+          {selectedRole !== UserRole.SYSTEM_ADMIN && (
             <Form.Item
               name="tenant_id"
               label="Tenant ID"
@@ -165,14 +165,14 @@ export const LoginForm: React.FC = () => {
               onChange={(value) => {
                 setSelectedRole(value);
                 // Clear tenant_id when switching to system admin
-                if (value === 'system_admin') {
+                if (value === UserRole.SYSTEM_ADMIN) {
                   form.setFieldValue('tenant_id', undefined);
                 }
               }}
             >
-              <Select.Option value="system_admin">System Admin</Select.Option>
-              <Select.Option value="tenant_admin">Tenant Admin</Select.Option>
-              <Select.Option value="site_manager">Site Manager</Select.Option>
+              <Select.Option value={UserRole.SYSTEM_ADMIN}>System Admin</Select.Option>
+              <Select.Option value={UserRole.TENANT_ADMIN}>Tenant Admin</Select.Option>
+              <Select.Option value={UserRole.SITE_MANAGER}>Site Manager</Select.Option>
             </Select>
           </Form.Item>
 

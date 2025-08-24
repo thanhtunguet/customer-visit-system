@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user
-from ..models.database import Tenant, Site, Camera, Staff, Customer, ApiKey, Visit, StaffFaceImage
+from ..models.database import Tenant, Site, Camera, Staff, Customer, ApiKey, Visit, StaffFaceImage, UserRole
 from ..schemas import TenantCreate, TenantUpdate, TenantStatusUpdate, TenantResponse
 
 router = APIRouter(prefix="/v1", tags=["Tenant Management"])
@@ -18,7 +18,7 @@ async def list_tenants(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=403, detail="Forbidden")
     
     await db.set_tenant_context(db_session, user["tenant_id"])
@@ -34,7 +34,7 @@ async def create_tenant(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system administrators can create tenants")
     
     # Check if tenant already exists
@@ -66,7 +66,7 @@ async def get_tenant(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system administrators can view tenants")
     
     result = await db_session.execute(
@@ -86,7 +86,7 @@ async def update_tenant(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system administrators can update tenants")
     
     result = await db_session.execute(
@@ -117,7 +117,7 @@ async def toggle_tenant_status(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system administrators can modify tenant status")
     
     result = await db_session.execute(
@@ -145,7 +145,7 @@ async def delete_tenant(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    if user["role"] != "system_admin":
+    if user["role"] != UserRole.SYSTEM_ADMIN.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system administrators can delete tenants")
     
     result = await db_session.execute(

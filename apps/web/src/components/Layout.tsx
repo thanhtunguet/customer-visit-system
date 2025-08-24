@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import { AuthUser, Tenant } from '../types/api';
+import { AuthUser, Tenant, UserRole } from '../types/api';
 import { ChangePasswordModal } from './ChangePasswordModal';
 
 const { Header, Sider, Content } = AntLayout;
@@ -36,7 +36,7 @@ export const AppLayout: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (user?.role === 'system_admin') {
+    if (user?.role === UserRole.SYSTEM_ADMIN) {
       loadTenants();
     }
   }, [user]);
@@ -47,7 +47,7 @@ export const AppLayout: React.FC = () => {
       setUser(userData);
       
       // For system admin, use stored tenant context or default to null (global view)
-      if (userData.role === 'system_admin') {
+      if (userData.role === UserRole.SYSTEM_ADMIN) {
         const storedTenantId = apiClient.getCurrentTenant();
         setSelectedTenantId(storedTenantId);
       } else {
@@ -76,7 +76,7 @@ export const AppLayout: React.FC = () => {
   const handleTenantChange = async (tenantId: string | null) => {
     try {
       // Only system admins can switch views
-      if (user?.role !== 'system_admin') {
+      if (user?.role !== UserRole.SYSTEM_ADMIN) {
         message.error('Only system admins can switch views');
         return;
       }
@@ -175,7 +175,7 @@ export const AppLayout: React.FC = () => {
   const getFilteredMenuItems = () => {
     if (!user) return [];
     
-    if (user.role === 'system_admin') {
+    if (user.role === UserRole.SYSTEM_ADMIN) {
       // System admin menu depends on tenant selection
       if (selectedTenantId) {
         // Tenant-specific view: only show tenant-specific features
@@ -197,12 +197,12 @@ export const AppLayout: React.FC = () => {
       label: `${user?.sub || 'User'} (${user?.role})`,
       disabled: true,
     },
-    ...(user?.role === 'system_admin' && selectedTenantId ? [{
+    ...(user?.role === UserRole.SYSTEM_ADMIN && selectedTenantId ? [{
       key: 'tenant-context',
       icon: <ShopOutlined />,
       label: `Context: ${tenants.find(t => t.tenant_id === selectedTenantId)?.name || selectedTenantId}`,
       disabled: true,
-    }] : user?.role === 'system_admin' ? [{
+    }] : user?.role === UserRole.SYSTEM_ADMIN ? [{
       key: 'tenant-context',
       icon: <ShopOutlined />,
       label: 'Context: Global View',
@@ -251,7 +251,7 @@ export const AppLayout: React.FC = () => {
             }`}>
               {collapsed ? 'CV' : 'Customer Visits'}
             </h1>
-            {!collapsed && user?.role === 'system_admin' && (
+            {!collapsed && user?.role === UserRole.SYSTEM_ADMIN && (
               <div className="text-xs text-gray-500 mt-1">
                 {selectedTenantId ? (
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
@@ -287,7 +287,7 @@ export const AppLayout: React.FC = () => {
               {collapsed ? '→' : '←'}
             </Button>
             
-            {user?.role === 'system_admin' ? (
+            {user?.role === UserRole.SYSTEM_ADMIN && (
               <Space>
                 <Text strong className="text-gray-700">Tenant:</Text>
                 <Select
@@ -306,10 +306,6 @@ export const AppLayout: React.FC = () => {
                   ]}
                 />
               </Space>
-            ) : (
-              <Text strong className="text-gray-700">
-                Tenant: {user?.tenant_id || 'N/A'}
-              </Text>
             )}
           </Space>
           

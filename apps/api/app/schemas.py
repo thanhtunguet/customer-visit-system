@@ -18,7 +18,7 @@ class TokenRequest(BaseModel):
     password: Optional[str] = None
     api_key: Optional[str] = None
     tenant_id: Optional[str] = None
-    role: str = "worker"
+    role: UserRole = UserRole.WORKER
 
 
 class ViewSwitchRequest(BaseModel):

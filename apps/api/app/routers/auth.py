@@ -35,7 +35,7 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
         
         token = mint_jwt(
             sub="worker",
-            role=payload.role,
+            role=payload.role.value,
             tenant_id=payload.tenant_id
         )
         return TokenResponse(access_token=token)
