@@ -32,6 +32,10 @@ class WorkerClient:
         self.assigned_camera_id: Optional[int] = None
         self.assigned_camera_name: Optional[str] = None
         
+        # Shutdown signaling
+        self.shutdown_requested = False
+        self.shutdown_signal = None
+        
         # Worker info
         self.hostname = socket.gethostname()
         self.worker_name = f"Worker-{self.hostname}"
@@ -178,13 +182,16 @@ class WorkerClient:
         logger.error("Failed to register worker after all attempts")
     
     async def _send_heartbeat(self, status: str = "idle", error_message: Optional[str] = None):
-        """Send heartbeat to backend"""
+        """Send heartbeat to backend and check for shutdown signals"""
         if not self.worker_id:
             logger.warning("Cannot send heartbeat - worker not registered")
             return
         
         try:
             await self._ensure_authenticated()
+            
+            # First check for shutdown signals
+            await self._check_shutdown_signal()
             
             heartbeat_data = {
                 "status": status,
@@ -232,6 +239,12 @@ class WorkerClient:
         while True:
             try:
                 await self._send_heartbeat()
+                
+                # Check if shutdown was requested
+                if self.should_shutdown():
+                    logger.warning("Shutdown requested - stopping heartbeat loop")
+                    break
+                
                 await asyncio.sleep(heartbeat_interval)
                 
             except asyncio.CancelledError:
@@ -293,3 +306,63 @@ class WorkerClient:
     def get_assigned_camera(self) -> Optional[int]:
         """Get currently assigned camera ID"""
         return self.assigned_camera_id
+    
+    async def _check_shutdown_signal(self):
+        """Check for pending shutdown signals from backend"""
+        try:
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/shutdown-signal",
+                headers={"Authorization": f"Bearer {self.access_token}"}
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("has_shutdown_signal"):
+                shutdown_signal = result.get("shutdown_signal")
+                if shutdown_signal:
+                    self.shutdown_requested = True
+                    self.shutdown_signal = shutdown_signal
+                    
+                    logger.warning(f"Shutdown signal received: {shutdown_signal['signal']}")
+                    logger.warning(f"Requested by: {shutdown_signal['requested_by']}")
+                    logger.warning(f"Message: {shutdown_signal['message']}")
+                    
+                    # Acknowledge receipt
+                    await self._acknowledge_shutdown()
+                    
+        except Exception as e:
+            logger.debug(f"Error checking shutdown signal: {e}")
+    
+    async def _acknowledge_shutdown(self):
+        """Acknowledge receipt of shutdown signal"""
+        try:
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/acknowledge-shutdown",
+                headers={"Authorization": f"Bearer {self.access_token}"}
+            )
+            response.raise_for_status()
+            logger.info("Shutdown signal acknowledged")
+            
+        except Exception as e:
+            logger.error(f"Failed to acknowledge shutdown: {e}")
+    
+    async def complete_shutdown(self):
+        """Mark shutdown as completed before exiting"""
+        try:
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/complete-shutdown",
+                headers={"Authorization": f"Bearer {self.access_token}"}
+            )
+            response.raise_for_status()
+            logger.info("Shutdown completion reported to backend")
+            
+        except Exception as e:
+            logger.error(f"Failed to report shutdown completion: {e}")
+    
+    def should_shutdown(self) -> bool:
+        """Check if worker should shutdown"""
+        return self.shutdown_requested
+    
+    def get_shutdown_signal(self) -> Optional[dict]:
+        """Get shutdown signal details"""
+        return self.shutdown_signal

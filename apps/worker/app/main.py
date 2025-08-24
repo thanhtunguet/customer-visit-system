@@ -55,6 +55,8 @@ import asyncio
 import cv2
 import logging
 import os
+import signal
+import sys
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -168,6 +170,9 @@ class FaceRecognitionWorker:
         # Worker client for registration and heartbeat
         self.worker_client = WorkerClient(config)
         
+        # Shared shutdown flag
+        self._shutdown_requested = False
+        
         # Event queue for failed events
         self.failed_events_queue: asyncio.Queue = asyncio.Queue()
         self.queue_processor_task: Optional[asyncio.Task] = None
@@ -184,6 +189,9 @@ class FaceRecognitionWorker:
         # Start failed event queue processor
         self.queue_processor_task = asyncio.create_task(self._process_failed_events_queue())
         
+        # Start shutdown monitor task
+        self.shutdown_monitor_task = asyncio.create_task(self._monitor_shutdown())
+        
         logger.info("Worker initialized successfully")
     
     async def shutdown(self):
@@ -196,6 +204,14 @@ class FaceRecognitionWorker:
             self.queue_processor_task.cancel()
             try:
                 await self.queue_processor_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Cancel shutdown monitor
+        if hasattr(self, 'shutdown_monitor_task') and self.shutdown_monitor_task and not self.shutdown_monitor_task.done():
+            self.shutdown_monitor_task.cancel()
+            try:
+                await self.shutdown_monitor_task
             except asyncio.CancelledError:
                 pass
         
@@ -427,6 +443,42 @@ class FaceRecognitionWorker:
         
         return {"error": "Max retries exceeded, event queued for retry"}
     
+    async def _monitor_shutdown(self):
+        """Monitor for shutdown signals and initiate graceful shutdown"""
+        check_interval = 2  # Check every 2 seconds
+        
+        while True:
+            try:
+                if self.worker_client.should_shutdown() and not self._shutdown_requested:
+                    logger.info("Shutdown monitor detected shutdown request - setting shutdown flag")
+                    self._shutdown_requested = True
+                    
+                    # Wait a reasonable time for graceful shutdown
+                    await asyncio.sleep(10)
+                    
+                    # If we're still here after 10 seconds, force complete shutdown
+                    if self._shutdown_requested:
+                        logger.warning("Graceful shutdown period expired, completing shutdown...")
+                        await self.worker_client.complete_shutdown()
+                        
+                        # Exit the process
+                        logger.info("Exiting worker process")
+                        import os
+                        os._exit(0)
+                
+                await asyncio.sleep(check_interval)
+                
+            except asyncio.CancelledError:
+                logger.info("Shutdown monitor cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in shutdown monitor: {e}")
+                await asyncio.sleep(check_interval)
+    
+    def should_shutdown(self) -> bool:
+        """Check if worker should shutdown"""
+        return self._shutdown_requested or self.worker_client.should_shutdown()
+    
     async def process_frame(self, frame: np.ndarray) -> int:
         """Process a single frame and detect faces"""
         faces_processed = 0
@@ -520,6 +572,11 @@ class FaceRecognitionWorker:
         
         try:
             while True:
+                    # Check for shutdown signal at the outer loop level too
+                if self.should_shutdown():
+                    logger.info("Shutdown signal received, exiting main camera loop")
+                    break
+                    
                 try:
                     # Initialize camera
                     if self.config.rtsp_url:
@@ -548,13 +605,21 @@ class FaceRecognitionWorker:
                     await self.worker_client.report_idle()
                     
                     # Main processing loop
+                    frame_count = 0
                     while True:
+                        # Check for shutdown signal every few frames
+                        if frame_count % 10 == 0 or self.should_shutdown():
+                            if self.should_shutdown():
+                                logger.info("Shutdown signal received, stopping camera capture")
+                                break
+                        
                         ret, frame = cap.read()
                         if not ret:
                             logger.warning("Failed to read frame, attempting reconnection")
                             break  # Break to outer loop for reconnection
                         
                         current_time = time.time()
+                        frame_count += 1
                         
                         # Process frame based on FPS setting
                         if current_time - last_process_time >= frame_delay:
@@ -597,13 +662,27 @@ class FaceRecognitionWorker:
             if cap:
                 cap.release()
                 logger.info("Camera released")
+            
+            # Handle graceful shutdown
+            if self.should_shutdown():
+                logger.info("Completing graceful shutdown...")
+                self._shutdown_requested = True
+                await self.worker_client.complete_shutdown()
     
     async def run_simulation(self):
         """Run simulation mode for testing"""
         logger.info("Running in simulation mode")
         
+        cycle_count = 0
         while True:
             try:
+                # Check for shutdown signal every few cycles
+                cycle_count += 1
+                if cycle_count % 5 == 0 or self.should_shutdown():
+                    if self.should_shutdown():
+                        logger.info("Shutdown signal received, stopping simulation")
+                        break
+                
                 # Generate mock frame
                 frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
                 
@@ -634,14 +713,31 @@ async def main():
     
     worker = FaceRecognitionWorker(config)
     
+    # Set up signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+        worker._shutdown_requested = True
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
         await worker.initialize()
         
+        # Main execution loop with shutdown checking
         if config.mock_mode:
             await worker.run_simulation()
         else:
             await worker.run_camera_capture()
+            
+        # Check if shutdown was requested and complete it
+        if worker.should_shutdown():
+            logger.info("Completing graceful shutdown...")
+            await worker.worker_client.complete_shutdown()
     
+    except Exception as e:
+        logger.error(f"Worker error: {e}")
+        
     finally:
         await worker.shutdown()
 

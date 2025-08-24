@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.database import Worker, UserRole, Camera
+from ..services.worker_shutdown_service import worker_shutdown_service, ShutdownSignal
 
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,19 @@ class WorkerHeartbeatRequest(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if status is error")
     capabilities: Optional[Dict[str, Any]] = Field(None, description="Updated worker capabilities")
     current_camera_id: Optional[int] = Field(None, description="Camera currently being processed by worker")
+
+
+class WorkerShutdownRequest(BaseModel):
+    signal: str = Field(default="graceful", description="Shutdown signal: graceful, immediate, restart")
+    timeout: int = Field(default=30, description="Timeout in seconds for graceful shutdown")
+
+
+class WorkerShutdownResponse(BaseModel):
+    success: bool
+    message: str
+    shutdown_id: Optional[str] = None
+    timeout: Optional[int] = None
+    error: Optional[str] = None
 
 
 class WorkerStatusResponse(BaseModel):
@@ -620,10 +634,11 @@ async def get_worker_status(
 @router.delete("/workers/{worker_id}")
 async def deregister_worker(
     worker_id: str,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user_dict: dict = Depends(get_current_user),
 ):
-    """Deregister a worker"""
+    """Deregister a worker with graceful shutdown"""
     
     current_user = UserInfo(**current_user_dict)
     
@@ -644,10 +659,40 @@ async def deregister_worker(
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     
+    # Check if worker is online and should be gracefully shutdown
+    if not force and worker.status in ["idle", "processing", "online"] and is_worker_healthy(worker):
+        # Request graceful shutdown first
+        try:
+            shutdown_result = await worker_shutdown_service.request_worker_shutdown(
+                worker_id=worker_id,
+                signal=ShutdownSignal.GRACEFUL,
+                timeout=30,
+                requested_by=current_user.sub
+            )
+            
+            if shutdown_result["success"]:
+                return {
+                    "message": "Graceful shutdown requested for worker. Worker will be deregistered after shutdown.",
+                    "shutdown_requested": True,
+                    "shutdown_timeout": 30,
+                    "worker_name": worker.worker_name
+                }
+        except Exception as e:
+            logger.warning(f"Failed to request graceful shutdown for worker {worker_id}: {e}")
+    
+    # Force delete if:
+    # 1. force=True parameter
+    # 2. Worker is already offline  
+    # 3. Graceful shutdown failed
+    logger.info(f"Force deleting worker {worker_id} ({worker.worker_name})")
     db.delete(worker)
     db.commit()
     
-    return {"message": "Worker deregistered successfully"}
+    return {
+        "message": "Worker deregistered successfully",
+        "shutdown_requested": False,
+        "force_deleted": True
+    }
 
 
 @router.post("/workers/cleanup-stale")
@@ -725,6 +770,156 @@ async def force_worker_cleanup(
             status_code=500,
             detail=f"Failed to force cleanup workers: {str(e)}"
         )
+
+
+@router.post("/workers/{worker_id}/shutdown", response_model=WorkerShutdownResponse)
+async def shutdown_worker(
+    worker_id: str,
+    shutdown_request: WorkerShutdownRequest,
+    db: Session = Depends(get_db),
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Request worker to shutdown gracefully"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only admins can shutdown workers
+    if current_user.role not in ["system_admin", "tenant_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can shutdown workers"
+        )
+    
+    # Validate worker exists and belongs to tenant
+    worker = db.query(Worker).filter(
+        and_(
+            Worker.worker_id == worker_id,
+            Worker.tenant_id == current_user.tenant_id
+        )
+    ).first()
+    
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    
+    # Validate shutdown signal
+    try:
+        signal = ShutdownSignal(shutdown_request.signal)
+    except ValueError:
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid shutdown signal. Use: graceful, immediate, or restart"
+        )
+    
+    # Request shutdown
+    result = await worker_shutdown_service.request_worker_shutdown(
+        worker_id=worker_id,
+        signal=signal,
+        timeout=shutdown_request.timeout,
+        requested_by=current_user.sub
+    )
+    
+    if result["success"]:
+        return WorkerShutdownResponse(**result)
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error", "Failed to request worker shutdown")
+        )
+
+
+@router.post("/workers/{worker_id}/shutdown-signal")
+async def get_shutdown_signal(
+    worker_id: str,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Get pending shutdown signal for worker (called by worker during heartbeat)"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers and admins can check shutdown signals
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can check shutdown signals"
+        )
+    
+    signal = await worker_shutdown_service.get_shutdown_signal(worker_id)
+    
+    return {
+        "has_shutdown_signal": signal is not None,
+        "shutdown_signal": signal
+    }
+
+
+@router.post("/workers/{worker_id}/acknowledge-shutdown")
+async def acknowledge_shutdown(
+    worker_id: str,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Acknowledge receipt of shutdown signal (called by worker)"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers can acknowledge shutdown
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can acknowledge shutdown"
+        )
+    
+    success = await worker_shutdown_service.acknowledge_shutdown(worker_id)
+    
+    if success:
+        return {"message": "Shutdown acknowledged"}
+    else:
+        raise HTTPException(status_code=404, detail="No pending shutdown found")
+
+
+@router.post("/workers/{worker_id}/complete-shutdown")
+async def complete_shutdown(
+    worker_id: str,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Mark worker shutdown as completed (called by worker before exit)"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers can complete shutdown
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can complete shutdown"
+        )
+    
+    success = await worker_shutdown_service.complete_shutdown(worker_id)
+    
+    if success:
+        return {"message": "Shutdown completed"}
+    else:
+        raise HTTPException(status_code=404, detail="No pending shutdown found")
+
+
+@router.get("/workers/shutdown-status")
+async def get_shutdown_status(
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Get status of all pending shutdowns (admin only)"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only admins can see shutdown status
+    if current_user.role not in ["system_admin", "tenant_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can view shutdown status"
+        )
+    
+    pending_shutdowns = worker_shutdown_service.get_pending_shutdowns()
+    
+    return {
+        "pending_shutdowns": list(pending_shutdowns.values()),
+        "total_pending": len(pending_shutdowns)
+    }
 
 
 @router.websocket("/workers/ws/{tenant_id}")
