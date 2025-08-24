@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 # Add shared packages to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../packages/python/common'))
-from enums import WorkerStatus
+from enums import WorkerStatus, WorkerCommand
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ class WorkerClient:
         # Camera assignment from backend
         self.assigned_camera_id: Optional[int] = None
         self.assigned_camera_name: Optional[str] = None
+        self.camera_config: Optional[Dict[str, Any]] = None
         
         # Shutdown signaling
         self.shutdown_requested = False
@@ -195,8 +196,9 @@ class WorkerClient:
         try:
             await self._ensure_authenticated()
             
-            # First check for shutdown signals
+            # First check for shutdown signals and commands
             await self._check_shutdown_signal()
+            await self._check_pending_commands()
             
             heartbeat_data = {
                 "status": status.value,
@@ -371,3 +373,194 @@ class WorkerClient:
     def get_shutdown_signal(self) -> Optional[dict]:
         """Get shutdown signal details"""
         return self.shutdown_signal
+    
+    def get_camera_config(self) -> Optional[Dict[str, Any]]:
+        """Get current camera configuration"""
+        return self.camera_config
+    
+    async def _check_pending_commands(self):
+        """Check for pending commands from backend"""
+        if not self.worker_id:
+            return
+        
+        try:
+            response = await self.http_client.get(
+                f"{self.config.api_url}/v1/worker-management/commands/{self.worker_id}/pending",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                params={"limit": 5}
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            commands = result.get("pending_commands", [])
+            
+            for command_data in commands:
+                await self._process_command(command_data)
+                
+        except Exception as e:
+            logger.debug(f"Error checking pending commands: {e}")
+    
+    async def _process_command(self, command_data: dict):
+        """Process a single command"""
+        command_id = command_data.get("command_id")
+        command_str = command_data.get("command")
+        parameters = command_data.get("parameters", {})
+        
+        try:
+            command = WorkerCommand.from_string(command_str)
+            logger.info(f"Processing command: {command.value} (ID: {command_id})")
+            
+            # Acknowledge command receipt
+            await self._acknowledge_command(command_id)
+            
+            # Process the command
+            result = None
+            error_message = None
+            
+            try:
+                if command == WorkerCommand.ASSIGN_CAMERA:
+                    result = await self._handle_assign_camera_command(parameters)
+                elif command == WorkerCommand.RELEASE_CAMERA:
+                    result = await self._handle_release_camera_command(parameters)
+                elif command == WorkerCommand.START_PROCESSING:
+                    result = await self._handle_start_processing_command(parameters)
+                elif command == WorkerCommand.STOP_PROCESSING:
+                    result = await self._handle_stop_processing_command(parameters)
+                elif command == WorkerCommand.START_STREAMING:
+                    result = await self._handle_start_streaming_command(parameters)
+                elif command == WorkerCommand.STOP_STREAMING:
+                    result = await self._handle_stop_streaming_command(parameters)
+                elif command == WorkerCommand.STATUS_REPORT:
+                    result = await self._handle_status_report_command(parameters)
+                elif command == WorkerCommand.RESTART:
+                    result = await self._handle_restart_command(parameters)
+                else:
+                    error_message = f"Unknown command: {command.value}"
+                    
+            except Exception as cmd_error:
+                error_message = f"Command execution error: {str(cmd_error)}"
+                logger.error(f"Error executing command {command.value}: {cmd_error}")
+            
+            # Complete the command
+            await self._complete_command(command_id, result, error_message)
+            
+        except ValueError as e:
+            logger.error(f"Invalid command: {command_str} - {e}")
+            await self._complete_command(command_id, None, str(e))
+        except Exception as e:
+            logger.error(f"Error processing command {command_id}: {e}")
+            await self._complete_command(command_id, None, str(e))
+    
+    async def _acknowledge_command(self, command_id: str):
+        """Acknowledge command receipt"""
+        try:
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/worker-management/commands/{command_id}/acknowledge",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                params={"worker_id": self.worker_id}
+            )
+            response.raise_for_status()
+            logger.debug(f"Command {command_id} acknowledged")
+        except Exception as e:
+            logger.error(f"Failed to acknowledge command {command_id}: {e}")
+    
+    async def _complete_command(self, command_id: str, result: Optional[Dict[str, Any]], error_message: Optional[str]):
+        """Complete command execution"""
+        try:
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/worker-management/commands/{command_id}/complete",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                json={
+                    "worker_id": self.worker_id,
+                    "result": result,
+                    "error_message": error_message
+                }
+            )
+            response.raise_for_status()
+            logger.debug(f"Command {command_id} completed")
+        except Exception as e:
+            logger.error(f"Failed to complete command {command_id}: {e}")
+    
+    async def _handle_assign_camera_command(self, parameters: dict) -> Dict[str, Any]:
+        """Handle camera assignment command"""
+        camera_id = parameters.get("camera_id")
+        camera_name = parameters.get("camera_name")
+        rtsp_url = parameters.get("rtsp_url")
+        device_index = parameters.get("device_index")
+        camera_type = parameters.get("camera_type", "webcam")
+        
+        if not camera_id:
+            raise ValueError("camera_id is required for camera assignment")
+        
+        # Update camera configuration
+        self.assigned_camera_id = int(camera_id)
+        self.assigned_camera_name = camera_name
+        self.camera_config = {
+            "camera_id": camera_id,
+            "camera_name": camera_name,
+            "rtsp_url": rtsp_url,
+            "device_index": device_index,
+            "camera_type": camera_type
+        }
+        
+        logger.info(f"Camera assigned: {camera_id} ({camera_name})")
+        return {"camera_id": camera_id, "camera_name": camera_name}
+    
+    async def _handle_release_camera_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle camera release command"""
+        old_camera_id = self.assigned_camera_id
+        old_camera_name = self.assigned_camera_name
+        
+        # Clear camera configuration
+        self.assigned_camera_id = None
+        self.assigned_camera_name = None
+        self.camera_config = None
+        
+        logger.info(f"Camera released: {old_camera_id} ({old_camera_name})")
+        return {"released_camera_id": old_camera_id, "released_camera_name": old_camera_name}
+    
+    async def _handle_start_processing_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle start processing command"""
+        if not self.assigned_camera_id:
+            raise ValueError("No camera assigned for processing")
+        
+        # Update status to processing
+        await self._send_heartbeat(WorkerStatus.PROCESSING)
+        logger.info("Processing started")
+        return {"status": "processing_started", "camera_id": self.assigned_camera_id}
+    
+    async def _handle_stop_processing_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle stop processing command"""
+        # Update status to idle
+        await self._send_heartbeat(WorkerStatus.IDLE)
+        logger.info("Processing stopped")
+        return {"status": "processing_stopped"}
+    
+    async def _handle_start_streaming_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle start streaming command"""
+        if not self.assigned_camera_id:
+            raise ValueError("No camera assigned for streaming")
+        
+        logger.info("Streaming started (placeholder - implement in main worker)")
+        return {"status": "streaming_started", "camera_id": self.assigned_camera_id}
+    
+    async def _handle_stop_streaming_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle stop streaming command"""
+        logger.info("Streaming stopped (placeholder - implement in main worker)")
+        return {"status": "streaming_stopped"}
+    
+    async def _handle_status_report_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle status report command"""
+        return {
+            "worker_id": self.worker_id,
+            "assigned_camera_id": self.assigned_camera_id,
+            "assigned_camera_name": self.assigned_camera_name,
+            "status": "idle",  # This would be dynamic in real implementation
+            "faces_processed": self.faces_processed_since_heartbeat
+        }
+    
+    async def _handle_restart_command(self, _parameters: dict) -> Dict[str, Any]:
+        """Handle restart command"""
+        logger.warning("Restart command received - setting restart flag")
+        # This would be implemented in the main worker loop
+        return {"status": "restart_requested"}

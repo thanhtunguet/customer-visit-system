@@ -11,7 +11,8 @@ import {
   EyeOutlined,
   UsergroupAddOutlined,
   KeyOutlined,
-  CloudServerOutlined
+  CloudServerOutlined,
+  ControlOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
@@ -154,6 +155,11 @@ export const AppLayout: React.FC = () => {
       key: '/workers',
       icon: <CloudServerOutlined />,
       label: 'Workers',
+    },
+    {
+      key: '/worker-management',
+      icon: <ControlOutlined />,
+      label: 'Worker Management',
     },
     {
       key: '/staff',

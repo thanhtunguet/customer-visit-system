@@ -17,43 +17,15 @@ from .models.database import Camera
 from .services.camera_streaming_service import streaming_service
 from .services.worker_monitor_service import worker_monitor_service
 from .services.worker_registry import worker_registry
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router
+from .services.worker_command_service import worker_command_service
+from .services.camera_delegation_service import camera_delegation_service
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management
 
 
 async def auto_start_camera_streams():
-    """Auto-start all active camera streams on API startup"""
-    try:
-        async for db_session in get_db_session():
-            try:
-                # Get all active cameras across all tenants
-                result = await db_session.execute(
-                    select(Camera).where(Camera.is_active == True)
-                )
-                cameras = result.scalars().all()
-                
-                started_count = 0
-                for camera in cameras:
-                    success = streaming_service.start_stream(
-                        camera_id=camera.camera_id,
-                        camera_type=camera.camera_type.value,
-                        rtsp_url=camera.rtsp_url,
-                        device_index=camera.device_index
-                    )
-                    if success:
-                        started_count += 1
-                        logging.info(f"Auto-started stream for camera {camera.camera_id}")
-                    else:
-                        logging.warning(f"Failed to auto-start stream for camera {camera.camera_id}")
-                
-                logging.info(f"Auto-started {started_count} camera streams")
-                break  # Only use the first database session
-                
-            except Exception as e:
-                logging.error(f"Error auto-starting camera streams: {e}")
-                break
-                
-    except Exception as e:
-        logging.error(f"Failed to get database session for auto-start: {e}")
+    """Auto-start disabled - cameras are now managed by workers"""
+    logging.info("Camera streaming disabled - cameras are now managed by workers")
+    pass
 
 
 # Application lifespan management
@@ -72,12 +44,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Failed to connect to MinIO: {e}")
     
-    # Auto-start all active camera streams
-    try:
-        await auto_start_camera_streams()
-        logging.info("Auto-started camera streams")
-    except Exception as e:
-        logging.warning(f"Failed to auto-start camera streams: {e}")
+    # Camera streaming is now handled by workers
+    await auto_start_camera_streams()
     
     # Start worker monitoring service
     try:
@@ -92,6 +60,13 @@ async def lifespan(app: FastAPI):
         logging.info("Started worker registry service")
     except Exception as e:
         logging.warning(f"Failed to start worker registry service: {e}")
+    
+    # Start worker command service
+    try:
+        await worker_command_service.start()
+        logging.info("Started worker command service")
+    except Exception as e:
+        logging.warning(f"Failed to start worker command service: {e}")
     
     logging.info("API startup completed")
     
@@ -113,6 +88,7 @@ async def lifespan(app: FastAPI):
         try:
             await worker_monitor_service.stop()
             await worker_registry.stop()
+            await worker_command_service.stop()
             await milvus_client.disconnect()
             await db.close()
             logging.info("Successfully disconnected from services")
@@ -166,6 +142,7 @@ app.include_router(events.router)
 app.include_router(files.router)
 app.include_router(workers.router)
 app.include_router(worker_registry_router.router)
+app.include_router(worker_camera_management.router)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
