@@ -65,6 +65,7 @@ from pydantic import BaseModel
 
 from .detectors import create_detector, FaceDetector
 from .embedder import create_embedder, FaceEmbedder
+from .worker_client import WorkerClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -163,6 +164,9 @@ class FaceRecognitionWorker:
         self.access_token: Optional[str] = None
         self.token_expires_at: float = 0
         
+        # Worker client for registration and heartbeat
+        self.worker_client = WorkerClient(config)
+        
         # Event queue for failed events
         self.failed_events_queue: asyncio.Queue = asyncio.Queue()
         self.queue_processor_task: Optional[asyncio.Task] = None
@@ -173,6 +177,9 @@ class FaceRecognitionWorker:
         await self._authenticate()
         await self._load_staff_embeddings()
         
+        # Initialize worker client for registration and heartbeat
+        await self.worker_client.initialize()
+        
         # Start failed event queue processor
         self.queue_processor_task = asyncio.create_task(self._process_failed_events_queue())
         
@@ -180,6 +187,9 @@ class FaceRecognitionWorker:
     
     async def shutdown(self):
         """Cleanup resources"""
+        # Shutdown worker client first
+        await self.worker_client.shutdown()
+        
         # Cancel queue processor
         if self.queue_processor_task and not self.queue_processor_task.done():
             self.queue_processor_task.cancel()
@@ -461,10 +471,14 @@ class FaceRecognitionWorker:
                 
                 # Send to API
                 await self._send_face_event(event)
+                
+                # Report face processed to worker client
+                self.worker_client.report_face_processed()
                 faces_processed += 1
         
         except Exception as e:
             logger.error(f"Frame processing error: {e}")
+            await self.worker_client.report_error(f"Frame processing error: {str(e)}")
         
         return faces_processed
     
@@ -530,6 +544,7 @@ class FaceRecognitionWorker:
                     
                 except Exception as camera_error:
                     logger.error(f"Camera error: {camera_error}")
+                    await self.worker_client.report_error(f"Camera error: {str(camera_error)}")
                     
                     if cap:
                         cap.release()

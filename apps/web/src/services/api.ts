@@ -443,6 +443,98 @@ class ApiClient {
     return response.data;
   }
 
+  // Workers Management
+  async getWorkers(params?: {
+    status?: string;
+    site_id?: number;
+    include_offline?: boolean;
+  }): Promise<{
+    workers: Array<{
+      worker_id: string;
+      tenant_id: string;
+      hostname: string;
+      ip_address?: string;
+      worker_name: string;
+      worker_version?: string;
+      capabilities?: Record<string, any>;
+      status: 'online' | 'offline' | 'error' | 'maintenance';
+      site_id?: number;
+      camera_id?: number;
+      last_heartbeat?: string;
+      last_error?: string;
+      error_count: number;
+      total_faces_processed: number;
+      uptime_minutes?: number;
+      registration_time: string;
+      is_healthy: boolean;
+    }>;
+    total_count: number;
+    online_count: number;
+    offline_count: number;
+    error_count: number;
+  }> {
+    const response = await this.client.get('/workers', { params });
+    return response.data;
+  }
+
+  async getWorker(workerId: string): Promise<{
+    worker_id: string;
+    tenant_id: string;
+    hostname: string;
+    ip_address?: string;
+    worker_name: string;
+    worker_version?: string;
+    capabilities?: Record<string, any>;
+    status: 'online' | 'offline' | 'error' | 'maintenance';
+    site_id?: number;
+    camera_id?: number;
+    last_heartbeat?: string;
+    last_error?: string;
+    error_count: number;
+    total_faces_processed: number;
+    uptime_minutes?: number;
+    registration_time: string;
+    is_healthy: boolean;
+  }> {
+    const response = await this.client.get(`/workers/${workerId}`);
+    return response.data;
+  }
+
+  async deleteWorker(workerId: string): Promise<{ message: string }> {
+    const response = await this.client.delete(`/workers/${workerId}`);
+    return response.data;
+  }
+
+  async cleanupStaleWorkers(minutesThreshold: number = 5): Promise<{ 
+    message: string; 
+    threshold_minutes: number; 
+    updated_count: number 
+  }> {
+    const response = await this.client.post('/workers/cleanup-stale', { minutes_threshold: minutesThreshold });
+    return response.data;
+  }
+
+  // Generic HTTP methods for flexibility
+  async get<T = any>(url: string, params?: any): Promise<T> {
+    const response = await this.client.get(url, { params });
+    return response.data;
+  }
+
+  async post<T = any>(url: string, data?: any): Promise<T> {
+    const response = await this.client.post(url, data);
+    return response.data;
+  }
+
+  async put<T = any>(url: string, data?: any): Promise<T> {
+    const response = await this.client.put(url, data);
+    return response.data;
+  }
+
+  async delete<T = any>(url: string): Promise<T> {
+    const response = await this.client.delete(url);
+    return response.data;
+  }
+
   // Authenticated image loading
   async getImageUrl(imagePath: string): Promise<string> {
     try {

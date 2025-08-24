@@ -10,7 +10,8 @@ import {
   LogoutOutlined,
   EyeOutlined,
   UsergroupAddOutlined,
-  KeyOutlined
+  KeyOutlined,
+  CloudServerOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
@@ -100,7 +101,7 @@ export const AppLayout: React.FC = () => {
         
         // If user is on a tenant-specific page, redirect to global page
         const currentPath = location.pathname;
-        const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/staff', '/customers', '/visits', '/reports'];
+        const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/workers', '/staff', '/customers', '/visits', '/reports'];
         if (tenantSpecificPaths.includes(currentPath)) {
           navigate('/tenants');
           return;
@@ -148,6 +149,11 @@ export const AppLayout: React.FC = () => {
       key: '/cameras',
       icon: <CameraOutlined />,
       label: 'Cameras',
+    },
+    {
+      key: '/workers',
+      icon: <CloudServerOutlined />,
+      label: 'Workers',
     },
     {
       key: '/staff',

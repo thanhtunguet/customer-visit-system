@@ -226,6 +226,37 @@ class Visit(Base):
     )
 
 
+class Worker(Base):
+    __tablename__ = "workers"
+    
+    worker_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+    hostname = Column(String(255), nullable=False)
+    ip_address = Column(String(45), nullable=True)  # Support both IPv4 and IPv6
+    worker_name = Column(String(255), nullable=False)
+    worker_version = Column(String(32), nullable=True)
+    capabilities = Column(Text, nullable=True)  # JSON string of worker capabilities
+    status = Column(String(32), default="offline", nullable=False)  # online, offline, error, maintenance
+    site_id = Column(BigInteger, nullable=True)  # Optional site assignment
+    camera_id = Column(BigInteger, nullable=True)  # Optional camera assignment
+    last_heartbeat = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    error_count = Column(Integer, default=0, nullable=False)
+    total_faces_processed = Column(BigInteger, default=0, nullable=False)
+    registration_time = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    
+    __table_args__ = (
+        Index('idx_workers_tenant_status', 'tenant_id', 'status'),
+        Index('idx_workers_heartbeat', 'tenant_id', 'last_heartbeat'),
+        Index('idx_workers_hostname', 'tenant_id', 'hostname'),
+    )
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
     

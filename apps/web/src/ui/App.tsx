@@ -13,6 +13,7 @@ import { VisitsPage } from '../pages/Visits';
 import { Reports } from '../pages/Reports';
 import { TenantsPage } from '../pages/Tenants';
 import { Users } from '../pages/Users';
+import Workers from '../pages/Workers';
 import '../styles.css';
 
 // Protected Route component
@@ -65,6 +66,7 @@ export function App() {
               
               {/* Implemented pages */}
               <Route path="cameras" element={<Cameras />} />
+              <Route path="workers" element={<Workers />} />
               <Route path="staff" element={<StaffPage />} />
               <Route path="customers" element={<Customers />} />
               <Route path="visits" element={<VisitsPage />} />

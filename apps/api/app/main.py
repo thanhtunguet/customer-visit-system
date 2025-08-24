@@ -15,7 +15,7 @@ from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .models.database import Camera
 from .services.camera_streaming_service import streaming_service
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers
 
 
 async def auto_start_camera_streams():
@@ -146,6 +146,7 @@ app.include_router(staff.router)
 app.include_router(customers.router)
 app.include_router(events.router)
 app.include_router(files.router)
+app.include_router(workers.router)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
