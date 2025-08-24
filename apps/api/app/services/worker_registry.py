@@ -175,6 +175,7 @@ class WorkerRegistry:
         capabilities: Optional[Dict[str, Any]] = None,
         site_id: Optional[int] = None,
         camera_id: Optional[int] = None,
+        db_session=None,
     ) -> WorkerInfo:
         """Register a new worker or update existing one"""
         
@@ -220,6 +221,30 @@ class WorkerRegistry:
         if tenant_id not in self.worker_by_hostname:
             self.worker_by_hostname[tenant_id] = {}
         self.worker_by_hostname[tenant_id][hostname] = worker_id
+        
+        # Auto-assign camera if worker has site_id and db_session is available
+        if site_id and db_session:
+            try:
+                logger.info(f"Attempting auto-assignment for worker {worker_id} in site {site_id}")
+                
+                # Import here to avoid circular import
+                from .camera_delegation_service import camera_delegation_service
+                
+                camera = camera_delegation_service.assign_camera_to_worker(
+                    db=db_session,
+                    tenant_id=tenant_id,
+                    worker_id=worker_id,
+                    site_id=site_id
+                )
+                
+                if camera:
+                    logger.info(f"Auto-assigned camera {camera.camera_id} ({camera.name}) to new worker {worker_id}")
+                else:
+                    logger.info(f"No available cameras in site {site_id} for new worker {worker_id}")
+            except Exception as e:
+                logger.error(f"Failed to auto-assign camera to new worker {worker_id}: {e}")
+        else:
+            logger.info(f"Skipping auto-assignment for worker {worker_id}: site_id={site_id}, db_session={db_session is not None}")
         
         await self._notify_callbacks("worker_registered", worker)
         logger.info(f"Worker {worker_id} ({hostname}) registered for tenant {tenant_id}")
@@ -309,6 +334,18 @@ class WorkerRegistry:
         worker = self.workers.get(worker_id)
         if not worker:
             return False
+        
+        # Release camera if assigned
+        if worker.camera_id:
+            try:
+                # Import here to avoid circular import
+                from .camera_delegation_service import camera_delegation_service
+                
+                camera_id = camera_delegation_service.release_camera_from_worker(worker_id)
+                if camera_id:
+                    logger.info(f"Released camera {camera_id} from removed worker {worker_id}")
+            except Exception as e:
+                logger.error(f"Failed to release camera from removed worker {worker_id}: {e}")
         
         # Remove from hostname index
         if worker.tenant_id in self.worker_by_hostname:

@@ -55,6 +55,17 @@ interface Worker {
   is_healthy: boolean;
 }
 
+interface Site {
+  site_id: number;
+  name: string;
+}
+
+interface Camera {
+  camera_id: number;
+  name: string;
+  site_id: number;
+}
+
 interface WorkersResponse {
   workers: Worker[];
   total_count: number;
@@ -66,6 +77,8 @@ interface WorkersResponse {
 
 const Workers: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [cameras, setCameras] = useState<Camera[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -217,16 +230,32 @@ const Workers: React.FC = () => {
     try {
       setLoading(true);
       
-      const response = await apiClient.getWorkers({
-        status: statusFilter,
-        include_offline: true
-      });
-      setWorkers(response.workers);
+      // Load workers and sites first
+      const [workersResponse, sitesResponse] = await Promise.all([
+        apiClient.getWorkers({
+          status: statusFilter,
+          include_offline: true
+        }),
+        apiClient.get('/sites')
+      ]);
+      
+      // Load cameras for all sites
+      const camerasPromises = sitesResponse.map((site: Site) => 
+        apiClient.get(`/sites/${site.site_id}/cameras`)
+      );
+      const camerasResponses = await Promise.all(camerasPromises);
+      
+      // Flatten all cameras from all sites
+      const allCameras = camerasResponses.flat();
+      
+      setWorkers(workersResponse.workers);
+      setSites(sitesResponse);
+      setCameras(allCameras);
       setSummaryStats({
-        total_count: response.total_count,
-        online_count: response.online_count,
-        offline_count: response.offline_count,
-        error_count: response.error_count,
+        total_count: workersResponse.total_count,
+        online_count: workersResponse.online_count,
+        offline_count: workersResponse.offline_count,
+        error_count: workersResponse.error_count,
       });
     } catch (error) {
       console.error('Failed to load workers:', error);
@@ -295,6 +324,18 @@ const Workers: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
+  const getSiteName = (siteId?: number) => {
+    if (!siteId) return null;
+    const site = sites.find(s => s.site_id === siteId);
+    return site ? site.name : `Site ${siteId}`;
+  };
+
+  const getCameraName = (cameraId?: number) => {
+    if (!cameraId) return null;
+    const camera = cameras.find(c => c.camera_id === cameraId);
+    return camera ? camera.name : `Camera ${cameraId}`;
+  };
+
   const filteredWorkers = workers.filter(worker => {
     if (!searchText) return true;
     return (
@@ -351,11 +392,19 @@ const Workers: React.FC = () => {
     {
       title: 'Assignment',
       key: 'assignment',
-      width: 140,
+      width: 160,
       render: (_, record: Worker) => (
         <div>
-          {record.site_id && <div className="text-sm">Site: {record.site_id}</div>}
-          {record.camera_id && <div className="text-sm">Camera: {record.camera_id}</div>}
+          {record.site_id && (
+            <div className="text-sm">
+              <span className="text-gray-500">Site:</span> <span className="font-medium">{getSiteName(record.site_id)}</span>
+            </div>
+          )}
+          {record.camera_id && (
+            <div className="text-sm">
+              <span className="text-gray-500">Camera:</span> <span className="font-medium">{getCameraName(record.camera_id)}</span>
+            </div>
+          )}
           {!record.site_id && !record.camera_id && (
             <span className="text-gray-400 text-sm">Unassigned</span>
           )}
@@ -600,10 +649,10 @@ const Workers: React.FC = () => {
                   )}
                 </Descriptions.Item>
                 <Descriptions.Item label="Site Assignment">
-                  {selectedWorker.site_id || 'Unassigned'}
+                  {selectedWorker.site_id ? getSiteName(selectedWorker.site_id) : 'Unassigned'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Camera Assignment">
-                  {selectedWorker.camera_id || 'Unassigned'}
+                  {selectedWorker.camera_id ? getCameraName(selectedWorker.camera_id) : 'Unassigned'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Faces Processed">
                   {selectedWorker.total_faces_processed.toLocaleString()}

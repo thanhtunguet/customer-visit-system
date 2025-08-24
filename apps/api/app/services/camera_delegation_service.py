@@ -21,6 +21,8 @@ class CameraDelegationService:
     def __init__(self):
         self.assignments: Dict[int, str] = {}  # camera_id -> worker_id
         self.worker_cameras: Dict[str, int] = {}  # worker_id -> camera_id
+        self.cleanup_task: Optional[asyncio.Task] = None
+        self.cleanup_interval = 60  # seconds - check every minute
         
     def assign_camera_to_worker(self, db: Session, tenant_id: str, worker_id: str, site_id: int) -> Optional[Camera]:
         """
@@ -60,6 +62,10 @@ class CameraDelegationService:
                 Camera.is_active == True
             )
         ).all()
+        
+        logger.info(f"Found {len(available_cameras)} cameras in site {site_id} for tenant {tenant_id}")
+        for cam in available_cameras:
+            logger.info(f"  Camera {cam.camera_id}: {cam.name} (assigned: {cam.camera_id in self.assignments})")
         
         if not available_cameras:
             logger.info(f"No cameras available in site {site_id} for tenant {tenant_id}")
@@ -129,14 +135,25 @@ class CameraDelegationService:
         return result
     
     def cleanup_stale_assignments(self) -> int:
-        """Clean up assignments for workers that are no longer active"""
+        """Clean up assignments for workers that are no longer active or healthy (5-minute timeout)"""
         cleanup_count = 0
         stale_workers = []
         
+        # Use 5-minute timeout for camera assignments specifically
+        timeout_threshold = datetime.now() - timedelta(minutes=5)
+        
         for worker_id in list(self.worker_cameras.keys()):
             worker = worker_registry.get_worker(worker_id)
-            if not worker or not worker.is_healthy or worker.status == WorkerStatus.OFFLINE:
+            if not worker:
+                # Worker no longer exists
                 stale_workers.append(worker_id)
+            elif worker.status == WorkerStatus.OFFLINE:
+                # Worker explicitly offline
+                stale_workers.append(worker_id)
+            elif worker.last_heartbeat < timeout_threshold:
+                # Worker hasn't sent heartbeat in 5 minutes
+                stale_workers.append(worker_id)
+                logger.info(f"Worker {worker_id} last heartbeat: {worker.last_heartbeat}, threshold: {timeout_threshold}")
         
         for worker_id in stale_workers:
             camera_id = self.release_camera_from_worker(worker_id)
@@ -161,6 +178,38 @@ class CameraDelegationService:
                 logger.info(f"Auto-assigned camera {camera.camera_id} to idle worker {worker.worker_id}")
         
         return assignments_made
+    
+    async def start(self):
+        """Start the camera assignment cleanup task"""
+        if self.cleanup_task is None:
+            self.cleanup_task = asyncio.create_task(self._cleanup_loop())
+            logger.info("Camera delegation cleanup task started")
+    
+    async def stop(self):
+        """Stop the camera assignment cleanup task"""
+        if self.cleanup_task:
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self.cleanup_task = None
+            logger.info("Camera delegation cleanup task stopped")
+    
+    async def _cleanup_loop(self):
+        """Background cleanup task for stale camera assignments"""
+        
+        while True:
+            try:
+                await asyncio.sleep(self.cleanup_interval)
+                cleanup_count = self.cleanup_stale_assignments()
+                if cleanup_count > 0:
+                    logger.info(f"Automatic cleanup: released {cleanup_count} stale camera assignments")
+            except asyncio.CancelledError:
+                logger.info("Camera delegation cleanup loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in camera delegation cleanup loop: {e}")
 
 
 # Global camera delegation service

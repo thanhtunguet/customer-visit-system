@@ -7,8 +7,10 @@ from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from ..core.security import get_current_user
+from ..core.database import get_db
 from ..services.worker_registry import worker_registry, WorkerInfo
 from common.enums.worker import WorkerStatus
 
@@ -148,6 +150,7 @@ worker_registry.add_status_callback(on_worker_status_change)
 async def register_worker(
     request: Request,
     registration: WorkerRegistrationRequest,
+    db: Session = Depends(get_db),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Register a new worker in the in-memory registry"""
@@ -172,6 +175,7 @@ async def register_worker(
         capabilities=registration.capabilities,
         site_id=registration.site_id,
         camera_id=registration.camera_id,
+        db_session=db,
     )
     
     return {

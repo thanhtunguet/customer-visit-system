@@ -157,11 +157,6 @@ export const AppLayout: React.FC = () => {
       label: 'Workers',
     },
     {
-      key: '/worker-management',
-      icon: <ControlOutlined />,
-      label: 'Worker Management',
-    },
-    {
       key: '/staff',
       icon: <TeamOutlined />,
       label: 'Staff',

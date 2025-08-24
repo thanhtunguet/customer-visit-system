@@ -68,6 +68,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.warning(f"Failed to start worker command service: {e}")
     
+    # Start camera delegation service
+    try:
+        await camera_delegation_service.start()
+        logging.info("Started camera delegation service")
+    except Exception as e:
+        logging.warning(f"Failed to start camera delegation service: {e}")
+    
     logging.info("API startup completed")
     
     yield
@@ -89,6 +96,7 @@ async def lifespan(app: FastAPI):
             await worker_monitor_service.stop()
             await worker_registry.stop()
             await worker_command_service.stop()
+            await camera_delegation_service.stop()
             await milvus_client.disconnect()
             await db.close()
             logging.info("Successfully disconnected from services")
