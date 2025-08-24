@@ -134,6 +134,47 @@ class WorkerConnectionManager:
 connection_manager = WorkerConnectionManager()
 
 
+async def broadcast_worker_status_update(worker: Worker, tenant_id: str):
+    """Broadcast worker status update via WebSocket"""
+    try:
+        import json
+        
+        # Parse capabilities
+        capabilities = None
+        if worker.capabilities:
+            try:
+                capabilities = json.loads(worker.capabilities)
+            except json.JSONDecodeError:
+                capabilities = None
+        
+        worker_data = {
+            "worker_id": worker.worker_id,
+            "tenant_id": worker.tenant_id,
+            "hostname": worker.hostname,
+            "ip_address": worker.ip_address,
+            "worker_name": worker.worker_name,
+            "worker_version": worker.worker_version,
+            "capabilities": capabilities,
+            "status": worker.status,
+            "site_id": worker.site_id,
+            "camera_id": worker.camera_id,
+            "last_heartbeat": worker.last_heartbeat.isoformat() if worker.last_heartbeat else None,
+            "last_error": worker.last_error,
+            "error_count": worker.error_count,
+            "total_faces_processed": worker.total_faces_processed,
+            "uptime_minutes": calculate_uptime_minutes(worker),
+            "registration_time": worker.registration_time.isoformat() if worker.registration_time else None,
+            "is_healthy": is_worker_healthy(worker)
+        }
+        
+        # Broadcast update
+        await connection_manager.broadcast_worker_update(tenant_id, worker_data)
+        logger.info(f"Broadcasted worker update for {worker.worker_id} to tenant {tenant_id}")
+        
+    except Exception as e:
+        logger.error(f"Error broadcasting worker status update: {e}")
+
+
 def assign_camera_to_worker(db: Session, tenant_id: str, site_id: int, worker_id: str) -> Optional[Camera]:
     """
     Assign an available camera to a worker. Enforces one-camera-per-worker constraint.
@@ -289,6 +330,10 @@ async def register_worker(
         existing_worker.updated_at = datetime.utcnow()
         
         db.commit()
+        db.refresh(existing_worker)
+        
+        # Trigger WebSocket update for existing worker
+        await broadcast_worker_status_update(existing_worker, current_user.tenant_id)
         
         response = {
             "worker_id": existing_worker.worker_id,
@@ -331,6 +376,9 @@ async def register_worker(
     
     db.commit()
     db.refresh(new_worker)
+    
+    # Trigger WebSocket update for new worker
+    await broadcast_worker_status_update(new_worker, current_user.tenant_id)
     
     response = {
         "worker_id": new_worker.worker_id,
@@ -495,6 +543,10 @@ async def request_camera_assignment(
         worker.status = "idle"
         worker.updated_at = datetime.utcnow()
         db.commit()
+        db.refresh(worker)
+        
+        # Broadcast worker update
+        await broadcast_worker_status_update(worker, current_user.tenant_id)
         
         return {
             "message": f"Camera {assigned_camera.camera_id} ({assigned_camera.name}) assigned successfully",
@@ -685,8 +737,16 @@ async def deregister_worker(
     # 2. Worker is already offline  
     # 3. Graceful shutdown failed
     logger.info(f"Force deleting worker {worker_id} ({worker.worker_name})")
+    
+    # Broadcast worker deletion before removing from database
+    worker.status = "offline"
+    await broadcast_worker_status_update(worker, current_user.tenant_id)
+    
     db.delete(worker)
     db.commit()
+    
+    # Broadcast list refresh to update frontend
+    await connection_manager.broadcast_worker_list_update(current_user.tenant_id)
     
     return {
         "message": "Worker deregistered successfully",

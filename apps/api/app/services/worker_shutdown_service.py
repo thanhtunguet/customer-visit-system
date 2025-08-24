@@ -179,6 +179,14 @@ class WorkerShutdownService:
                 worker.updated_at = datetime.utcnow()
                 db.commit()
                 
+                # Broadcast worker update
+                try:
+                    from ..routers.workers import broadcast_worker_status_update
+                    import asyncio
+                    asyncio.create_task(broadcast_worker_status_update(worker, worker.tenant_id))
+                except Exception as broadcast_error:
+                    logger.error(f"Error broadcasting worker shutdown update: {broadcast_error}")
+                
                 logger.info(f"Worker {worker_id} shutdown completed gracefully")
         except Exception as e:
             logger.error(f"Error updating worker status after shutdown: {e}")
@@ -214,6 +222,14 @@ class WorkerShutdownService:
                 worker.last_error = f"Shutdown timeout after {timeout}s"
                 worker.updated_at = datetime.utcnow()
                 db.commit()
+                
+                # Broadcast worker update for timeout
+                try:
+                    from ..routers.workers import broadcast_worker_status_update
+                    import asyncio
+                    asyncio.create_task(broadcast_worker_status_update(worker, worker.tenant_id))
+                except Exception as broadcast_error:
+                    logger.error(f"Error broadcasting worker timeout update: {broadcast_error}")
                 
                 logger.warning(f"Forced worker {worker_id} offline due to shutdown timeout")
         except Exception as e:
