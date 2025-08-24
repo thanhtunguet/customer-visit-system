@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from ..core.security import get_current_user
 from ..services.worker_registry import worker_registry, WorkerInfo
-from ..enums import WorkerStatus
+from common.enums.worker import WorkerStatus
 
 logger = logging.getLogger(__name__)
 

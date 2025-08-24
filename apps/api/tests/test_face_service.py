@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
 from apps.api.app.services.face_service import FaceMatchingService, StaffService
-from pkg_common.models import FaceDetectedEvent
+from common.models import FaceDetectedEvent
 
 
 @pytest.fixture

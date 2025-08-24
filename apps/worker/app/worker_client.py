@@ -4,18 +4,15 @@ import asyncio
 import json
 import logging
 import socket
-import sys
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional, Any
-import os
 
 import httpx
 from pydantic import BaseModel
 
-# Add shared packages to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../packages/python/common'))
-from enums import WorkerStatus, WorkerCommand
+from common.enums.worker import WorkerStatus
+from common.enums.commands import WorkerCommand
 
 logger = logging.getLogger(__name__)
 

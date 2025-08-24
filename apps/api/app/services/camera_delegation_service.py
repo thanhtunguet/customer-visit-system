@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from ..enums import WorkerStatus
+from common.enums.worker import WorkerStatus
 from ..models.database import Camera, Worker
 from .worker_registry import worker_registry, WorkerInfo
 

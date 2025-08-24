@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Set, Any
 import logging
 
-from ..enums import WorkerStatus
+from common.enums.worker import WorkerStatus
 
 logger = logging.getLogger(__name__)
 

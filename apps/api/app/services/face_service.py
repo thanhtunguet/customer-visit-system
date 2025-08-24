@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.milvus_client import milvus_client
 from ..models.database import Customer, Staff, Visit
-from pkg_common.models import FaceDetectedEvent
+from common.models import FaceDetectedEvent
 
 logger = logging.getLogger(__name__)
 

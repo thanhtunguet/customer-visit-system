@@ -13,7 +13,8 @@ from ..core.security import get_current_user
 from ..services.camera_delegation_service import camera_delegation_service
 from ..services.worker_command_service import worker_command_service, WorkerCommandMessage
 from ..services.worker_registry import worker_registry
-from ..enums import WorkerCommand, CommandPriority, WorkerStatus
+from common.enums.commands import WorkerCommand, CommandPriority
+from common.enums.worker import WorkerStatus
 
 logger = logging.getLogger(__name__)
 

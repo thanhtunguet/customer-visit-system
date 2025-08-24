@@ -10,7 +10,7 @@ from ..core.security import get_current_user
 from ..models.database import Visit
 from ..schemas import FaceEventResponse, VisitResponse
 from ..services.face_service import face_service
-from pkg_common.models import FaceDetectedEvent
+from common.models import FaceDetectedEvent
 
 router = APIRouter(prefix="/v1", tags=["Events & Detection", "Visits & Analytics"])
 

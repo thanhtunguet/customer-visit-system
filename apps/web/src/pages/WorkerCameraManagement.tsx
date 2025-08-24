@@ -22,7 +22,7 @@ import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   ReloadOutlined,
-  CleanupOutlined,
+  ClearOutlined,
   ThunderboltOutlined,
   ControlOutlined,
   CloseCircleOutlined,
@@ -383,7 +383,7 @@ const WorkerCameraManagement: React.FC = () => {
           </div>
           <Space>
             <Button
-              icon={<CleanupOutlined />}
+              icon={<ClearOutlined />}
               onClick={handleCleanupStale}
               disabled={stats.stale_assignments === 0}
             >

@@ -45,7 +45,7 @@ def test_imports():
         return False
     
     try:
-        from pkg_common.models import FaceDetectedEvent
+        from common.models import FaceDetectedEvent
         logger.info("✓ pkg_common.models available")
     except ImportError as e:
         logger.error(f"✗ pkg_common.models import failed: {e}")
