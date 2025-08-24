@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..core.security import get_current_user
-from ..models.database import Worker, UserRole
+from ..models.database import Worker, UserRole, Camera
 
 from pydantic import BaseModel, Field
 
@@ -33,10 +33,11 @@ class WorkerRegistrationRequest(BaseModel):
 
 
 class WorkerHeartbeatRequest(BaseModel):
-    status: str = Field(..., description="Worker status: online, offline, error, maintenance")
+    status: str = Field(..., description="Worker status: idle, processing, offline, error, maintenance")
     faces_processed_count: Optional[int] = Field(0, description="Number of faces processed since last heartbeat")
     error_message: Optional[str] = Field(None, description="Error message if status is error")
     capabilities: Optional[Dict[str, Any]] = Field(None, description="Updated worker capabilities")
+    current_camera_id: Optional[int] = Field(None, description="Camera currently being processed by worker")
 
 
 class WorkerStatusResponse(BaseModel):
@@ -111,6 +112,71 @@ class WorkerConnectionManager:
 connection_manager = WorkerConnectionManager()
 
 
+def assign_camera_to_worker(db: Session, tenant_id: str, site_id: int, worker_id: str) -> Optional[Camera]:
+    """
+    Assign an available camera to a worker. Enforces one-camera-per-worker constraint.
+    
+    Args:
+        db: Database session
+        tenant_id: Tenant ID for RLS
+        site_id: Site ID where worker should be assigned
+        worker_id: Worker ID to assign camera to
+        
+    Returns:
+        Camera object if assignment successful, None if no cameras available
+    """
+    
+    # Find all cameras in the site for this tenant
+    available_cameras = db.query(Camera).filter(
+        and_(
+            Camera.tenant_id == tenant_id,
+            Camera.site_id == site_id,
+            Camera.is_active == True
+        )
+    ).all()
+    
+    if not available_cameras:
+        return None
+    
+    # Find cameras that are not currently assigned to any active worker
+    assigned_camera_ids = set()
+    active_workers = db.query(Worker).filter(
+        and_(
+            Worker.tenant_id == tenant_id,
+            Worker.site_id == site_id,
+            Worker.camera_id.isnot(None),
+            Worker.status.in_(["idle", "processing", "online"])  # Consider these as active
+        )
+    ).all()
+    
+    for worker in active_workers:
+        if worker.worker_id != worker_id and worker.camera_id:  # Don't count current worker
+            assigned_camera_ids.add(worker.camera_id)
+    
+    # Find first available camera
+    for camera in available_cameras:
+        if camera.camera_id not in assigned_camera_ids:
+            return camera
+    
+    # No available cameras
+    return None
+
+
+def release_worker_camera(db: Session, worker_id: str):
+    """
+    Release camera assignment from a worker (e.g., when worker goes offline)
+    
+    Args:
+        db: Database session
+        worker_id: Worker ID to release camera from
+    """
+    worker = db.query(Worker).filter(Worker.worker_id == worker_id).first()
+    if worker:
+        worker.camera_id = None
+        worker.status = "offline"
+        db.commit()
+
+
 def get_client_ip(request: Request) -> str:
     """Extract client IP address from request"""
     forwarded = request.headers.get("X-Forwarded-For")
@@ -153,7 +219,7 @@ async def register_worker(
     db: Session = Depends(get_db),
     current_user_dict: dict = Depends(get_current_user),
 ):
-    """Register a new worker or update existing worker registration"""
+    """Register a new worker and automatically assign an available camera from the specified site"""
     
     # Only workers can register themselves
     current_user = UserInfo(**current_user_dict)
@@ -161,6 +227,13 @@ async def register_worker(
         raise HTTPException(
             status_code=403, 
             detail="Only workers or admins can register workers"
+        )
+    
+    # Validate site_id is required for camera assignment
+    if not registration.site_id:
+        raise HTTPException(
+            status_code=400,
+            detail="site_id is required for worker registration"
         )
     
     client_ip = get_client_ip(request)
@@ -174,25 +247,37 @@ async def register_worker(
     ).first()
     
     if existing_worker:
+        # For existing worker, reassign camera if needed
+        assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, registration.site_id, existing_worker.worker_id)
+        
         # Update existing worker registration
         existing_worker.worker_name = registration.worker_name
         existing_worker.ip_address = client_ip
         existing_worker.worker_version = registration.worker_version
         existing_worker.capabilities = json.dumps(registration.capabilities) if registration.capabilities else None
         existing_worker.site_id = registration.site_id
-        existing_worker.camera_id = registration.camera_id
-        existing_worker.status = "online"
+        existing_worker.camera_id = assigned_camera.camera_id if assigned_camera else None
+        existing_worker.status = "idle"  # Start as idle, will become 'processing' when working
         existing_worker.last_heartbeat = datetime.utcnow()
         existing_worker.registration_time = datetime.utcnow()
         existing_worker.updated_at = datetime.utcnow()
         
         db.commit()
         
-        return {
+        response = {
             "worker_id": existing_worker.worker_id,
-            "message": "Worker registration updated successfully",
+            "message": f"Worker registration updated successfully",
             "status": "updated"
         }
+        
+        if assigned_camera:
+            response["assigned_camera_id"] = str(assigned_camera.camera_id)
+            response["assigned_camera_name"] = assigned_camera.name
+            response["message"] += f" and assigned to camera {assigned_camera.camera_id} ({assigned_camera.name})"
+        else:
+            response["message"] += " but no available cameras to assign"
+        
+        return response
     
     # Create new worker registration
     new_worker = Worker(
@@ -202,22 +287,39 @@ async def register_worker(
         worker_name=registration.worker_name,
         worker_version=registration.worker_version,
         capabilities=json.dumps(registration.capabilities) if registration.capabilities else None,
-        status="online",
+        status="idle",  # Start as idle
         site_id=registration.site_id,
-        camera_id=registration.camera_id,
+        camera_id=None,  # Will be assigned below
         last_heartbeat=datetime.utcnow(),
         registration_time=datetime.utcnow()
     )
     
     db.add(new_worker)
+    db.flush()  # Get the worker_id without committing
+    
+    # Assign an available camera to this worker
+    assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, registration.site_id, new_worker.worker_id)
+    
+    if assigned_camera:
+        new_worker.camera_id = assigned_camera.camera_id
+    
     db.commit()
     db.refresh(new_worker)
     
-    return {
+    response = {
         "worker_id": new_worker.worker_id,
-        "message": "Worker registered successfully",
+        "message": f"Worker registered successfully",
         "status": "registered"
     }
+    
+    if assigned_camera:
+        response["assigned_camera_id"] = str(assigned_camera.camera_id)
+        response["assigned_camera_name"] = assigned_camera.name
+        response["message"] += f" and assigned to camera {assigned_camera.camera_id} ({assigned_camera.name})"
+    else:
+        response["message"] += " but no available cameras to assign"
+    
+    return response
 
 
 @router.post("/workers/{worker_id}/heartbeat")
@@ -249,9 +351,26 @@ async def send_heartbeat(
         raise HTTPException(status_code=404, detail="Worker not found")
     
     # Update worker status
+    old_status = worker.status
     worker.status = heartbeat.status
     worker.last_heartbeat = datetime.utcnow()
     worker.updated_at = datetime.utcnow()
+    
+    # Handle status transitions
+    if old_status != heartbeat.status:
+        if heartbeat.status == "offline":
+            # Worker going offline - release camera assignment
+            worker.camera_id = None
+        elif heartbeat.status == "idle" and not worker.camera_id:
+            # Worker becoming idle but has no camera - try to assign one
+            assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker.worker_id)
+            if assigned_camera:
+                worker.camera_id = assigned_camera.camera_id
+        elif heartbeat.status == "processing" and heartbeat.current_camera_id:
+            # Verify worker is processing the correct assigned camera
+            if worker.camera_id and worker.camera_id != heartbeat.current_camera_id:
+                # Worker is processing different camera than assigned - this might be an error
+                worker.last_error = f"Worker processing camera {heartbeat.current_camera_id} but assigned to {worker.camera_id}"
     
     # Update faces processed count
     if heartbeat.faces_processed_count and heartbeat.faces_processed_count > 0:
@@ -306,7 +425,63 @@ async def send_heartbeat(
     except Exception as e:
         print(f"Error broadcasting worker update: {e}")
     
-    return {"message": "Heartbeat received successfully", "status": worker.status}
+    return {
+        "message": "Heartbeat received successfully", 
+        "status": worker.status,
+        "assigned_camera_id": worker.camera_id
+    }
+
+
+@router.post("/workers/{worker_id}/request-camera")
+async def request_camera_assignment(
+    worker_id: str,
+    db: Session = Depends(get_db),
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Request camera assignment for a worker"""
+    
+    current_user = UserInfo(**current_user_dict)
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can request camera assignments"
+        )
+    
+    # Find worker
+    worker = db.query(Worker).filter(
+        and_(
+            Worker.worker_id == worker_id,
+            Worker.tenant_id == current_user.tenant_id
+        )
+    ).first()
+    
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    
+    if not worker.site_id:
+        raise HTTPException(status_code=400, detail="Worker must be assigned to a site first")
+    
+    # Try to assign a camera
+    assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker_id)
+    
+    if assigned_camera:
+        worker.camera_id = assigned_camera.camera_id
+        worker.status = "idle"
+        worker.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "message": f"Camera {assigned_camera.camera_id} ({assigned_camera.name}) assigned successfully",
+            "assigned_camera_id": assigned_camera.camera_id,
+            "assigned_camera_name": assigned_camera.name,
+            "worker_status": "idle"
+        }
+    else:
+        return {
+            "message": "No available cameras to assign",
+            "assigned_camera_id": None,
+            "worker_status": worker.status
+        }
 
 
 @router.get("/workers", response_model=WorkersListResponse)

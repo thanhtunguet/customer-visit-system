@@ -94,7 +94,8 @@ class WorkerConfig:
         self.api_url = os.getenv("API_URL", "http://localhost:8080")
         self.tenant_id = os.getenv("TENANT_ID", "t-dev")
         self.site_id = os.getenv("SITE_ID", "s-1")
-        self.camera_id = os.getenv("CAMERA_ID", "c-1")
+        # camera_id is now assigned by backend, not from env
+        self.camera_id = None  # Will be set by WorkerClient after registration
         self.worker_api_key = os.getenv("WORKER_API_KEY", "dev-api-key")
         
         # Worker Configuration
@@ -456,11 +457,17 @@ class FaceRecognitionWorker:
                 # Check if staff member
                 is_staff_local, staff_id = self._is_staff_match(embedding)
                 
+                # Get assigned camera ID from worker client
+                assigned_camera_id = self.worker_client.get_assigned_camera()
+                if not assigned_camera_id:
+                    logger.warning("No camera assigned to worker, skipping face processing")
+                    continue
+                
                 # Create event
                 event = FaceDetectedEvent(
                     tenant_id=self.config.tenant_id,
                     site_id=self.config.site_id,
-                    camera_id=self.config.camera_id,
+                    camera_id=str(assigned_camera_id),
                     timestamp=datetime.now(timezone.utc),
                     embedding=embedding,
                     bbox=bbox,
@@ -482,11 +489,34 @@ class FaceRecognitionWorker:
         
         return faces_processed
     
+    async def _wait_for_camera_assignment(self, timeout: int = 60) -> bool:
+        """Wait for camera assignment from backend"""
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            if self.worker_client.get_assigned_camera():
+                return True
+            
+            logger.info("Waiting for camera assignment from backend...")
+            await self.worker_client.request_camera_assignment()
+            await asyncio.sleep(5)
+        
+        return False
+    
     async def run_camera_capture(self):
         """Run continuous camera capture and processing"""
         cap = None
         reconnect_attempts = 0
         max_reconnect_attempts = self.config.max_camera_reconnect_attempts
+        
+        # Wait for camera assignment before starting
+        logger.info("Waiting for camera assignment from backend...")
+        if not await self._wait_for_camera_assignment():
+            logger.error("No camera assignment received, cannot start processing")
+            return
+        
+        assigned_camera_id = self.worker_client.get_assigned_camera()
+        logger.info(f"Camera {assigned_camera_id} assigned, starting capture...")
         
         try:
             while True:
@@ -513,6 +543,9 @@ class FaceRecognitionWorker:
                     reconnect_attempts = 0  # Reset on successful connection
                     
                     logger.info(f"Camera connected successfully, processing at {self.config.worker_fps} FPS")
+                    
+                    # Report ready to process
+                    await self.worker_client.report_idle()
                     
                     # Main processing loop
                     while True:

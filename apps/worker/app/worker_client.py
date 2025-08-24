@@ -28,6 +28,10 @@ class WorkerClient:
         self.registration_retry_count = 0
         self.max_registration_retries = 5
         
+        # Camera assignment from backend
+        self.assigned_camera_id: Optional[int] = None
+        self.assigned_camera_name: Optional[str] = None
+        
         # Worker info
         self.hostname = socket.gethostname()
         self.worker_name = f"Worker-{self.hostname}"
@@ -122,7 +126,7 @@ class WorkerClient:
                     "worker_version": self.worker_version,
                     "capabilities": self.capabilities,
                     "site_id": int(self.config.site_id) if self.config.site_id and self.config.site_id.isdigit() else None,
-                    "camera_id": int(self.config.camera_id) if self.config.camera_id and self.config.camera_id.isdigit() else None,
+                    # camera_id is removed - backend will auto-assign
                 }
                 
                 response = await self.http_client.post(
@@ -134,6 +138,15 @@ class WorkerClient:
                 
                 result = response.json()
                 self.worker_id = result["worker_id"]
+                
+                # Capture camera assignment
+                if "assigned_camera_id" in result:
+                    self.assigned_camera_id = int(result["assigned_camera_id"])
+                    self.assigned_camera_name = result.get("assigned_camera_name")
+                    logger.info(f"Worker registered and assigned camera {self.assigned_camera_id} ({self.assigned_camera_name})")
+                else:
+                    logger.info(f"Worker registered but no camera assigned")
+                
                 logger.info(f"Worker registered successfully: {result['message']}")
                 return
                 
@@ -146,7 +159,7 @@ class WorkerClient:
         
         logger.error("Failed to register worker after all attempts")
     
-    async def _send_heartbeat(self, status: str = "online", error_message: Optional[str] = None):
+    async def _send_heartbeat(self, status: str = "idle", error_message: Optional[str] = None):
         """Send heartbeat to backend"""
         if not self.worker_id:
             logger.warning("Cannot send heartbeat - worker not registered")
@@ -161,6 +174,10 @@ class WorkerClient:
                 "capabilities": self.capabilities
             }
             
+            # Include current camera if processing
+            if status == "processing" and self.assigned_camera_id:
+                heartbeat_data["current_camera_id"] = self.assigned_camera_id
+            
             if error_message:
                 heartbeat_data["error_message"] = error_message
             
@@ -171,9 +188,21 @@ class WorkerClient:
             )
             response.raise_for_status()
             
+            # Handle response from heartbeat
+            result = response.json()
+            if "assigned_camera_id" in result and result["assigned_camera_id"]:
+                new_camera_id = int(result["assigned_camera_id"])
+                if new_camera_id != self.assigned_camera_id:
+                    self.assigned_camera_id = new_camera_id
+                    logger.info(f"Camera assignment updated to: {self.assigned_camera_id}")
+            elif result.get("assigned_camera_id") is None:
+                if self.assigned_camera_id is not None:
+                    logger.info(f"Camera assignment removed (was {self.assigned_camera_id})")
+                    self.assigned_camera_id = None
+            
             # Reset counter after successful heartbeat
             self.faces_processed_since_heartbeat = 0
-            logger.debug(f"Heartbeat sent successfully - status: {status}")
+            logger.debug(f"Heartbeat sent successfully - status: {status}, camera: {self.assigned_camera_id}")
             
         except Exception as e:
             logger.error(f"Failed to send heartbeat: {e}")
@@ -205,3 +234,44 @@ class WorkerClient:
     async def report_maintenance(self):
         """Report maintenance status to backend"""
         await self._send_heartbeat(status="maintenance")
+    
+    async def report_processing(self):
+        """Report that worker is currently processing faces"""
+        await self._send_heartbeat(status="processing")
+    
+    async def report_idle(self):
+        """Report that worker is idle and ready for work"""
+        await self._send_heartbeat(status="idle")
+    
+    async def request_camera_assignment(self):
+        """Request camera assignment from backend"""
+        if not self.worker_id:
+            logger.warning("Cannot request camera assignment - worker not registered")
+            return None
+        
+        try:
+            await self._ensure_authenticated()
+            
+            response = await self.http_client.post(
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/request-camera",
+                headers={"Authorization": f"Bearer {self.access_token}"}
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("assigned_camera_id"):
+                self.assigned_camera_id = int(result["assigned_camera_id"])
+                self.assigned_camera_name = result.get("assigned_camera_name")
+                logger.info(f"Camera assignment requested successfully: {self.assigned_camera_id} ({self.assigned_camera_name})")
+                return self.assigned_camera_id
+            else:
+                logger.info("Camera assignment requested but no cameras available")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to request camera assignment: {e}")
+            return None
+    
+    def get_assigned_camera(self) -> Optional[int]:
+        """Get currently assigned camera ID"""
+        return self.assigned_camera_id
