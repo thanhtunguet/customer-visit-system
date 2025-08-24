@@ -44,6 +44,24 @@ class WorkerClient:
             "camera_source": "rtsp" if config.rtsp_url else "usb"
         }
     
+    def _parse_site_id(self) -> Optional[int]:
+        """Parse site_id from config, handling both integer strings and s-prefixed values"""
+        if not self.config.site_id:
+            return None
+        
+        site_id_str = str(self.config.site_id).strip()
+        
+        # Handle direct integer strings
+        if site_id_str.isdigit():
+            return int(site_id_str)
+        
+        # Handle s-prefixed format like "s-1"
+        if site_id_str.startswith("s-") and site_id_str[2:].isdigit():
+            return int(site_id_str[2:])
+        
+        logger.warning(f"Invalid site_id format: {site_id_str}, expected integer or 's-N' format")
+        return None
+    
     async def initialize(self):
         """Initialize worker client and register with backend"""
         self.http_client = httpx.AsyncClient(timeout=30.0)
@@ -125,7 +143,7 @@ class WorkerClient:
                     "hostname": self.hostname,
                     "worker_version": self.worker_version,
                     "capabilities": self.capabilities,
-                    "site_id": int(self.config.site_id) if self.config.site_id and self.config.site_id.isdigit() else None,
+                    "site_id": self._parse_site_id(),
                     # camera_id is removed - backend will auto-assign
                 }
                 

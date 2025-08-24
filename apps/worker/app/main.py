@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 API_URL = os.getenv("API_URL", "http://api:8080")
 TENANT_ID = os.getenv("TENANT_ID", "t-dev")
-SITE_ID = os.getenv("SITE_ID", "s-1")
+SITE_ID = os.getenv("SITE_ID", "1")
 CAMERA_ID = os.getenv("CAMERA_ID", "c-1")
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "dev-api-key")
 
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 # Configuration from environment (will be replaced by config object later)
 API_URL = os.getenv("API_URL", "http://localhost:8080")
 TENANT_ID = os.getenv("TENANT_ID", "t-dev")
-SITE_ID = os.getenv("SITE_ID", "s-1")
+SITE_ID = os.getenv("SITE_ID", "1")
 CAMERA_ID = os.getenv("CAMERA_ID", "c-1")
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "dev-api-key")
 DETECTOR_TYPE = os.getenv("DETECTOR_TYPE", "yunet")
@@ -93,7 +93,7 @@ class WorkerConfig:
         # API Configuration
         self.api_url = os.getenv("API_URL", "http://localhost:8080")
         self.tenant_id = os.getenv("TENANT_ID", "t-dev")
-        self.site_id = os.getenv("SITE_ID", "s-1")
+        self.site_id = os.getenv("SITE_ID", "1")
         # camera_id is now assigned by backend, not from env
         self.camera_id = None  # Will be set by WorkerClient after registration
         self.worker_api_key = os.getenv("WORKER_API_KEY", "dev-api-key")
