@@ -93,6 +93,7 @@ const Workers: React.FC = () => {
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [siteFilter, setSiteFilter] = useState<number | undefined>(undefined);
   const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
@@ -108,7 +109,7 @@ const Workers: React.FC = () => {
         wsRef.current.close();
       }
     };
-  }, [statusFilter]);
+  }, [statusFilter, siteFilter]);
 
   const setupWebSocket = () => {
     const token = localStorage.getItem('access_token');
@@ -337,12 +338,21 @@ const Workers: React.FC = () => {
   };
 
   const filteredWorkers = workers.filter(worker => {
-    if (!searchText) return true;
-    return (
+    // Apply search text filter
+    if (searchText && !(
       worker.worker_name.toLowerCase().includes(searchText.toLowerCase()) ||
       worker.hostname.toLowerCase().includes(searchText.toLowerCase()) ||
       (worker.ip_address?.toLowerCase().includes(searchText.toLowerCase()))
-    );
+    )) {
+      return false;
+    }
+    
+    // Apply site filter
+    if (siteFilter && worker.site_id !== siteFilter) {
+      return false;
+    }
+    
+    return true;
   });
 
   const columns: ColumnsType<Worker> = [
@@ -390,22 +400,28 @@ const Workers: React.FC = () => {
       ),
     },
     {
-      title: 'Assignment',
-      key: 'assignment',
-      width: 160,
+      title: 'Site',
+      key: 'site',
+      width: 120,
       render: (_, record: Worker) => (
         <div>
-          {record.site_id && (
-            <div className="text-sm">
-              <span className="text-gray-500">Site:</span> <span className="font-medium">{getSiteName(record.site_id)}</span>
-            </div>
+          {record.site_id ? (
+            <span className="font-medium">{getSiteName(record.site_id)}</span>
+          ) : (
+            <span className="text-gray-400 text-sm">Unassigned</span>
           )}
-          {record.camera_id && (
-            <div className="text-sm">
-              <span className="text-gray-500">Camera:</span> <span className="font-medium">{getCameraName(record.camera_id)}</span>
-            </div>
-          )}
-          {!record.site_id && !record.camera_id && (
+        </div>
+      ),
+    },
+    {
+      title: 'Camera',
+      key: 'camera',
+      width: 120,
+      render: (_, record: Worker) => (
+        <div>
+          {record.camera_id ? (
+            <span className="font-medium">{getCameraName(record.camera_id)}</span>
+          ) : (
             <span className="text-gray-400 text-sm">Unassigned</span>
           )}
         </div>
@@ -540,6 +556,14 @@ const Workers: React.FC = () => {
               value={statusFilter}
               onChange={setStatusFilter}
               options={WorkerStatusHelper.getStatusOptions()}
+            />
+            <Select
+              placeholder="Filter by site"
+              allowClear
+              style={{ width: 150 }}
+              value={siteFilter}
+              onChange={setSiteFilter}
+              options={sites.map(site => ({ value: site.site_id, label: site.name }))}
             />
           </Space>
           <Space>

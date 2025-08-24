@@ -22,7 +22,9 @@ class CameraDelegationService:
         self.assignments: Dict[int, str] = {}  # camera_id -> worker_id
         self.worker_cameras: Dict[str, int] = {}  # worker_id -> camera_id
         self.cleanup_task: Optional[asyncio.Task] = None
+        self.auto_assign_task: Optional[asyncio.Task] = None
         self.cleanup_interval = 60  # seconds - check every minute
+        self.auto_assign_interval = 30  # seconds - check for auto-assignments every 30 seconds
         
     def assign_camera_to_worker(self, db: Session, tenant_id: str, worker_id: str, site_id: int) -> Optional[Camera]:
         """
@@ -180,13 +182,17 @@ class CameraDelegationService:
         return assignments_made
     
     async def start(self):
-        """Start the camera assignment cleanup task"""
+        """Start the camera assignment cleanup and auto-assignment tasks"""
         if self.cleanup_task is None:
             self.cleanup_task = asyncio.create_task(self._cleanup_loop())
             logger.info("Camera delegation cleanup task started")
+        
+        if self.auto_assign_task is None:
+            self.auto_assign_task = asyncio.create_task(self._auto_assign_loop())
+            logger.info("Camera delegation auto-assignment task started")
     
     async def stop(self):
-        """Stop the camera assignment cleanup task"""
+        """Stop the camera assignment cleanup and auto-assignment tasks"""
         if self.cleanup_task:
             self.cleanup_task.cancel()
             try:
@@ -195,6 +201,15 @@ class CameraDelegationService:
                 pass
             self.cleanup_task = None
             logger.info("Camera delegation cleanup task stopped")
+        
+        if self.auto_assign_task:
+            self.auto_assign_task.cancel()
+            try:
+                await self.auto_assign_task
+            except asyncio.CancelledError:
+                pass
+            self.auto_assign_task = None
+            logger.info("Camera delegation auto-assignment task stopped")
     
     async def _cleanup_loop(self):
         """Background cleanup task for stale camera assignments"""
@@ -210,6 +225,46 @@ class CameraDelegationService:
                 break
             except Exception as e:
                 logger.error(f"Error in camera delegation cleanup loop: {e}")
+    
+    async def _auto_assign_loop(self):
+        """Background auto-assignment task for available workers"""
+        
+        while True:
+            try:
+                await asyncio.sleep(self.auto_assign_interval)
+                
+                # Get database session
+                from ..database import SessionLocal
+                db = SessionLocal()
+                
+                try:
+                    # Get all unique tenant IDs from active workers
+                    active_tenants = set()
+                    for worker in worker_registry.workers.values():
+                        if worker.status in [WorkerStatus.IDLE, WorkerStatus.ONLINE] and worker.is_healthy:
+                            active_tenants.add(worker.tenant_id)
+                    
+                    total_assigned = 0
+                    for tenant_id in active_tenants:
+                        try:
+                            assigned_count = self.reassign_cameras_automatically(db, tenant_id)
+                            total_assigned += assigned_count
+                            if assigned_count > 0:
+                                logger.info(f"Auto-assigned {assigned_count} cameras for tenant {tenant_id}")
+                        except Exception as e:
+                            logger.error(f"Error in auto-assignment for tenant {tenant_id}: {e}")
+                    
+                    if total_assigned > 0:
+                        logger.info(f"Background auto-assignment: assigned {total_assigned} cameras total")
+                        
+                finally:
+                    db.close()
+                    
+            except asyncio.CancelledError:
+                logger.info("Camera delegation auto-assignment loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in camera delegation auto-assignment loop: {e}")
 
 
 # Global camera delegation service

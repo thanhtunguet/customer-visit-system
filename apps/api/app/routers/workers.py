@@ -438,8 +438,8 @@ async def send_heartbeat(
         if heartbeat.status == "offline":
             # Worker going offline - release camera assignment
             worker.camera_id = None
-        elif heartbeat.status == "idle" and not worker.camera_id:
-            # Worker becoming idle but has no camera - try to assign one
+        elif heartbeat.status in ["idle", "online"] and not worker.camera_id:
+            # Worker becoming idle/online but has no camera - try to assign one
             assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker.worker_id)
             if assigned_camera:
                 worker.camera_id = assigned_camera.camera_id
@@ -464,6 +464,13 @@ async def send_heartbeat(
     elif heartbeat.status == "online":
         # Clear error when worker comes back online
         worker.last_error = None
+    
+    # Additional check: if worker is idle/online but still has no camera, try to assign one
+    # This handles cases where cameras became available after worker was already idle
+    if heartbeat.status in ["idle", "online"] and not worker.camera_id and worker.site_id:
+        assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker.worker_id)
+        if assigned_camera:
+            worker.camera_id = assigned_camera.camera_id
     
     db.commit()
     db.refresh(worker)
