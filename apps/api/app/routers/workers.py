@@ -157,7 +157,7 @@ async def register_worker(
     
     # Only workers can register themselves
     current_user = UserInfo(**current_user_dict)
-    if current_user.role not in [UserRole.WORKER, UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN]:
+    if current_user.role not in ["worker", "system_admin", "tenant_admin"]:
         raise HTTPException(
             status_code=403, 
             detail="Only workers or admins can register workers"
@@ -231,7 +231,7 @@ async def send_heartbeat(
     
     # Only workers can send heartbeats
     current_user = UserInfo(**current_user_dict)
-    if current_user.role not in [UserRole.WORKER, UserRole.SYSTEM_ADMIN]:
+    if current_user.role not in ["worker", "system_admin"]:
         raise HTTPException(
             status_code=403,
             detail="Only workers or system admins can send heartbeats"
@@ -441,7 +441,7 @@ async def deregister_worker(
     current_user = UserInfo(**current_user_dict)
     
     # Only admins or workers themselves can deregister
-    if current_user.role not in [UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN, UserRole.WORKER]:
+    if current_user.role not in ["system_admin", "tenant_admin", "worker"]:
         raise HTTPException(
             status_code=403,
             detail="Only admins or workers can deregister workers"
@@ -474,7 +474,7 @@ async def cleanup_stale_workers(
     current_user = UserInfo(**current_user_dict)
     
     # Only admins can cleanup stale workers
-    if current_user.role not in [UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN]:
+    if current_user.role not in ["system_admin", "tenant_admin"]:
         raise HTTPException(
             status_code=403,
             detail="Only admins can cleanup stale workers"

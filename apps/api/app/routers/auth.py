@@ -1,4 +1,6 @@
 import os
+import hashlib
+import os
 from datetime import datetime
 from typing import List
 
@@ -12,7 +14,7 @@ from ..core.security import (
     require_system_admin
 )
 from ..core.database import get_db
-from ..models.database import User, UserRole
+from ..models.database import User, UserRole, ApiKey
 from ..schemas import (
     TokenRequest, 
     TokenResponse, 
@@ -30,13 +32,34 @@ router = APIRouter(prefix="/v1", tags=["Authentication"])
 async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
     if payload.grant_type == "api_key":
         # API key authentication for workers
-        if payload.api_key != os.getenv("WORKER_API_KEY", "dev-api-key"):
+        if not payload.api_key:
+            raise HTTPException(status_code=400, detail="Missing API key")
+        
+        # Hash the provided API key for lookup
+        hashed_key = hashlib.sha256(payload.api_key.encode()).hexdigest()
+        
+        # Look up API key in database
+        api_key_record = db.query(ApiKey).filter(
+            ApiKey.hashed_key == hashed_key,
+            ApiKey.tenant_id == payload.tenant_id,
+            ApiKey.is_active == True
+        ).first()
+        
+        if not api_key_record:
             raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Check if API key has expired
+        if api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
+            raise HTTPException(status_code=401, detail="API key has expired")
+        
+        # Update last_used timestamp
+        api_key_record.last_used = datetime.utcnow()
+        db.commit()
         
         token = mint_jwt(
             sub="worker",
-            role=payload.role.value,
-            tenant_id=payload.tenant_id
+            role=api_key_record.role,
+            tenant_id=api_key_record.tenant_id
         )
         return TokenResponse(access_token=token)
     
@@ -304,3 +327,4 @@ async def toggle_user_status(
     db.refresh(user)
     
     return user
+
