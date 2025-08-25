@@ -114,7 +114,8 @@ class CameraProxyService:
                     except Exception as http_error:
                         logger.warning(f"Direct HTTP call to worker failed: {http_error}")
                 
-                # Fallback to command result
+                # Fallback to command result - still broadcast status change
+                await self._broadcast_camera_status_change(camera_id, True, worker_id)
                 return {
                     "success": True,
                     "message": "Camera stream start command sent to worker",
@@ -183,7 +184,8 @@ class CameraProxyService:
                     except Exception as http_error:
                         logger.warning(f"Direct HTTP call to worker failed: {http_error}")
                 
-                # Fallback to command result
+                # Fallback to command result - still broadcast status change
+                await self._broadcast_camera_status_change(camera_id, False, worker_id)
                 return {
                     "success": True,
                     "message": "Camera stream stop command sent to worker",

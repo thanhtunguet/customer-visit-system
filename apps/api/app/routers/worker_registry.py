@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.security import get_current_user
+from ..core.security import get_current_user, verify_jwt
 from ..core.database import get_db, get_db_session
 from ..services.worker_registry import worker_registry, WorkerInfo
 from common.enums.worker import WorkerStatus
@@ -431,6 +431,21 @@ async def websocket_endpoint(
 ):
     """WebSocket endpoint for real-time worker status updates"""
     try:
+        # Validate token if provided
+        if token:
+            try:
+                payload = verify_jwt(token)
+                user_tenant_id = payload.get("tenant_id")
+                
+                if user_tenant_id != tenant_id:
+                    logger.warning(f"WebSocket connection denied: token tenant_id {user_tenant_id} != requested tenant_id {tenant_id}")
+                    await websocket.close(code=1008, reason="Invalid tenant")
+                    return
+            except Exception as auth_error:
+                logger.warning(f"WebSocket authentication failed: {auth_error}")
+                await websocket.close(code=1008, reason="Authentication failed")
+                return
+        
         await connection_manager.connect(websocket, tenant_id)
         
         # Send initial worker status

@@ -109,6 +109,27 @@ class CameraDelegationService:
                         requested_by="system_auto_assignment"
                     )
                     logger.info(f"Sent ASSIGN_CAMERA command {command_id} to worker {worker_id} for camera {camera.camera_id}")
+                    
+                    # Broadcast camera status change for immediate frontend update
+                    try:
+                        from .camera_status_broadcaster import camera_status_broadcaster
+                        from datetime import datetime
+                        status_data = {
+                            "camera_id": camera.camera_id,
+                            "stream_active": False,  # Will be updated when worker actually starts
+                            "worker_id": worker_id,
+                            "worker_status": "assigned",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "source": "camera_assignment"
+                        }
+                        asyncio.create_task(
+                            camera_status_broadcaster.broadcast_camera_status_change(
+                                str(camera.site_id), camera.camera_id, status_data
+                            )
+                        )
+                    except Exception as broadcast_error:
+                        logger.warning(f"Failed to broadcast camera assignment status: {broadcast_error}")
+                        
                 except Exception as e:
                     logger.error(f"Failed to send ASSIGN_CAMERA command to worker {worker_id}: {e}")
                 

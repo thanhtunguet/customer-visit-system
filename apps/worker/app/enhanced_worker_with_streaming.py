@@ -457,6 +457,10 @@ class EnhancedFaceRecognitionWorker:
                 # Enable face processing
                 self.face_processing_enabled = True
                 await self.worker_client.report_processing()
+                
+                # Immediately send heartbeat with updated streaming status to notify frontend
+                logger.info(f"Sending immediate status update for camera {camera_id}")
+                await self.worker_client._send_heartbeat()
             else:
                 logger.error(f"Failed to start streaming for assigned camera {camera_id}")
             
@@ -477,6 +481,10 @@ class EnhancedFaceRecognitionWorker:
                 # Disable face processing if no cameras active
                 self.face_processing_enabled = False
                 await self.worker_client.report_idle()
+            
+            # Immediately send heartbeat with updated streaming status
+            logger.info(f"Sending immediate status update for released camera {camera_id}")
+            await self.worker_client._send_heartbeat()
             
             logger.info(f"Released camera {camera_id}")
             return success
