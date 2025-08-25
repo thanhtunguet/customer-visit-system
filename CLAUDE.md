@@ -40,6 +40,9 @@ Create a monorepo:
 	•	**Camera Streaming**: Full OpenCV streaming service with device management
 	•	**HTTP Endpoints**: RESTful API for camera control and status monitoring
 	•	**Proxy Integration**: API delegates camera operations to workers via HTTP
+	•	**Worker Communication**: Registration, 30s heartbeat, command system (ASSIGN_CAMERA, RELEASE_CAMERA)
+	•	**Multi-Camera Support**: Handle multiple camera streams simultaneously with conflict management
+	•	**Status Reporting**: IDLE, PROCESSING, ONLINE, OFFLINE, ERROR with capability updates
 	•	Capture: OpenCV capture from RTSP/USB; config via env; frame-skip (WORKER_FPS=5).
 	•	Detect: YuNet default; RetinaFace optional. 5-point alignment.
 	•	Embed: InsightFace ArcFace 512-D; L2-norm; cosine sim. Use ONNXRuntime (arm64) or PyTorch+MPS when available.
@@ -51,6 +54,9 @@ Create a monorepo:
 	•	Pages: Sites, Cameras, Staff, Customers (CRUD); Live Monitor (SSE/WebSocket events list + refreshing snapshot); Reports (Recharts).
 	•	**Enhanced Staff Management**: StaffFaceGallery, FaceRecognitionTest, StaffDetailsModal components
 	•	**Face Management Features**: Drag-drop upload, multiple face images per staff, recognition testing, similarity scoring
+	•	**Real-time Communication**: Server-Sent Events for camera status, WebSocket for worker monitoring
+	•	**Multi-tenant Context**: Tenant switching and context management with JWT token updates
+	•	**Authenticated Media**: Secure image loading via blob URLs for protected MinIO resources
 	•	UX: Filters by date/site; CSV export. Use shared TS types from /packages/ts/common.
 
 5) DevOps

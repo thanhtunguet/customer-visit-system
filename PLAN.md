@@ -38,6 +38,12 @@ Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Mi
 		- Camera Streaming Service (apps/worker/app/camera_streaming_service.py)
 		- Camera Proxy Service (apps/api/app/services/camera_proxy_service.py)
 		- Worker Registry and Command Services for delegation
+	•	**Worker Communication**: 
+		- Command System: ASSIGN_CAMERA, RELEASE_CAMERA, START_PROCESSING, STOP_PROCESSING
+		- Registration & Heartbeat: 30s cycle with status/capability reporting
+		- Persistent Worker IDs with tenant/site context
+		- HTTP + WebSocket bidirectional communication
+	•	**Multi-Camera Support**: Workers can handle multiple cameras simultaneously
 	•	**Benefits**: Scalability, reliability, performance, distributed processing
 	•	**Config**: USE_ENHANCED_WORKER=true enables new architecture
 	•	DoD: Proxy streaming works; worker delegation functional; face events flow correctly.
@@ -53,24 +59,55 @@ Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Mi
 
 ⸻
 
-3. Data & Schemas
+3. Service Communication & Protocols
 
-3.1 PostgreSQL schema & RLS
+3.1 Worker-API Communication
+	•	**✅ COMPLETE**: Multi-channel communication system implemented
+	•	**Registration Protocol**: POST /v1/registry/workers/register with persistent IDs
+	•	**Heartbeat System**: 30-second cycle with status, capabilities, and streaming info
+	•	**Command System**: Asynchronous command queue with acknowledgment/completion
+	•	**Commands Available**: ASSIGN_CAMERA, RELEASE_CAMERA, START_PROCESSING, STOP_PROCESSING
+	•	**Status Types**: IDLE, PROCESSING, ONLINE, OFFLINE, ERROR, MAINTENANCE
+	•	**Capabilities Reporting**: Active streams, device status, processing stats
+	•	DoD: Workers register, maintain heartbeat, execute commands reliably.
+
+3.2 Frontend-API Communication
+	•	**✅ COMPLETE**: Multiple communication channels for real-time updates
+	•	**REST APIs**: Standard CRUD operations with JWT authentication
+	•	**Server-Sent Events**: Real-time camera status updates via /status-stream
+	•	**WebSocket**: Worker monitoring and live status updates
+	•	**Authenticated Media**: Blob URL creation for protected image resources
+	•	**Multi-tenant Context**: Tenant switching and context management
+	•	DoD: Real-time updates work; authentication secure; tenant isolation maintained.
+
+3.3 API-Worker HTTP Proxy
+	•	**✅ COMPLETE**: Direct HTTP communication for camera control
+	•	**Worker Endpoints**: Camera streaming control on port 8090
+	•	**Stream Proxying**: MJPEG stream relay from worker to frontend
+	•	**Command Delegation**: HTTP calls for immediate camera operations
+	•	**Fallback Logic**: Command system backup when HTTP calls fail
+	•	DoD: Camera streams proxy correctly; control commands work; fallback reliable.
+
+⸻
+
+4. Data & Schemas
+
+4.1 PostgreSQL schema & RLS
 	•	Deliverable: SQL migrations for tenants, sites, cameras, staff, customers, visits, api_keys. RLS on tenant-scoped tables.
 	•	**✅ ENHANCED**: Added staff_face_images table for multiple face images per staff
 	•	**New**: StaffFaceImage model with face_landmarks, face_embedding, is_primary fields
 	•	**New**: Foreign key constraints with cascade deletion for data integrity
 	•	DoD: make migrate applies; RLS test proves cross-tenant leak impossible.
 
-3.2 Milvus collection & indexes
+4.2 Milvus collection & indexes
 	•	Deliverable: face_embeddings (dim=512, metric=cosine), partitions per tenant_id; IVF index config (nlist/nprobe).
 	•	DoD: Insert/search e2e test <100ms p95 on sample data (≥100k vectors).
 
-3.3 MinIO buckets & lifecycle
+4.3 MinIO buckets & lifecycle
 	•	Deliverable: Buckets faces-raw, faces-derived; 30-day lifecycle on raw; presigned URL helper.
 	•	DoD: Object older than 30 days is auto-deleted in sandbox; presigned URL works.
 
-3.4 JSON contracts
+4.4 JSON contracts
 	•	Deliverable: Versioned JSON Schemas in contracts/:
 	•	Event.FaceDetected.v1
 	•	VisitRecord.v1
@@ -206,6 +243,9 @@ Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Mi
 
 9.3 Live monitor
 	•	Deliverable: Recent events list via WebSocket/SSE; snapshot refresh; status badges.
+	•	**✅ ENHANCED**: Server-Sent Events for real-time camera status updates
+	•	**New**: WebSocket connections for worker monitoring and status
+	•	**New**: Real-time streaming status broadcasts across services
 	•	DoD: New visit appears in UI <2s from API event (dev env).
 
 9.4 Reports
