@@ -31,19 +31,28 @@ class StreamInfo:
     # Fields for async face processing
     latest_frame_for_processing: Optional[np.ndarray] = field(default=None, init=False)
     needs_face_processing: bool = field(default=False, init=False)
+    last_face_processing_time: float = field(default=0.0, init=False)
 
 
 class WorkerCameraStreamingService:
     """Camera streaming service for workers with face recognition integration"""
     
-    def __init__(self, worker_id: str):
+    def __init__(self, worker_id: str, face_processing_fps: int = 5, capture_fps: int = 30):
         self.worker_id = worker_id
         self.streams: Dict[str, StreamInfo] = {}
         self.lock = threading.Lock()
         self.device_locks: Dict[int, str] = {}  # Track which camera_id is using each device index
         
-        # Face processing callback
+        # Face processing configuration
+        self.face_processing_fps = face_processing_fps
+        self.face_processing_interval = 1.0 / face_processing_fps
         self.face_processor_callback: Optional[callable] = None
+        
+        # Capture configuration
+        self.capture_fps = capture_fps
+        self.capture_interval = 1.0 / capture_fps
+        
+        logger.info(f"Camera streaming service initialized with {face_processing_fps} FPS face processing, {capture_fps} FPS capture")
         
     def set_face_processor(self, callback: callable):
         """Set callback for face processing on each frame"""
@@ -87,13 +96,20 @@ class WorkerCameraStreamingService:
                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Process frame for face recognition if callback is set
-                # Process every 10th frame to reduce CPU load (same as stream_frames logic)
-                if self.face_processor_callback and frame is not None and frame_count % 10 == 0:
+                # Process at configured FPS for face recognition (time-based to ensure consistent rate)
+                current_time = time.time()
+                time_since_last_processing = current_time - stream_info.last_face_processing_time
+                
+                if (self.face_processor_callback and frame is not None and 
+                    time_since_last_processing >= self.face_processing_interval):
                     try:
-                        # Store the frame for async processing by scheduling it in the main event loop
-                        # We'll use a simple approach: store the frame and let it be processed elsewhere
+                        # Store the frame for async processing and update timing
                         stream_info.latest_frame_for_processing = frame.copy()
                         stream_info.needs_face_processing = True
+                        stream_info.last_face_processing_time = current_time
+                        # Log face processing rate occasionally
+                        if frame_count % 150 == 0:  # Every ~5 seconds at default capture FPS
+                            logger.debug(f"Camera {stream_info.camera_id}: processing faces at {self.face_processing_fps} FPS")
                     except Exception as face_error:
                         logger.debug(f"Face processing error: {face_error}")
                 
@@ -112,8 +128,8 @@ class WorkerCameraStreamingService:
                     except:
                         pass  # Queue full, skip frame
                 
-                # Control frame rate (~30 FPS max)
-                time.sleep(1/30)
+                # Control frame rate
+                time.sleep(self.capture_interval)
                 
         except Exception as e:
             logger.error(f"Error in capture thread for camera {stream_info.camera_id}: {e}")
@@ -197,7 +213,7 @@ class WorkerCameraStreamingService:
                 # Set some properties for better performance and uniqueness
                 stream_info.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                 stream_info.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-                stream_info.cap.set(cv2.CAP_PROP_FPS, 30)
+                stream_info.cap.set(cv2.CAP_PROP_FPS, self.capture_fps)
                 stream_info.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 
                 # For webcam, try to set additional properties to ensure unique streams
@@ -334,7 +350,7 @@ class WorkerCameraStreamingService:
                 frame_count += 1
             else:
                 # No frame available, wait a bit
-                await asyncio.sleep(1/30)  # ~30 FPS  # ~30 FPS
+                await asyncio.sleep(self.capture_interval)
 
     def get_device_status(self) -> Dict:
         """Get status of all devices and conflicts"""

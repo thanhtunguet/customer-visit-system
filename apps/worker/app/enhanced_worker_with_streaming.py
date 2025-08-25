@@ -44,7 +44,8 @@ class EnhancedFaceRecognitionWorker:
         
         # Enhanced camera streaming service
         self.streaming_service = WorkerCameraStreamingService(
-            worker_id=f"worker-{os.getenv('WORKER_ID', 'unknown')}"
+            worker_id=f"worker-{os.getenv('WORKER_ID', 'unknown')}",
+            face_processing_fps=self.config.worker_fps
         )
         
         # Set face processing callback
