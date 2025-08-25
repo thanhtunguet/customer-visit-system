@@ -1,5 +1,4 @@
 import logging
-import logging
 from typing import List, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -643,6 +642,7 @@ async def camera_status_stream(
     return await camera_status_broadcaster.stream_site_status(site_id_str, request)
 
 
+@router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
 async def get_camera_stream_feed(
     site_id: int,
     camera_id: int,
