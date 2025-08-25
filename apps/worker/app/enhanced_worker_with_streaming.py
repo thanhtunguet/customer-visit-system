@@ -87,30 +87,62 @@ class EnhancedFaceRecognitionWorker:
     
     async def shutdown(self):
         """Cleanup resources"""
+        logger.info("Starting enhanced worker shutdown...")
+        
+        # Set shutdown flag to stop any ongoing operations
+        self._shutdown_requested = True
+        
         # Stop all camera streams first
-        self.streaming_service.cleanup_all_streams()
+        try:
+            self.streaming_service.cleanup_all_streams()
+            logger.info("Camera streams cleaned up")
+        except Exception as e:
+            logger.error(f"Error cleaning up camera streams: {e}")
         
-        # Shutdown worker client
-        await self.worker_client.shutdown()
+        # Cancel and wait for tasks with timeout
+        tasks_to_cancel = []
         
-        # Cancel queue processor
         if self.queue_processor_task and not self.queue_processor_task.done():
-            self.queue_processor_task.cancel()
-            try:
-                await self.queue_processor_task
-            except asyncio.CancelledError:
-                pass
+            tasks_to_cancel.append(self.queue_processor_task)
         
-        # Cancel shutdown monitor
         if hasattr(self, 'shutdown_monitor_task') and self.shutdown_monitor_task and not self.shutdown_monitor_task.done():
-            self.shutdown_monitor_task.cancel()
-            try:
-                await self.shutdown_monitor_task
-            except asyncio.CancelledError:
-                pass
+            tasks_to_cancel.append(self.shutdown_monitor_task)
         
+        # Cancel all tasks
+        for task in tasks_to_cancel:
+            task.cancel()
+        
+        # Wait for tasks to complete with timeout
+        if tasks_to_cancel:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks_to_cancel, return_exceptions=True), 
+                    timeout=2.0
+                )
+                logger.info("Background tasks cancelled successfully")
+            except asyncio.TimeoutError:
+                logger.warning("Timeout waiting for background tasks to cancel")
+            except Exception as e:
+                logger.error(f"Error cancelling background tasks: {e}")
+        
+        # Shutdown worker client with timeout
+        try:
+            await asyncio.wait_for(self.worker_client.shutdown(), timeout=3.0)
+            logger.info("Worker client shutdown complete")
+        except asyncio.TimeoutError:
+            logger.warning("Worker client shutdown timeout")
+        except Exception as e:
+            logger.error(f"Error shutting down worker client: {e}")
+        
+        # Close HTTP client
         if self.http_client:
-            await self.http_client.aclose()
+            try:
+                await asyncio.wait_for(self.http_client.aclose(), timeout=1.0)
+                logger.info("HTTP client closed")
+            except asyncio.TimeoutError:
+                logger.warning("HTTP client close timeout")
+            except Exception as e:
+                logger.error(f"Error closing HTTP client: {e}")
         
         logger.info("Enhanced worker shutdown complete")
     
@@ -413,6 +445,9 @@ class EnhancedFaceRecognitionWorker:
                     logger.info("Shutdown monitor detected shutdown request - setting shutdown flag")
                     self._shutdown_requested = True
                     
+                    # Send stop signal to backend with retries as requested
+                    await self._send_stop_signal_to_backend()
+                    
                     # Wait a reasonable time for graceful shutdown
                     await asyncio.sleep(10)
                     
@@ -434,6 +469,60 @@ class EnhancedFaceRecognitionWorker:
             except Exception as e:
                 logger.error(f"Error in shutdown monitor: {e}")
                 await asyncio.sleep(check_interval)
+
+    
+    async def _send_stop_signal_to_backend(self):
+        """Send stop signal to backend with 3 retry attempts, 1-second timeout each"""
+        max_retries = 3
+        timeout = 1.0  # 1 second timeout for each request as requested
+        
+        # Don't hang if worker client or http client is not available
+        if not self.worker_client.worker_id or not self.http_client:
+            logger.warning("Cannot send stop signal - worker not properly initialized")
+            return False
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Sending stop signal to backend (attempt {attempt + 1}/{max_retries})")
+                
+                # Try to ensure authentication but don't hang on it
+                try:
+                    await asyncio.wait_for(self._ensure_authenticated(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    logger.warning("Authentication timeout, proceeding with existing token")
+                
+                # Send the stop signal
+                response = await self.http_client.post(
+                    f"{self.config.api_url}/v1/workers/{self.worker_client.worker_id}/stop-signal",
+                    headers={"Authorization": f"Bearer {self.access_token}"} if self.access_token else {},
+                    json={
+                        "worker_id": self.worker_client.worker_id,
+                        "reason": "shutdown_requested",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    },
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                logger.info(f"Successfully sent stop signal to backend on attempt {attempt + 1}")
+                return True
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout sending stop signal (attempt {attempt + 1}/{max_retries})")
+            except httpx.TimeoutException:
+                logger.warning(f"Request timeout sending stop signal (attempt {attempt + 1}/{max_retries})")  
+            except Exception as e:
+                logger.warning(f"Error sending stop signal (attempt {attempt + 1}/{max_retries}): {e}")
+            
+            # Don't wait after the last attempt
+            if attempt < max_retries - 1:
+                try:
+                    await asyncio.wait_for(asyncio.sleep(0.1), timeout=0.2)
+                except asyncio.TimeoutError:
+                    pass
+        
+        logger.error(f"Failed to send stop signal to backend after {max_retries} attempts")
+        return False
     
     def should_shutdown(self) -> bool:
         """Check if worker should shutdown"""
@@ -601,14 +690,22 @@ async def run_enhanced_worker():
     
     worker = EnhancedFaceRecognitionWorker(config)
     
+    # Shutdown event to coordinate between signal handler and main loop
+    shutdown_event = asyncio.Event()
+    
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         worker._shutdown_requested = True
+        shutdown_event.set()
+        
+        # Send stop signal to backend immediately
+        asyncio.create_task(worker._send_stop_signal_to_backend())
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    server = None
     try:
         await worker.initialize()
         
@@ -618,7 +715,7 @@ async def run_enhanced_worker():
         # Get worker HTTP port (default 8090, can be overridden)
         worker_port = int(os.getenv("WORKER_HTTP_PORT", "8090"))
         
-        # Start HTTP server
+        # Create uvicorn server
         config_uvicorn = uvicorn.Config(
             app, 
             host="0.0.0.0", 
@@ -629,14 +726,41 @@ async def run_enhanced_worker():
         
         logger.info(f"Starting enhanced worker HTTP server on port {worker_port}")
         
-        # Run server with shutdown monitoring
-        await server.serve()
+        # Start server in background task
+        server_task = asyncio.create_task(server.serve())
+        
+        # Wait for shutdown signal or server to complete
+        done, pending = await asyncio.wait(
+            [server_task, asyncio.create_task(shutdown_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        # If shutdown event was set, stop the server
+        if shutdown_event.is_set():
+            logger.info("Shutdown event detected, stopping server...")
+            if server:
+                server.should_exit = True
+            
+            # Cancel pending tasks
+            for task in pending:
+                task.cancel()
+            
+            # Wait briefly for server to shutdown
+            try:
+                await asyncio.wait_for(server_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Server shutdown timeout, proceeding with worker shutdown")
         
     except Exception as e:
         logger.error(f"Enhanced worker error: {e}")
         
     finally:
+        # Ensure worker shutdown
         await worker.shutdown()
+        
+        # Force exit if still running
+        logger.info("Worker shutdown complete, exiting process")
+        os._exit(0)
 
 
 if __name__ == "__main__":

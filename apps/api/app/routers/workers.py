@@ -897,6 +897,65 @@ async def shutdown_worker(
         )
 
 
+class WorkerStopSignalRequest(BaseModel):
+    worker_id: str = Field(..., description="Worker ID sending stop signal")
+    reason: str = Field(default="shutdown_requested", description="Reason for stop signal")
+    timestamp: str = Field(..., description="Timestamp when signal was sent")
+
+
+@router.post("/workers/{worker_id}/stop-signal")
+async def receive_worker_stop_signal(
+    worker_id: str,
+    stop_signal: WorkerStopSignalRequest,
+    db: Session = Depends(get_db),
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Receive stop signal from worker (sent during shutdown process)"""
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only workers can send stop signals
+    if current_user.role not in ["worker", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only workers or system admins can send stop signals"
+        )
+    
+    # Find worker
+    worker = db.query(Worker).filter(
+        and_(
+            Worker.worker_id == worker_id,
+            Worker.tenant_id == current_user.tenant_id
+        )
+    ).first()
+    
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    
+    # Log the stop signal
+    logger.info(f"Received stop signal from worker {worker_id} ({worker.worker_name}): {stop_signal.reason}")
+    
+    # Update worker status to indicate shutdown in progress
+    worker.status = "shutting_down"
+    worker.last_error = f"Stop signal received: {stop_signal.reason}"
+    worker.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(worker)
+    
+    # Broadcast worker status update
+    try:
+        await broadcast_worker_status_update(worker, current_user.tenant_id)
+    except Exception as e:
+        logger.error(f"Error broadcasting worker stop signal update: {e}")
+    
+    return {
+        "message": "Stop signal received and acknowledged",
+        "worker_id": worker_id,
+        "status": "acknowledged",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 @router.post("/workers/{worker_id}/shutdown-signal")
 async def get_shutdown_signal(
     worker_id: str,

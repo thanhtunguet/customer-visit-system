@@ -109,25 +109,37 @@ class WorkerClient:
     
     async def shutdown(self):
         """Cleanup worker client"""
+        logger.info("Starting worker client shutdown...")
+        
         # Cancel heartbeat task
         if self.heartbeat_task and not self.heartbeat_task.done():
             self.heartbeat_task.cancel()
             try:
-                await self.heartbeat_task
-            except asyncio.CancelledError:
+                await asyncio.wait_for(self.heartbeat_task, timeout=1.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
         
-        # Send final offline status
+        # Send final offline status with timeout
         if self.worker_id:
             try:
-                await self._send_heartbeat(status=WorkerStatus.OFFLINE)
+                await asyncio.wait_for(
+                    self._send_heartbeat(status=WorkerStatus.OFFLINE),
+                    timeout=2.0
+                )
                 logger.info("Sent offline status to backend")
+            except asyncio.TimeoutError:
+                logger.warning("Timeout sending offline status")
             except Exception as e:
                 logger.warning(f"Failed to send offline status: {e}")
         
-        # Close HTTP client
+        # Close HTTP client with timeout
         if self.http_client:
-            await self.http_client.aclose()
+            try:
+                await asyncio.wait_for(self.http_client.aclose(), timeout=1.0)
+            except asyncio.TimeoutError:
+                logger.warning("HTTP client close timeout")
+            except Exception as e:
+                logger.error(f"Error closing HTTP client: {e}")
         
         logger.info("Worker client shutdown complete")
     

@@ -453,6 +453,9 @@ class FaceRecognitionWorker:
                     logger.info("Shutdown monitor detected shutdown request - setting shutdown flag")
                     self._shutdown_requested = True
                     
+                    # Send stop signal to backend with retries as requested
+                    await self._send_stop_signal_to_backend()
+                    
                     # Wait a reasonable time for graceful shutdown
                     await asyncio.sleep(10)
                     
@@ -474,6 +477,48 @@ class FaceRecognitionWorker:
             except Exception as e:
                 logger.error(f"Error in shutdown monitor: {e}")
                 await asyncio.sleep(check_interval)
+
+    async def _send_stop_signal_to_backend(self):
+        """Send stop signal to backend with 3 retry attempts, 1-second timeout each"""
+        max_retries = 3
+        timeout = 1.0  # 1 second timeout for each request as requested
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Sending stop signal to backend (attempt {attempt + 1}/{max_retries})")
+                
+                # Ensure we have authentication
+                await self._ensure_authenticated()
+                
+                # Send the stop signal
+                response = await self.http_client.post(
+                    f"{self.config.api_url}/v1/workers/{self.worker_client.worker_id}/stop-signal",
+                    headers={"Authorization": f"Bearer {self.access_token}"},
+                    json={
+                        "worker_id": self.worker_client.worker_id,
+                        "reason": "shutdown_requested",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    },
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                logger.info(f"Successfully sent stop signal to backend on attempt {attempt + 1}")
+                return True
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout sending stop signal (attempt {attempt + 1}/{max_retries})")
+            except httpx.TimeoutException:
+                logger.warning(f"Request timeout sending stop signal (attempt {attempt + 1}/{max_retries})")  
+            except Exception as e:
+                logger.warning(f"Error sending stop signal (attempt {attempt + 1}/{max_retries}): {e}")
+            
+            # Don't wait after the last attempt
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.1)  # Brief delay before retry
+        
+        logger.error(f"Failed to send stop signal to backend after {max_retries} attempts")
+        return False
     
     def should_shutdown(self) -> bool:
         """Check if worker should shutdown"""
@@ -728,6 +773,9 @@ async def main():
     def signal_handler(signum, frame):
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         worker._shutdown_requested = True
+        
+        # Create a task to send stop signal to backend immediately
+        asyncio.create_task(worker._send_stop_signal_to_backend())
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
