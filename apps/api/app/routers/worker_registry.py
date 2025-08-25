@@ -88,10 +88,19 @@ class WorkerConnectionManager:
         self.active_connections: Dict[str, set] = {}
     
     async def connect(self, websocket: WebSocket, tenant_id: str):
-        await websocket.accept()
-        if tenant_id not in self.active_connections:
-            self.active_connections[tenant_id] = set()
-        self.active_connections[tenant_id].add(websocket)
+        try:
+            logger.info(f"Attempting to accept WebSocket connection for tenant {tenant_id}")
+            await websocket.accept()
+            logger.info(f"WebSocket accepted for tenant {tenant_id}")
+            
+            if tenant_id not in self.active_connections:
+                self.active_connections[tenant_id] = set()
+            self.active_connections[tenant_id].add(websocket)
+            logger.info(f"WebSocket added to connection pool for tenant {tenant_id}. Total connections: {len(self.active_connections[tenant_id])}")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect WebSocket for tenant {tenant_id}: {e}")
+            raise
     
     def disconnect(self, websocket: WebSocket, tenant_id: str):
         if tenant_id in self.active_connections:
@@ -430,6 +439,8 @@ async def websocket_endpoint(
     token: Optional[str] = None
 ):
     """WebSocket endpoint for real-time worker status updates"""
+    logger.info(f"WebSocket connection attempt for tenant: {tenant_id}, token provided: {token is not None}")
+    
     try:
         # Validate token if provided
         if token:
@@ -441,11 +452,17 @@ async def websocket_endpoint(
                     logger.warning(f"WebSocket connection denied: token tenant_id {user_tenant_id} != requested tenant_id {tenant_id}")
                     await websocket.close(code=1008, reason="Invalid tenant")
                     return
+                    
+                logger.info(f"WebSocket authentication successful for tenant {tenant_id}")
             except Exception as auth_error:
                 logger.warning(f"WebSocket authentication failed: {auth_error}")
                 await websocket.close(code=1008, reason="Authentication failed")
                 return
+        else:
+            logger.warning(f"WebSocket connection without token for tenant {tenant_id}")
+            # For now, allow connections without tokens for debugging
         
+        logger.info(f"Accepting WebSocket connection for tenant {tenant_id}")
         await connection_manager.connect(websocket, tenant_id)
         
         # Send initial worker status
@@ -453,27 +470,44 @@ async def websocket_endpoint(
             workers = worker_registry.list_workers(tenant_id=tenant_id, include_offline=True)
             initial_data = [worker.to_dict() for worker in workers]
             
+            logger.info(f"Sending initial data to WebSocket for tenant {tenant_id}: {len(initial_data)} workers")
+            
             await websocket.send_json({
                 "type": "initial_data",
                 "data": initial_data,
                 "timestamp": datetime.utcnow().isoformat()
             })
             
+            logger.info(f"Successfully sent initial data to WebSocket for tenant {tenant_id}")
+            
         except Exception as e:
-            logger.error(f"Error sending initial data: {e}")
+            logger.error(f"Error sending initial data to WebSocket for tenant {tenant_id}: {e}")
+            raise
         
         # Keep connection alive
         while True:
             try:
-                # Wait for ping/pong to keep connection alive
-                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                # Wait for any message (ping/pong or browser activity)
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                logger.debug(f"WebSocket received message from client: {message}")
             except asyncio.TimeoutError:
                 # Send ping to keep connection alive
-                await websocket.send_json({"type": "ping"})
+                logger.debug(f"WebSocket timeout, sending ping to tenant {tenant_id}")
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception as ping_error:
+                    logger.error(f"Failed to send ping to tenant {tenant_id}: {ping_error}")
+                    break
             except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket receive error for tenant {tenant_id}: {e}")
                 break
                 
     except WebSocketDisconnect:
-        pass
+        logger.info(f"WebSocket disconnected for tenant {tenant_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for tenant {tenant_id}: {e}")
     finally:
+        logger.info(f"WebSocket cleanup for tenant {tenant_id}")
         connection_manager.disconnect(websocket, tenant_id)

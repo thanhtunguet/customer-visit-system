@@ -262,6 +262,21 @@ class ApiClient {
     return url.toString();
   }
 
+  getWorkerWebSocketUrl(tenantId: string): string {
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const token = this.token || localStorage.getItem('access_token');
+    
+    // Convert HTTP(S) URL to WebSocket URL
+    const wsProtocol = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
+    const wsBaseUrl = baseUrl.replace(/^https?:/, wsProtocol);
+    
+    const url = new URL(`${wsBaseUrl}/v1/registry/workers/ws/${tenantId}`);
+    if (token) {
+      url.searchParams.set('token', token);
+    }
+    return url.toString();
+  }
+
   // Camera Processing Control
   async startCameraProcessing(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; worker_id: string; command_id: string; processing_active: boolean }> {
     const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/processing/start`);

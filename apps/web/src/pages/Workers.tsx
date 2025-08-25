@@ -81,6 +81,7 @@ const Workers: React.FC = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [loading, setLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState<{
     total_count: number;
@@ -96,22 +97,46 @@ const Workers: React.FC = () => {
   const [siteFilter, setSiteFilter] = useState<number | undefined>(undefined);
   const [searchText, setSearchText] = useState('');
 
+  // Setup WebSocket connection once on mount
+  useEffect(() => {
+    setupWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      // Clear any pending reconnection timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, []); // No dependencies - only run once on mount
+  
+  // Load workers when filters change
   useEffect(() => {
     loadWorkers();
-    setupWebSocket();
     
     // Auto-refresh every 30 seconds (fallback)
     const interval = setInterval(loadWorkers, 30000);
     
     return () => {
       clearInterval(interval);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
     };
   }, [statusFilter, siteFilter]);
 
   const setupWebSocket = () => {
+    // Clean up existing connection first
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
+    }
+    
+    // Clear any existing reconnection timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
     const token = localStorage.getItem('access_token');
     const currentTenant = apiClient.getCurrentTenant();
     
@@ -121,7 +146,8 @@ const Workers: React.FC = () => {
     }
 
     try {
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/v1/registry/workers/ws/${currentTenant}?token=${token}`;
+      const wsUrl = apiClient.getWorkerWebSocketUrl(currentTenant);
+      console.log('Attempting WebSocket connection to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
@@ -132,6 +158,7 @@ const Workers: React.FC = () => {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          console.log('WebSocket message received:', message);
           
           if (message.type === 'initial_data') {
             setWorkers(message.data);
@@ -199,7 +226,14 @@ const Workers: React.FC = () => {
             });
           } else if (message.type === 'ping') {
             // Respond to ping
-            ws.send('pong');
+            console.log('WebSocket ping received, sending pong');
+            try {
+              ws.send('pong');
+            } catch (error) {
+              console.error('Failed to send pong:', error);
+            }
+          } else {
+            console.log('Unknown WebSocket message type:', message.type, message);
           }
           
         } catch (error) {
@@ -211,8 +245,17 @@ const Workers: React.FC = () => {
         console.log('WebSocket disconnected');
         setWsConnected(false);
         
-        // Reconnect after 5 seconds
-        setTimeout(setupWebSocket, 5000);
+        // Clear any existing timeout and set up reconnection
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        
+        // Reconnect after 5 seconds only if component is still mounted
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (wsRef.current === null || wsRef.current.readyState === WebSocket.CLOSED) {
+            setupWebSocket();
+          }
+        }, 5000);
       };
       
       ws.onerror = (error) => {
@@ -423,9 +466,9 @@ const Workers: React.FC = () => {
             <div>
               <span className="font-medium">{getCameraName(record.camera_id)}</span>
               {/* Show streaming status from worker capabilities */}
-              {record.capabilities && record.capabilities.active_camera_streams && (
+              {record.capabilities && (
                 <div className="text-xs mt-1">
-                  {record.capabilities.total_active_streams > 0 ? (
+                  {(record.capabilities.total_active_streams || 0) > 0 ? (
                     <Tag color="green" size="small">
                       Streaming ({record.capabilities.total_active_streams})
                     </Tag>
@@ -692,7 +735,7 @@ const Workers: React.FC = () => {
                 <Descriptions.Item label="Camera Assignment">
                   {selectedWorker.camera_id ? getCameraName(selectedWorker.camera_id) : 'Unassigned'}
                 </Descriptions.Item>
-                {selectedWorker.capabilities && selectedWorker.capabilities.active_camera_streams && (
+                {selectedWorker.capabilities && (
                   <>
                     <Descriptions.Item label="Active Streams">
                       <Space>
@@ -707,9 +750,9 @@ const Workers: React.FC = () => {
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label="Streaming Cameras" span={2}>
-                      {selectedWorker.capabilities.active_camera_streams.length > 0 ? (
+                      {(selectedWorker.capabilities.active_camera_streams || []).length > 0 ? (
                         <Space wrap>
-                          {selectedWorker.capabilities.active_camera_streams.map((cameraId: string) => (
+                          {(selectedWorker.capabilities.active_camera_streams || []).map((cameraId: string) => (
                             <Tag key={cameraId} color="blue">
                               Camera {cameraId}
                             </Tag>
