@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import socket
 import time
 from datetime import datetime, timezone
@@ -49,7 +50,10 @@ class WorkerClient:
             "embedder_type": config.embedder_type,
             "mock_mode": config.mock_mode,
             "fps": config.worker_fps,
-            "camera_source": "rtsp" if config.rtsp_url else "usb"
+            "camera_source": "rtsp" if config.rtsp_url else "usb",
+            "http_port": int(os.getenv("WORKER_HTTP_PORT", "8090")),
+            "streaming_enabled": True,
+            "face_processing_enabled": True
         }
         
         # Streaming service reference (set from parent worker)

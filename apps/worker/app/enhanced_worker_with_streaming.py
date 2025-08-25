@@ -639,13 +639,13 @@ def create_worker_app(worker: EnhancedFaceRecognitionWorker) -> FastAPI:
     async def start_camera_stream(camera_id: str, request: Request):
         """Start streaming for a camera (from API delegation)"""
         body = await request.json()
-        camera_config = {
-            "camera_type": body.get("camera_type", "webcam"),
-            "rtsp_url": body.get("rtsp_url"),
-            "device_index": body.get("device_index")
-        }
         
-        success = await worker.assign_camera(camera_id, camera_config)
+        success = await worker.assign_camera(
+            camera_id=camera_id,
+            camera_type=body.get("camera_type", "webcam"),
+            rtsp_url=body.get("rtsp_url"),
+            device_index=body.get("device_index")
+        )
         if not success:
             raise HTTPException(status_code=500, detail="Failed to start camera stream")
         

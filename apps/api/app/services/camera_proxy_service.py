@@ -42,10 +42,16 @@ class CameraProxyService:
         if not worker:
             return None
         
-        # Get worker HTTP endpoint (assuming workers expose HTTP on port 8090)
-        # In production, this would be configurable or discovered
-        if worker.hostname:
-            return f"http://{worker.hostname}:8090"
+        # Get worker HTTP port from capabilities, fallback to 8090
+        http_port = 8090
+        if worker.capabilities and "http_port" in worker.capabilities:
+            http_port = worker.capabilities["http_port"]
+        
+        # Try IP address first, then hostname
+        if worker.ip_address:
+            return f"http://{worker.ip_address}:{http_port}"
+        elif worker.hostname:
+            return f"http://{worker.hostname}:{http_port}"
         
         return None
     
@@ -56,11 +62,36 @@ class CameraProxyService:
         # Find worker assigned to this camera
         worker_id = camera_delegation_service.get_camera_worker(camera_id)
         if not worker_id:
-            return {
-                "success": False,
-                "error": "No worker assigned to camera",
-                "camera_id": camera_id
-            }
+            # No worker assigned yet - try to find an available worker and assign camera
+            logger.info(f"No worker assigned to camera {camera_id}, attempting auto-assignment")
+            
+            # Get available workers (basic check - could be improved)
+            available_workers = []
+            for worker in worker_registry.workers.values():
+                if (worker.is_healthy and 
+                    worker.status in ["idle", "online"] and
+                    worker.site_id and
+                    worker.worker_id not in camera_delegation_service.worker_cameras):
+                    available_workers.append(worker)
+            
+            if not available_workers:
+                return {
+                    "success": False,
+                    "error": "No available workers to assign camera",
+                    "camera_id": camera_id
+                }
+            
+            # Try to assign camera to first available worker
+            # In a production system, this would be more sophisticated
+            worker_id = available_workers[0].worker_id
+            logger.info(f"Attempting to assign camera {camera_id} to worker {worker_id}")
+            
+            # Update in-memory assignment (simplified)
+            camera_delegation_service.assignments[camera_id] = worker_id
+            camera_delegation_service.worker_cameras[worker_id] = camera_id
+            
+            # Update worker info
+            available_workers[0].camera_id = camera_id
         
         worker = worker_registry.get_worker(worker_id)
         if not worker or not worker.is_healthy:
@@ -73,7 +104,7 @@ class CameraProxyService:
         
         try:
             # Send command to worker to start streaming
-            command_result = await worker_command_service.send_command(
+            command_id = worker_command_service.send_command(
                 worker_id=worker_id,
                 command=WorkerCommand.ASSIGN_CAMERA,
                 parameters={
@@ -84,7 +115,7 @@ class CameraProxyService:
                 }
             )
             
-            if command_result.get("success"):
+            if command_id:
                 # Also try direct HTTP call to worker for immediate response
                 endpoint = self._get_worker_endpoint(worker_id)
                 if endpoint and self.http_client:
@@ -121,12 +152,12 @@ class CameraProxyService:
                     "message": "Camera stream start command sent to worker",
                     "camera_id": camera_id,
                     "worker_id": worker_id,
-                    "command_id": command_result.get("command_id")
+                    "command_id": command_id
                 }
             else:
                 return {
                     "success": False,
-                    "error": f"Failed to send start command to worker: {command_result.get('error')}",
+                    "error": "Failed to send start command to worker",
                     "camera_id": camera_id,
                     "worker_id": worker_id
                 }
@@ -155,13 +186,13 @@ class CameraProxyService:
         
         try:
             # Send command to worker to stop streaming
-            command_result = await worker_command_service.send_command(
+            command_id = worker_command_service.send_command(
                 worker_id=worker_id,
                 command=WorkerCommand.RELEASE_CAMERA,
                 parameters={"camera_id": camera_id}
             )
             
-            if command_result.get("success"):
+            if command_id:
                 # Also try direct HTTP call to worker
                 endpoint = self._get_worker_endpoint(worker_id)
                 if endpoint and self.http_client:
@@ -191,12 +222,12 @@ class CameraProxyService:
                     "message": "Camera stream stop command sent to worker",
                     "camera_id": camera_id,
                     "worker_id": worker_id,
-                    "command_id": command_result.get("command_id")
+                    "command_id": command_id
                 }
             else:
                 return {
                     "success": False,
-                    "error": f"Failed to send stop command to worker: {command_result.get('error')}",
+                    "error": "Failed to send stop command to worker",
                     "camera_id": camera_id,
                     "worker_id": worker_id
                 }
