@@ -7,11 +7,12 @@ from typing import Optional
 
 import httpx
 from pydantic import BaseModel
+from common.models import FaceDetectedEvent
 
 
 API_URL = os.getenv("API_URL", "http://api:8080")
 TENANT_ID = os.getenv("TENANT_ID", "t-dev")
-SITE_ID = os.getenv("SITE_ID", "1")
+SITE_ID = os.getenv("SITE_ID", "s-1")
 CAMERA_ID = os.getenv("CAMERA_ID", "c-1")
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "dev-api-key")
 
@@ -34,8 +35,8 @@ async def get_token(client: httpx.AsyncClient) -> str:
 async def simulate_event_post(token: str, client: httpx.AsyncClient) -> None:
     evt = FaceDetectedEvent(
         tenant_id=TENANT_ID,
-        site_id=SITE_ID,
-        camera_id=CAMERA_ID,
+        site_id=int(SITE_ID),
+        camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
         timestamp=datetime.now(timezone.utc),
         embedding=[0.0] * 512,
         bbox=[10, 10, 100, 100],
@@ -76,7 +77,7 @@ logger = logging.getLogger(__name__)
 # Configuration from environment (will be replaced by config object later)
 API_URL = os.getenv("API_URL", "http://localhost:8080")
 TENANT_ID = os.getenv("TENANT_ID", "t-dev")
-SITE_ID = os.getenv("SITE_ID", "1")
+SITE_ID = os.getenv("SITE_ID", "s-1")
 CAMERA_ID = os.getenv("CAMERA_ID", "c-1")
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "dev-api-key")
 DETECTOR_TYPE = os.getenv("DETECTOR_TYPE", "yunet")
@@ -95,7 +96,9 @@ class WorkerConfig:
         # API Configuration
         self.api_url = os.getenv("API_URL", "http://localhost:8080")
         self.tenant_id = os.getenv("TENANT_ID", "t-dev")
-        self.site_id = os.getenv("SITE_ID", "1")
+        site_id_str = os.getenv("SITE_ID", "1")
+        # Handle both prefixed (s-1) and plain (1) formats
+        self.site_id = int(site_id_str.split('-')[1]) if site_id_str.startswith('s-') else int(site_id_str)
         # camera_id is now assigned by backend, not from env
         self.camera_id = None  # Will be set by WorkerClient after registration
         self.worker_api_key = os.getenv("WORKER_API_KEY", "dev-api-key")
@@ -144,17 +147,7 @@ class WorkerConfig:
 config = WorkerConfig()
 
 
-class FaceDetectedEvent(BaseModel):
-    tenant_id: str
-    site_id: str
-    camera_id: str
-    timestamp: datetime
-    embedding: List[float]
-    bbox: List[float]
-    confidence: float = 0.0
-    snapshot_url: Optional[str] = None
-    is_staff_local: bool = False
-    staff_id: Optional[str] = None
+# Import FaceDetectedEvent from common instead of defining it locally
 
 
 class FaceRecognitionWorker:
@@ -564,7 +557,7 @@ class FaceRecognitionWorker:
                 event = FaceDetectedEvent(
                     tenant_id=self.config.tenant_id,
                     site_id=self.config.site_id,
-                    camera_id=str(assigned_camera_id),
+                    camera_id=assigned_camera_id,
                     timestamp=datetime.now(timezone.utc),
                     embedding=embedding,
                     bbox=bbox,

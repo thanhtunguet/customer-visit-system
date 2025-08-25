@@ -109,12 +109,10 @@ class EnhancedFaceRecognitionWorker(FaceRecognitionWorker):
                 event = FaceDetectedEvent(
                     tenant_id=self.config.tenant_id,
                     site_id=self.config.site_id,
-                    camera_id=self.config.camera_id or "enhanced_worker",
+                    camera_id=int(self.config.camera_id) if self.config.camera_id else 1,
                     timestamp=datetime.now(timezone.utc),
                     embedding=embedding,
                     bbox=bbox,
-                    confidence=confidence,
-                    landmarks=landmarks,
                     is_staff_local=is_staff_local,
                     staff_id=staff_id if is_staff_local else None
                 )

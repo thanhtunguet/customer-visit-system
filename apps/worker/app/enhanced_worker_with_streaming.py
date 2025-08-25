@@ -302,7 +302,7 @@ class EnhancedFaceRecognitionWorker:
                 event = FaceDetectedEvent(
                     tenant_id=self.config.tenant_id,
                     site_id=self.config.site_id,
-                    camera_id=str(assigned_camera_id),
+                    camera_id=assigned_camera_id,
                     timestamp=datetime.now(timezone.utc),
                     embedding=embedding,
                     bbox=bbox,

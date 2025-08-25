@@ -15,6 +15,7 @@ class FaceDetectedEvent(BaseModel):
     bbox: List[float] = Field(min_length=4, max_length=4)
     snapshot_url: Optional[HttpUrl] | None = None
     is_staff_local: bool = False
+    staff_id: Optional[str] = None
 
 
 class VisitRecord(BaseModel):

@@ -170,12 +170,11 @@ async def test_api_retry_logic(worker):
     # Create test event
     event = FaceDetectedEvent(
         tenant_id="test-tenant",
-        site_id="test-site", 
-        camera_id="test-camera",
+        site_id=1, 
+        camera_id=1,
         timestamp=datetime.now(timezone.utc),
         embedding=[0.1] * 512,
         bbox=[0, 0, 100, 100],
-        confidence=0.9,
     )
     
     # Mock API failure then success
@@ -205,12 +204,11 @@ async def test_failed_event_queuing(worker):
     # Create test event
     event = FaceDetectedEvent(
         tenant_id="test-tenant",
-        site_id="test-site",
-        camera_id="test-camera", 
+        site_id=1, 
+        camera_id=1,
         timestamp=datetime.now(timezone.utc),
         embedding=[0.1] * 512,
         bbox=[0, 0, 100, 100],
-        confidence=0.9,
     )
     
     # Mock API failure
@@ -290,12 +288,11 @@ def test_face_detected_event_serialization():
     """Test that FaceDetectedEvent serializes correctly"""
     event = FaceDetectedEvent(
         tenant_id="test-tenant",
-        site_id="test-site", 
-        camera_id="test-camera",
+        site_id=1, 
+        camera_id=1,
         timestamp=datetime.now(timezone.utc),
         embedding=[0.1] * 512,
         bbox=[0, 0, 100, 100],
-        confidence=0.95,
         is_staff_local=True,
         staff_id="staff-123"
     )
