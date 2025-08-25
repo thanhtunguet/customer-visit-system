@@ -7,6 +7,7 @@ import {
   User, UserCreate, UserUpdate, UserPasswordUpdate
 } from '../types/api';
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
+import axios, { AxiosInstance } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -56,6 +57,10 @@ class ApiClient {
       // Token expired, clean up
       this.logout();
     }
+  }
+
+  get baseURL(): string {
+    return this.client.defaults.baseURL || `${API_BASE_URL}/v1`;
   }
 
   // Auth methods
