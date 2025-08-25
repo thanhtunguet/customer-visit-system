@@ -83,6 +83,9 @@ class EnhancedFaceRecognitionWorker:
         # Start shutdown monitor task
         self.shutdown_monitor_task = asyncio.create_task(self._monitor_shutdown())
         
+        # Start background face processing task
+        self.face_processing_task = asyncio.create_task(self._process_frames_background())
+        
         logger.info("Enhanced worker initialized successfully")
     
     async def shutdown(self):
@@ -107,6 +110,9 @@ class EnhancedFaceRecognitionWorker:
         
         if hasattr(self, 'shutdown_monitor_task') and self.shutdown_monitor_task and not self.shutdown_monitor_task.done():
             tasks_to_cancel.append(self.shutdown_monitor_task)
+        
+        if hasattr(self, 'face_processing_task') and self.face_processing_task and not self.face_processing_task.done():
+            tasks_to_cancel.append(self.face_processing_task)
         
         # Cancel all tasks
         for task in tasks_to_cancel:
@@ -469,6 +475,45 @@ class EnhancedFaceRecognitionWorker:
             except Exception as e:
                 logger.error(f"Error in shutdown monitor: {e}")
                 await asyncio.sleep(check_interval)
+
+    async def _process_frames_background(self):
+        """Background task to process frames for face detection when streaming is active"""
+        logger.info("Starting background face processing task")
+        
+        while True:
+            try:
+                if self._shutdown_requested:
+                    break
+                
+                # Check all active camera streams for frames that need processing
+                if hasattr(self.streaming_service, 'streams'):
+                    for camera_id, stream_info in self.streaming_service.streams.items():
+                        if (stream_info.is_active and 
+                            stream_info.needs_face_processing and 
+                            stream_info.latest_frame_for_processing is not None):
+                            
+                            try:
+                                # Process the frame
+                                frame = stream_info.latest_frame_for_processing
+                                await self._process_frame_for_faces(frame)
+                                
+                                # Mark as processed
+                                stream_info.needs_face_processing = False
+                                stream_info.latest_frame_for_processing = None
+                                
+                            except Exception as e:
+                                logger.error(f"Error processing frame for camera {camera_id}: {e}")
+                                stream_info.needs_face_processing = False
+                
+                # Sleep briefly before checking again
+                await asyncio.sleep(0.1)  # Check 10 times per second
+                
+            except asyncio.CancelledError:
+                logger.info("Background face processing task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in background face processing: {e}")
+                await asyncio.sleep(1)  # Wait longer on error
 
     
     async def _send_stop_signal_to_backend(self):

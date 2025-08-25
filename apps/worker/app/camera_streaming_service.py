@@ -28,6 +28,9 @@ class StreamInfo:
     last_frame_time: float = field(default_factory=time.time, init=False)
     error_count: int = field(default=0, init=False)
     max_retries: int = field(default=5, init=False)
+    # Fields for async face processing
+    latest_frame_for_processing: Optional[np.ndarray] = field(default=None, init=False)
+    needs_face_processing: bool = field(default=False, init=False)
 
 
 class WorkerCameraStreamingService:
@@ -84,12 +87,13 @@ class WorkerCameraStreamingService:
                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Process frame for face recognition if callback is set
-                if self.face_processor_callback and frame is not None:
+                # Process every 10th frame to reduce CPU load (same as stream_frames logic)
+                if self.face_processor_callback and frame is not None and frame_count % 10 == 0:
                     try:
-                        # Schedule face processing without blocking the capture thread
-                        # We can't use asyncio.create_task from a sync thread, so we'll use a different approach
-                        # The face processing will be handled by the streaming consumer instead
-                        pass  # Face processing moved to streaming consumer
+                        # Store the frame for async processing by scheduling it in the main event loop
+                        # We'll use a simple approach: store the frame and let it be processed elsewhere
+                        stream_info.latest_frame_for_processing = frame.copy()
+                        stream_info.needs_face_processing = True
                     except Exception as face_error:
                         logger.debug(f"Face processing error: {face_error}")
                 
@@ -318,19 +322,8 @@ class WorkerCameraStreamingService:
         while self.is_stream_active(camera_id):
             frame_bytes = self.get_frame(camera_id)
             if frame_bytes:
-                # Process face detection on every 10th frame (to reduce CPU load)
-                if self.face_processor_callback and frame_count % 10 == 0:
-                    try:
-                        # Decode frame for face processing
-                        import numpy as np
-                        nparr = np.frombuffer(frame_bytes, np.uint8)
-                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        
-                        if frame is not None:
-                            # Process face detection asynchronously
-                            await self.face_processor_callback(frame)
-                    except Exception as face_error:
-                        logger.debug(f"Face processing error: {face_error}")
+                # Face processing now happens in background task (_process_frames_background)
+                # No need to process faces here since it's handled automatically
                 
                 # Yield MJPEG frame
                 yield b'--frame\r\n'
