@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from common.enums.worker import WorkerStatus
 from common.enums.commands import WorkerCommand
+from .worker_id_manager import worker_id_manager
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,14 @@ class WorkerClient:
         
         logger.info("Worker client shutdown complete")
     
+    async def clear_persistent_id(self):
+        """Clear the persistent worker ID (for complete shutdown/reset)"""
+        try:
+            worker_id_manager.clear_worker_id()
+            logger.info("Cleared persistent worker ID")
+        except Exception as e:
+            logger.warning(f"Failed to clear persistent worker ID: {e}")
+    
     async def _authenticate(self):
         """Get JWT token for API access"""
         try:
@@ -179,6 +188,12 @@ class WorkerClient:
     
     async def _register_worker(self):
         """Register worker with backend"""
+        # Get or create persistent worker ID
+        persistent_worker_id = worker_id_manager.get_or_create_worker_id(
+            tenant_id=self.config.tenant_id,
+            site_id=str(self.config.site_id) if self.config.site_id else None
+        )
+        
         for attempt in range(self.max_registration_retries):
             try:
                 # Authenticate first
@@ -186,12 +201,13 @@ class WorkerClient:
                     continue
                 
                 registration_data = {
+                    "worker_id": persistent_worker_id,  # Use persistent ID
                     "worker_name": self.worker_name,
                     "hostname": self.hostname,
                     "worker_version": self.worker_version,
                     "capabilities": self.capabilities,
                     "site_id": self._parse_site_id(),
-                    # camera_id is removed - backend will auto-assign
+                    "is_reconnection": self.worker_id is not None,  # Flag for API to know this is a reconnection
                 }
                 
                 response = await self.http_client.post(
@@ -202,7 +218,14 @@ class WorkerClient:
                 response.raise_for_status()
                 
                 result = response.json()
-                self.worker_id = result["worker_id"]
+                self.worker_id = result.get("worker_id", persistent_worker_id)
+                
+                # Update persistent storage with successful registration
+                worker_id_manager.update_last_used(
+                    worker_id=self.worker_id,
+                    tenant_id=self.config.tenant_id,
+                    site_id=str(self.config.site_id) if self.config.site_id else None
+                )
                 
                 # Capture camera assignment
                 if "assigned_camera_id" in result and result["assigned_camera_id"]:
@@ -211,11 +234,26 @@ class WorkerClient:
                 else:
                     logger.info(f"Worker registered but no camera assigned")
                 
-                logger.info(f"Worker registered successfully: {result['message']}")
+                status = "reconnected" if registration_data["is_reconnection"] else "registered"
+                logger.info(f"Worker {status} successfully: {result.get('message', 'Success')}")
                 return
                 
             except Exception as e:
                 logger.error(f"Worker registration failed (attempt {attempt + 1}/{self.max_registration_retries}): {e}")
+                
+                # If we're using a persistent worker ID and getting 404/403 errors, 
+                # it might be stale - try clearing it on the last attempt
+                if (attempt == self.max_registration_retries - 1 and 
+                    persistent_worker_id and 
+                    hasattr(e, 'response') and 
+                    e.response and e.response.status_code in [404, 403]):
+                    logger.warning("Clearing potentially stale worker ID for fresh registration")
+                    worker_id_manager.clear_worker_id()
+                    # Create a new ID for potential retry
+                    persistent_worker_id = worker_id_manager.get_or_create_worker_id(
+                        tenant_id=self.config.tenant_id,
+                        site_id=str(self.config.site_id) if self.config.site_id else None
+                    )
                 
                 if attempt < self.max_registration_retries - 1:
                     wait_time = 2 ** attempt  # Exponential backoff

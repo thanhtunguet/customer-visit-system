@@ -643,7 +643,6 @@ async def camera_status_stream(
     return await camera_status_broadcaster.stream_site_status(site_id_str, request)
 
 
-@router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
 async def get_camera_stream_feed(
     site_id: int,
     camera_id: int,
@@ -652,6 +651,8 @@ async def get_camera_stream_feed(
 ):
     """Get live video feed for a camera (MJPEG stream)"""
     tenant_id = user["tenant_id"]
+    logger.info(f"Stream feed requested for camera {camera_id} in site {site_id} by tenant {tenant_id}")
+    
     await db.set_tenant_context(db_session, tenant_id)
     
     # Verify camera exists
@@ -666,15 +667,27 @@ async def get_camera_stream_feed(
     )
     camera = result.scalar_one_or_none()
     if not camera:
+        logger.error(f"Camera {camera_id} not found for tenant {tenant_id} in site {site_id}")
         raise HTTPException(status_code=404, detail="Camera not found")
+    
+    logger.info(f"Camera {camera_id} found: {camera.name} (active: {camera.is_active})")
     
     # Proxy stream from worker
     try:
+        logger.info(f"Starting proxy stream for camera {camera_id}")
+        
+        # Create an async generator wrapper that properly handles the coroutine
+        async def stream_wrapper():
+            async for chunk in camera_proxy_service.proxy_camera_stream(camera_id):
+                yield chunk
+        
+        logger.info(f"Returning streaming response for camera {camera_id}")
         return StreamingResponse(
-            camera_proxy_service.proxy_camera_stream(camera_id),
+            stream_wrapper(),
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
     except ValueError as e:
+        logger.error(f"Camera stream proxy error for camera {camera_id}: {e}")
         raise HTTPException(status_code=404, detail=str(e))
 
 

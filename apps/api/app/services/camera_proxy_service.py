@@ -344,36 +344,66 @@ class CameraProxyService:
     
     async def proxy_camera_stream(self, camera_id: int) -> AsyncGenerator[bytes, None]:
         """Proxy MJPEG stream from worker to client"""
+        logger.info(f"Starting proxy stream for camera {camera_id}")
+        
         worker_id = camera_delegation_service.get_camera_worker(camera_id)
         if not worker_id:
+            logger.error(f"No worker assigned to camera {camera_id}")
             raise ValueError("No worker assigned to camera")
         
+        logger.info(f"Camera {camera_id} assigned to worker {worker_id}")
+        
         worker = worker_registry.get_worker(worker_id)
-        if not worker or not worker.is_healthy:
+        if not worker:
+            logger.error(f"Worker {worker_id} not found in registry")
             raise ValueError("Assigned worker is not available")
+        
+        if not worker.is_healthy:
+            logger.error(f"Worker {worker_id} is not healthy (status: {worker.status})")
+            raise ValueError("Assigned worker is not available")
+        
+        logger.info(f"Worker {worker_id} is healthy, getting endpoint")
         
         endpoint = self._get_worker_endpoint(worker_id)
         if not endpoint:
+            logger.error(f"No endpoint available for worker {worker_id}")
             raise ValueError("Worker endpoint not available")
         
+        logger.info(f"Worker {worker_id} endpoint: {endpoint}")
+        
         if not self.http_client:
+            logger.error("HTTP client not initialized")
             raise ValueError("HTTP client not initialized")
+        
+        stream_url = f"{endpoint}/cameras/{camera_id}/stream/feed"
+        logger.info(f"Attempting to proxy stream from: {stream_url}")
         
         try:
             async with self.http_client.stream(
                 "GET",
-                f"{endpoint}/cameras/{camera_id}/stream/feed",
+                stream_url,
                 timeout=None  # No timeout for streaming
             ) as response:
+                logger.info(f"Worker stream response status: {response.status_code}")
+                
                 if response.status_code != 200:
+                    response_text = await response.aread()
+                    logger.error(f"Worker stream returned status {response.status_code}, body: {response_text[:500]}")
                     raise ValueError(f"Worker stream returned status {response.status_code}")
                 
+                logger.info(f"Successfully connected to worker stream, starting proxy")
+                chunk_count = 0
                 async for chunk in response.aiter_bytes():
+                    chunk_count += 1
+                    if chunk_count % 100 == 0:  # Log every 100 chunks
+                        logger.debug(f"Proxied {chunk_count} chunks for camera {camera_id}")
                     yield chunk
                     
-        except httpx.ConnectError:
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to worker {worker_id} at {endpoint}: {e}")
             raise ValueError("Failed to connect to worker")
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
+            logger.error(f"Worker stream timeout for worker {worker_id}: {e}")
             raise ValueError("Worker stream timeout")
         except Exception as e:
             logger.error(f"Error proxying stream from worker {worker_id}: {e}")
@@ -425,12 +455,12 @@ class CameraProxyService:
         """Broadcast camera status change to SSE clients"""
         try:
             from .camera_status_broadcaster import camera_status_broadcaster
-            from ..core.database import get_db_session
+            from ..core.database import db
             from ..models.database import Camera
             from sqlalchemy import select
             
-            # Get site_id for this camera
-            async with get_db_session() as db_session:
+            # Get site_id for this camera using the correct database access pattern
+            async with db.get_session() as db_session:
                 result = await db_session.execute(
                     select(Camera.site_id, Camera.tenant_id).where(Camera.camera_id == camera_id)
                 )

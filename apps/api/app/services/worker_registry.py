@@ -176,6 +176,7 @@ class WorkerRegistry:
         site_id: Optional[int] = None,
         camera_id: Optional[int] = None,
         db_session=None,
+        preferred_worker_id: Optional[str] = None,
     ) -> WorkerInfo:
         """Register a new worker or update existing one"""
         
@@ -200,8 +201,32 @@ class WorkerRegistry:
                     logger.info(f"Worker {worker.worker_id} ({hostname}) updated for tenant {tenant_id}")
                     return worker
         
-        # Create new worker
-        worker_id = str(uuid.uuid4())
+        # Create new worker with preferred ID if provided
+        if preferred_worker_id:
+            # Check if preferred ID is already in use
+            if preferred_worker_id in self.workers:
+                logger.warning(f"Preferred worker ID {preferred_worker_id} already in use, updating existing worker")
+                existing_worker = self.workers[preferred_worker_id]
+                # Update existing worker with new registration data
+                existing_worker.hostname = hostname
+                existing_worker.ip_address = ip_address
+                existing_worker.worker_name = worker_name
+                existing_worker.worker_version = worker_version
+                existing_worker.capabilities = capabilities or {}
+                existing_worker.site_id = site_id
+                existing_worker.camera_id = camera_id
+                existing_worker.status = WorkerStatus.IDLE
+                existing_worker.last_heartbeat = datetime.utcnow()
+                
+                await self._notify_callbacks("worker_reconnected", existing_worker)
+                logger.info(f"Worker {preferred_worker_id} ({hostname}) reconnected for tenant {tenant_id}")
+                return existing_worker
+            else:
+                worker_id = preferred_worker_id
+                logger.info(f"Using preferred worker ID: {worker_id}")
+        else:
+            worker_id = str(uuid.uuid4())
+        
         worker = WorkerInfo(
             worker_id=worker_id,
             tenant_id=tenant_id,

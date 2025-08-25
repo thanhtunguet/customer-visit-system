@@ -25,12 +25,14 @@ class UserInfo(BaseModel):
 
 
 class WorkerRegistrationRequest(BaseModel):
+    worker_id: Optional[str] = Field(None, description="Persistent worker ID for reconnection")
     worker_name: str = Field(..., description="Human-readable worker name")
     hostname: str = Field(..., description="Worker hostname")
     worker_version: Optional[str] = Field(None, description="Worker version")
     capabilities: Optional[Dict[str, Any]] = Field(None, description="Worker capabilities")
     site_id: Optional[int] = Field(None, description="Optional site assignment")
     camera_id: Optional[int] = Field(None, description="Optional camera assignment")
+    is_reconnection: Optional[bool] = Field(False, description="Flag indicating this is a reconnection")
 
 
 class WorkerHeartbeatRequest(BaseModel):
@@ -180,7 +182,35 @@ async def register_worker(
     
     client_ip = get_client_ip(request)
     
-    # Register worker in memory
+    # Handle persistent worker ID for reconnections
+    use_persistent_id = registration.worker_id and registration.is_reconnection
+    
+    if use_persistent_id:
+        logger.info(f"Worker reconnection attempt with ID: {registration.worker_id}")
+        
+        # Check if worker with this ID already exists and update it
+        existing_worker = worker_registry.get_worker(registration.worker_id)
+        if existing_worker:
+            logger.info(f"Updating existing worker {registration.worker_id} for reconnection")
+            # Update existing worker info
+            existing_worker.hostname = registration.hostname
+            existing_worker.ip_address = client_ip
+            existing_worker.worker_name = registration.worker_name
+            existing_worker.worker_version = registration.worker_version
+            existing_worker.capabilities = registration.capabilities
+            existing_worker.site_id = registration.site_id
+            existing_worker.status = WorkerStatus.ONLINE
+            existing_worker.last_heartbeat = datetime.utcnow()
+            
+            return {
+                "worker_id": existing_worker.worker_id,
+                "message": f"Worker reconnected successfully as {existing_worker.worker_name}",
+                "status": "reconnected",
+                "assigned_camera_id": existing_worker.camera_id,
+                "site_id": existing_worker.site_id,
+            }
+    
+    # Register new worker or worker with persistent ID
     worker = await worker_registry.register_worker(
         tenant_id=current_user.tenant_id,
         hostname=registration.hostname,
@@ -191,12 +221,14 @@ async def register_worker(
         site_id=registration.site_id,
         camera_id=registration.camera_id,
         db_session=db,
+        preferred_worker_id=registration.worker_id if use_persistent_id else None,
     )
     
+    status = "reconnected" if use_persistent_id else "registered"
     return {
         "worker_id": worker.worker_id,
-        "message": f"Worker registered successfully as {worker.worker_name}",
-        "status": "registered",
+        "message": f"Worker {status} successfully as {worker.worker_name}",
+        "status": status,
         "assigned_camera_id": worker.camera_id,
         "site_id": worker.site_id,
     }

@@ -592,7 +592,8 @@ class EnhancedFaceRecognitionWorker:
     
     async def get_camera_frame_stream(self, camera_id: str):
         """Get MJPEG stream for a camera"""
-        return self.streaming_service.stream_frames(camera_id)
+        async for chunk in self.streaming_service.stream_frames(camera_id):
+            yield chunk
 
 
 # FastAPI app for worker HTTP endpoints
@@ -621,8 +622,12 @@ def create_worker_app(worker: EnhancedFaceRecognitionWorker) -> FastAPI:
         if not worker.is_camera_active(camera_id):
             raise HTTPException(status_code=404, detail="Camera stream not active")
         
+        async def stream_wrapper():
+            async for chunk in worker.streaming_service.stream_frames(camera_id):
+                yield chunk
+        
         return StreamingResponse(
-            worker.get_camera_frame_stream(camera_id),
+            stream_wrapper(),
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
     

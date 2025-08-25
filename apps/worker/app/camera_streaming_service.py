@@ -86,8 +86,10 @@ class WorkerCameraStreamingService:
                 # Process frame for face recognition if callback is set
                 if self.face_processor_callback and frame is not None:
                     try:
-                        # Process face detection in background (don't block streaming)
-                        asyncio.create_task(self.face_processor_callback(frame.copy()))
+                        # Schedule face processing without blocking the capture thread
+                        # We can't use asyncio.create_task from a sync thread, so we'll use a different approach
+                        # The face processing will be handled by the streaming consumer instead
+                        pass  # Face processing moved to streaming consumer
                     except Exception as face_error:
                         logger.debug(f"Face processing error: {face_error}")
                 
@@ -309,18 +311,37 @@ class WorkerCameraStreamingService:
             }
 
     async def stream_frames(self, camera_id: str) -> AsyncGenerator[bytes, None]:
-        """Stream frames for MJPEG output"""
+        """Stream frames for MJPEG output with face processing"""
         camera_id = str(camera_id)
+        frame_count = 0
+        
         while self.is_stream_active(camera_id):
-            frame = self.get_frame(camera_id)
-            if frame:
+            frame_bytes = self.get_frame(camera_id)
+            if frame_bytes:
+                # Process face detection on every 10th frame (to reduce CPU load)
+                if self.face_processor_callback and frame_count % 10 == 0:
+                    try:
+                        # Decode frame for face processing
+                        import numpy as np
+                        nparr = np.frombuffer(frame_bytes, np.uint8)
+                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        if frame is not None:
+                            # Process face detection asynchronously
+                            await self.face_processor_callback(frame)
+                    except Exception as face_error:
+                        logger.debug(f"Face processing error: {face_error}")
+                
+                # Yield MJPEG frame
                 yield b'--frame\r\n'
                 yield b'Content-Type: image/jpeg\r\n\r\n'
-                yield frame
+                yield frame_bytes
                 yield b'\r\n'
+                
+                frame_count += 1
             else:
                 # No frame available, wait a bit
-                await asyncio.sleep(1/30)  # ~30 FPS
+                await asyncio.sleep(1/30)  # ~30 FPS  # ~30 FPS
 
     def get_device_status(self) -> Dict:
         """Get status of all devices and conflicts"""
