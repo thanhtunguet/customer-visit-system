@@ -632,7 +632,7 @@ async def get_streaming_overview(
 async def camera_status_stream(
     site_id: int,
     request: Request,
-    user: Dict = Depends(get_current_user)
+    user: Dict = Depends(get_current_user_for_stream)
 ):
     """Server-Sent Events stream for real-time camera status updates"""
     from ..services.camera_status_broadcaster import camera_status_broadcaster

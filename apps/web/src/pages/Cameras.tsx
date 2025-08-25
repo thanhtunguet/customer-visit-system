@@ -81,11 +81,11 @@ export const Cameras: React.FC = () => {
           
           // Set up SSE for real-time updates
           const token = localStorage.getItem('access_token');
-          eventSource = new EventSource(`${apiClient.baseURL}/sites/${selectedSite}/cameras/status-stream`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          } as any);
+          const sseUrl = new URL(`${apiClient.baseURL}/sites/${selectedSite}/cameras/status-stream`);
+          if (token) {
+            sseUrl.searchParams.set('access_token', token);
+          }
+          eventSource = new EventSource(sseUrl.toString());
           
           eventSource.onmessage = (event) => {
             try {
