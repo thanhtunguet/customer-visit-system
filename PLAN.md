@@ -28,21 +28,49 @@ Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Mi
 
 ⸻
 
-2. Data & Schemas
+2. Architecture Migration & Enhancements
 
-2.1 PostgreSQL schema & RLS
+2.1 Camera Processing Migration (API → Worker)
+	•	**✅ COMPLETE**: Migrated camera streaming and face recognition from API to Workers
+	•	**New Architecture**: Frontend → API (proxy) → Worker → Camera Streaming
+	•	**New Components**: 
+		- Enhanced Worker with HTTP endpoints (apps/worker/app/enhanced_worker_with_streaming.py)
+		- Camera Streaming Service (apps/worker/app/camera_streaming_service.py)
+		- Camera Proxy Service (apps/api/app/services/camera_proxy_service.py)
+		- Worker Registry and Command Services for delegation
+	•	**Benefits**: Scalability, reliability, performance, distributed processing
+	•	**Config**: USE_ENHANCED_WORKER=true enables new architecture
+	•	DoD: Proxy streaming works; worker delegation functional; face events flow correctly.
+
+2.2 Staff Face Management Enhancement  
+	•	**✅ COMPLETE**: Multiple face images per staff member with landmarks and embeddings
+	•	**New Database**: staff_face_images table with face processing pipeline
+	•	**New Services**: FaceProcessingService for detection, landmarks, embeddings
+	•	**New APIs**: Staff face CRUD, recognition testing, recalculation endpoints
+	•	**New UI**: StaffFaceGallery, FaceRecognitionTest, StaffDetailsModal components
+	•	**Features**: Drag-drop upload, similarity testing, primary image designation
+	•	DoD: Multiple faces per staff; recognition testing works; UI integrated.
+
+⸻
+
+3. Data & Schemas
+
+3.1 PostgreSQL schema & RLS
 	•	Deliverable: SQL migrations for tenants, sites, cameras, staff, customers, visits, api_keys. RLS on tenant-scoped tables.
+	•	**✅ ENHANCED**: Added staff_face_images table for multiple face images per staff
+	•	**New**: StaffFaceImage model with face_landmarks, face_embedding, is_primary fields
+	•	**New**: Foreign key constraints with cascade deletion for data integrity
 	•	DoD: make migrate applies; RLS test proves cross-tenant leak impossible.
 
-2.2 Milvus collection & indexes
+3.2 Milvus collection & indexes
 	•	Deliverable: face_embeddings (dim=512, metric=cosine), partitions per tenant_id; IVF index config (nlist/nprobe).
 	•	DoD: Insert/search e2e test <100ms p95 on sample data (≥100k vectors).
 
-2.3 MinIO buckets & lifecycle
+3.3 MinIO buckets & lifecycle
 	•	Deliverable: Buckets faces-raw, faces-derived; 30-day lifecycle on raw; presigned URL helper.
 	•	DoD: Object older than 30 days is auto-deleted in sandbox; presigned URL works.
 
-2.4 JSON contracts
+3.4 JSON contracts
 	•	Deliverable: Versioned JSON Schemas in contracts/:
 	•	Event.FaceDetected.v1
 	•	VisitRecord.v1
@@ -51,173 +79,190 @@ Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Mi
 
 ⸻
 
-3. API Backend (FastAPI)
+4. API Backend (FastAPI)
 
-3.1 AuthN/Z & multi-tenant guard
+4.1 AuthN/Z & multi-tenant guard
 	•	Deliverable: JWT (HS/RS), roles: system_admin / tenant_admin / site_manager / worker; dependency injects tenant_ctx.
 	•	DoD: Protected endpoints return 401/403 as expected; RLS enforced.
 
-3.2 Core endpoints (v1)
+4.2 Core endpoints (v1)
 	•	Deliverable:
 	•	Tenants/Sites/Cameras CRUD
 	•	Staff CRUD (enrollment stores embeddings tagged is_staff)
+	•	**✅ ENHANCED**: Staff Face Management - Multiple face images per staff member
+	•	**New**: GET /v1/staff/{staff_id}/faces - List all face images for staff
+	•	**New**: POST /v1/staff/{staff_id}/faces - Upload face images with landmarks & embeddings
+	•	**New**: DELETE /v1/staff/{staff_id}/faces/{image_id} - Delete face images
+	•	**New**: POST /v1/staff/{staff_id}/test-recognition - Test recognition accuracy
 	•	Events intake: POST /v1/events/face (embedding+meta)
 	•	Matching: server queries Milvus, returns person_id|new
 	•	Visits query: paginated, filter by time/site
 	•	Reports: visitor counts (hour/day/week/month), new vs repeat, gender, DOW
 	•	DoD: OpenAPI docs; Postman collection; integration tests green.
 
-3.3 Background jobs
+4.3 Background jobs
 	•	Deliverable: Scheduler (APScheduler/Celery) for: raw image purge verify, report materialization, staff cache refresh.
 	•	DoD: Jobs visible in logs; idempotent; unit tests.
 
-3.4 Performance controls
+4.4 Performance controls
 	•	Deliverable: Batch insert, DB indexes, Milvus search params (nprobe) via env.
 	•	DoD: Load test: sustain ≥50 events/s aggregate with p95 API <300ms on dev hardware.
 
 ⸻
 
-4. Edge Worker (Mac Mini)
+5. Edge Worker (Mac Mini) - **UPDATED: Now Enhanced Worker with HTTP Endpoints**
 
-4.1 Capture & decode
+5.1 Capture & decode
 	•	Deliverable: RTSP/USB capture via OpenCV/FFmpeg, frame throttling (e.g., 5 FPS), motion gate (optional).
+	•	**✅ COMPLETE**: Enhanced Worker with full camera streaming service and device management
+	•	**New**: HTTP endpoints for camera control and streaming proxy support
 	•	DoD: Works with RTSP test source; configurable fps/skip.
 
-4.2 Detection & alignment
+5.2 Detection & alignment
 	•	Deliverable: YuNet (fast) and RetinaFace (accurate) selectable; 5-point alignment.
+	•	**✅ COMPLETE**: Enhanced detector pipeline with multiple face processing models
 	•	DoD: Detector unit test on sample images: ≥95% recall on provided set.
 
-4.3 Embeddings
+5.3 Embeddings
 	•	Deliverable: InsightFace ArcFace (512-D) via ONNX/PyTorch (M-series friendly); L2-norm; cosine similarity.
+	•	**✅ COMPLETE**: Production-ready embedding generation with graceful fallbacks
 	•	DoD: Embedding consistency test (same face >0.6 cosine; different <0.4 on sample set).
 
-4.4 Staff pre-filter
+5.4 Staff pre-filter
 	•	Deliverable: In-memory staff gallery per site; local match before upload.
+	•	**✅ COMPLETE**: Enhanced staff pre-filtering with multiple face images per staff
 	•	DoD: Staff not sent as customer events; unit tests.
 
-4.5 Event upload & resilience
+5.5 Event upload & resilience
 	•	Deliverable: Signed requests to API with backoff; local disk queue for outages; snapshot JPEG optional.
+	•	**✅ COMPLETE**: Full resilience with enhanced worker HTTP server
 	•	DoD: Network cut test: events buffered and replayed; no loss.
 
-4.6 Packaging & ops
+5.6 Packaging & ops
 	•	Deliverable: Docker (arm64) & native runner; scripts/mac/setup.zsh; env-based config.
+	•	**✅ COMPLETE**: Enhanced worker with HTTP server option (USE_ENHANCED_WORKER=true)
+	•	**New**: Worker HTTP endpoints for camera streaming and status monitoring
 	•	DoD: ./run-worker.sh starts service on Mac; logs to file/syslog.
 
 ⸻
 
-5. Matching & Identity
+6. Matching & Identity
 
-5.1 Server-side search & thresholding
+6.1 Server-side search & thresholding
 	•	Deliverable: Top-K (k=5) search, calibrated threshold; create-or-link customer; multi-embedding per person; optional centroid.
 	•	DoD: Confusion matrix on validation set; target FAR <1% @ TAR ≥95% (sample data).
 
-5.2 Cross-tenant policy
+6.2 Cross-tenant policy
 	•	Deliverable: Default: search within tenant partition; config flag for global search (admin only).
 	•	DoD: Unit tests assert partition scoping.
 
-5.3 Merge & dedupe tools
+6.3 Merge & dedupe tools
 	•	Deliverable: Admin endpoint to merge person_ids; cascades visits; removes old vectors.
 	•	DoD: Post-merge integrity tests pass.
 
 ⸻
 
-6. Analytics & Reporting
+7. Analytics & Reporting
 
-6.1 Materialized views
+7.1 Materialized views
 	•	Deliverable: Daily/hourly aggregates per (tenant, site), repeat vs new, gender, DOW.
 	•	DoD: Query time <200ms for 1y window on sample volume.
 
-6.2 Export
+7.2 Export
 	•	Deliverable: CSV export endpoints; time/site filters.
 	•	DoD: Downloaded CSV matches API totals.
 
 ⸻
 
-7. Security & Privacy
+8. Security & Privacy
 
-7.1 Retention enforcement
+8.1 Retention enforcement
 	•	Deliverable: S3 lifecycle + audit job verifying deletions; nullify image_path after purge.
 	•	DoD: After 30d in test clock, images gone, DB pointers cleaned.
 
-7.2 Secrets & policies
+8.2 Secrets & policies
 	•	Deliverable: K8s Secrets; NetworkPolicies; least-privilege DB roles; API rate limiting.
 	•	DoD: Pod-to-DB restricted; load test shows 429 when exceeding limits.
 
-7.3 Audit logs
+8.3 Audit logs
 	•	Deliverable: Admin actions & data exports logged with tenant/user context.
 	•	DoD: Logs searchable; tamper-evident (append-only index).
 
 ⸻
 
-8. Frontend (React + Vite + AntD + Tailwind)
+9. Frontend (React + Vite + AntD + Tailwind)
 
-8.1 Shell & auth
+9.1 Shell & auth
 	•	Deliverable: Login, role-aware routing, layout (sidebar/topbar).
 	•	DoD: Unauthorized paths redirect; token refresh works.
 
-8.2 Entity management
+9.2 Entity management
 	•	Deliverable: CRUD pages: sites, cameras, staff, customers; table filters/sort; forms with validation.
+	•	**✅ ENHANCED**: Staff Face Management UI with multiple face images
+	•	**New**: StaffFaceGallery component - Upload, view, delete face images
+	•	**New**: FaceRecognitionTest component - Test recognition accuracy  
+	•	**New**: StaffDetailsModal - Tabbed interface for staff details, faces, testing
 	•	DoD: E2E tests (Playwright) cover create/edit/delete happy paths.
 
-8.3 Live monitor
+9.3 Live monitor
 	•	Deliverable: Recent events list via WebSocket/SSE; snapshot refresh; status badges.
 	•	DoD: New visit appears in UI <2s from API event (dev env).
 
-8.4 Reports
+9.4 Reports
 	•	Deliverable: Charts (Recharts): time series, DOW heatmap, new vs repeat, gender; export CSV.
 	•	DoD: Visuals match API data; download correct.
 
 ⸻
 
-9. DevOps
+10. DevOps
 
-9.1 Docker & Compose
+10.1 Docker & Compose
 	•	Deliverable: Multi-arch Dockerfiles; docker-compose.dev.yml (api, web, worker-sim, postgres, milvus, minio).
 	•	DoD: make dev-up runs full stack; sample flow works.
 
-9.2 Kubernetes (prod-like)
+10.2 Kubernetes (prod-like)
 	•	Deliverable: Manifests: Deployment/Service/Ingress/HPA/PVC for api, web, postgres, milvus, minio; NetworkPolicies; PodSecurity.
 	•	DoD: kustomize build valid; kubectl apply boots cluster locally (kind/microk8s) with health checks.
 
-9.3 CI/CD
+10.3 CI/CD
 	•	Deliverable: GitHub Actions: build/test; buildx multi-arch images; push to registry; deploy job (manual gate).
 	•	DoD: Badge green; tagged release produces images & manifests.
 
-9.4 Observability
+10.4 Observability
 	•	Deliverable: Prometheus metrics (api/worker), Grafana dashboards; request/latency panels; alerting rules.
 	•	DoD: Dashboards render; test alert fires on synthetic SLO breach.
 
 ⸻
 
-10. Testing & QA
+11. Testing & QA
 
-10.1 Unit tests
+11.1 Unit tests
 	•	Deliverable: ≥80% coverage on api core & worker core.
 	•	DoD: Coverage gate enforced in CI.
 
-10.2 Contract tests
+11.2 Contract tests
 	•	Deliverable: Schemas validated both sides; Pact (or JSONSchema) tests.
 	•	DoD: Breaking changes caught in CI.
 
-10.3 E2E scenario
+11.3 E2E scenario
 	•	Deliverable: Synthetic RTSP stream → worker → api → milvus → reports → UI.
 	•	DoD: Single script scripts/e2e_demo.sh proves flow; artifacts stored.
 
 ⸻
 
-11. Rollout & Ops
+12. Rollout & Ops
 
-11.1 Mac Mini provisioning
+12.1 Mac Mini provisioning
 	•	Deliverable: scripts/mac/setup.zsh (install Docker, pull image, launch agent, logrotate).
 	•	DoD: Fresh Mac runs worker in <10 min.
 
-11.2 Runbooks & SRE docs
+12.2 Runbooks & SRE docs
 	•	Deliverable: Oncall cheatsheet: restart, scale, diagnose, rotate keys.
 	•	DoD: Peer dry-run passes.
 
 ⸻
 
-12. Optional backlog (post-MVP)
+13. Optional backlog (post-MVP)
 	•	Age/gender classifier; loyalty scoring; POS/CRM webhooks; WebRTC live stream; watchlist alerts.
 
 ⸻

@@ -20,28 +20,37 @@ Create a monorepo:
 2) Implement APIs & Models
 	•	Contracts: Add JSON Schemas for Event.FaceDetected.v1, VisitRecord.v1, CustomerProfile.v1. Generate Pydantic/TS types from schemas.
 	•	DB: Alembic migrations for tables: tenants, sites, cameras, staff, customers, visits, api_keys. Add RLS: every SELECT/UPDATE/DELETE on tenant-scoped tables requires current_setting('app.tenant_id'). Set in middleware per request.
+	•	**Enhanced DB**: Added staff_face_images table for multiple face images per staff with landmarks and embeddings.
 	•	Milvus: One collection face_embeddings (dim=512, metric=IP/cosine), partitions per tenant_id; create IVF index; config via env.
 	•	MinIO: Buckets faces-raw, faces-derived; lifecycle rule 30 days on faces-raw.
 	•	Auth: JWT (RS256). Roles: system_admin, tenant_admin, site_manager, worker. Worker uses API key → JWT minting endpoint.
 	•	Endpoints (FastAPI /v1):
 	•	POST /auth/token (password or API key for worker)
 	•	CRUD: /tenants, /sites, /cameras, /staff, /customers
+	•	**Enhanced Staff Management**: GET/POST/DELETE /staff/{id}/faces, POST /staff/{id}/test-recognition
+	•	**Face Processing Service**: Detection, landmarks, embeddings, recognition testing
 	•	POST /events/face (ingest): validate schema, staff filter, Milvus search (topK=5), threshold, create customer if new, insert visit, return match.
 	•	GET /visits (filters: tenant/site/time/person)
 	•	GET /reports/visitors (granularity=hour|day|week|month, site filter)
 	•	GET /reports/distribution (new_vs_repeat, gender, dow)
 	•	Background jobs: APScheduler: verify MinIO purge (nullify image_path), refresh staff cache, precompute aggregates into materialized views.
 
-3) Worker (Mac Mini)
+3) Worker (Mac Mini) - **ENHANCED: Now with HTTP Endpoints & Proxy Architecture**
+	•	**New Architecture**: Enhanced Worker with HTTP server (USE_ENHANCED_WORKER=true)
+	•	**Camera Streaming**: Full OpenCV streaming service with device management
+	•	**HTTP Endpoints**: RESTful API for camera control and status monitoring
+	•	**Proxy Integration**: API delegates camera operations to workers via HTTP
 	•	Capture: OpenCV capture from RTSP/USB; config via env; frame-skip (WORKER_FPS=5).
 	•	Detect: YuNet default; RetinaFace optional. 5-point alignment.
 	•	Embed: InsightFace ArcFace 512-D; L2-norm; cosine sim. Use ONNXRuntime (arm64) or PyTorch+MPS when available.
-	•	Staff pre-match: Load staff embeddings for site at startup; mark is_staff_local=true to skip customer flow.
+	•	Staff pre-match: Load staff embeddings for site at startup; **enhanced with multiple face images per staff**.
 	•	Upload: POST to /v1/events/face; include presigned snapshot URL or upload snapshot via MinIO client first; exponential backoff; local disk queue on failure.
 
 4) Web (React+TS+Vite+AntD+Tailwind)
 	•	Auth & Layout: Login; role-aware routes; sidebar nav.
 	•	Pages: Sites, Cameras, Staff, Customers (CRUD); Live Monitor (SSE/WebSocket events list + refreshing snapshot); Reports (Recharts).
+	•	**Enhanced Staff Management**: StaffFaceGallery, FaceRecognitionTest, StaffDetailsModal components
+	•	**Face Management Features**: Drag-drop upload, multiple face images per staff, recognition testing, similarity scoring
 	•	UX: Filters by date/site; CSV export. Use shared TS types from /packages/ts/common.
 
 5) DevOps
@@ -111,10 +120,12 @@ TODO MANAGEMENT:
 • Only one todo should be in_progress at any time
 • Break complex tasks into specific, actionable items
 
-CURRENT PROJECT STATUS (as of 2025-08-22):
-• WBS Completion: ~88% ✅
+CURRENT PROJECT STATUS (as of 2025-08-25):
+• WBS Completion: ~90% ✅ (Updated with Architecture Migration & Staff Face Management)
+• **New Architecture**: Enhanced Worker with HTTP endpoints, API delegation/proxy, distributed processing
+• **Enhanced Features**: Staff Face Management with multiple images, landmarks, embeddings, recognition testing
 • Production Blockers: Background jobs (APScheduler), admin merge endpoints, audit logging, MinIO purge verification
-• Architecture: Milvus & MinIO production-ready, core APIs complete, worker pipeline functional
+• Architecture: Milvus & MinIO production-ready, core APIs complete, worker pipeline functional with enhanced streaming
 
 Now generate:
 	1.	All scaffolding and configs.
