@@ -1,7 +1,8 @@
 import logging
+import logging
 from typing import List, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -626,6 +627,20 @@ async def get_streaming_overview(
             overview["summary"]["total_assigned_cameras"] += 1
     
     return overview
+
+@router.get("/sites/{site_id:int}/cameras/status-stream")
+async def camera_status_stream(
+    site_id: int,
+    request: Request,
+    user: Dict = Depends(get_current_user)
+):
+    """Server-Sent Events stream for real-time camera status updates"""
+    from ..services.camera_status_broadcaster import camera_status_broadcaster
+    
+    # Convert site_id to string for broadcaster
+    site_id_str = str(site_id)
+    
+    return await camera_status_broadcaster.stream_site_status(site_id_str, request)
 
 
 @router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")

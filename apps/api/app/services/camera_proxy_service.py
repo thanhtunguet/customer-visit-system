@@ -101,6 +101,9 @@ class CameraProxyService:
                         if response.status_code == 200:
                             result = response.json()
                             logger.info(f"Successfully started camera {camera_id} streaming on worker {worker_id}")
+                            
+                            # Broadcast status change
+                            await self._broadcast_camera_status_change(camera_id, True, worker_id)
                             return {
                                 "success": True,
                                 "message": result.get("message", "Camera stream started"),
@@ -168,6 +171,9 @@ class CameraProxyService:
                         if response.status_code == 200:
                             result = response.json()
                             logger.info(f"Successfully stopped camera {camera_id} streaming on worker {worker_id}")
+                            
+                            # Broadcast status change
+                            await self._broadcast_camera_status_change(camera_id, False, worker_id)
                             return {
                                 "success": True,
                                 "message": result.get("message", "Camera stream stopped"),
@@ -268,7 +274,7 @@ class CameraProxyService:
             return streaming_status
     
     def _get_streaming_status_from_worker(self, worker: WorkerInfo, camera_id: int) -> Dict[str, Any]:
-        """Get streaming status from worker's heartbeat data"""
+        """Get streaming and processing status from worker's heartbeat data"""
         camera_id_str = str(camera_id)
         
         # Check if worker has streaming capabilities info
@@ -280,15 +286,27 @@ class CameraProxyService:
             active_streams = worker.capabilities["active_camera_streams"]
             streaming_active = camera_id_str in active_streams
         
+        # Check if worker has processing capabilities info
+        processing_active = False
+        if (worker.capabilities and 
+            "active_camera_processing" in worker.capabilities and
+            isinstance(worker.capabilities["active_camera_processing"], list)):
+            
+            active_processing = worker.capabilities["active_camera_processing"]
+            processing_active = camera_id_str in active_processing
+        
         return {
             "camera_id": camera_id,
             "stream_active": streaming_active,
+            "processing_active": processing_active,
             "worker_id": worker.worker_id,
             "worker_status": worker.status.value,
             "worker_healthy": worker.is_healthy,
             "source": "heartbeat",
             "total_active_streams": worker.capabilities.get("total_active_streams", 0) if worker.capabilities else 0,
-            "streaming_status_updated": worker.capabilities.get("streaming_status_updated") if worker.capabilities else None
+            "total_active_processing": worker.capabilities.get("total_active_processing", 0) if worker.capabilities else 0,
+            "streaming_status_updated": worker.capabilities.get("streaming_status_updated") if worker.capabilities else None,
+            "processing_status_updated": worker.capabilities.get("processing_status_updated") if worker.capabilities else None
         }
     
     async def proxy_camera_stream(self, camera_id: int) -> AsyncGenerator[bytes, None]:
@@ -369,6 +387,41 @@ class CameraProxyService:
         
         worker = worker_registry.get_worker(worker_id)
         return worker is not None and worker.is_healthy
+
+    async def _broadcast_camera_status_change(self, camera_id: int, is_streaming: bool, worker_id: str):
+        """Broadcast camera status change to SSE clients"""
+        try:
+            from .camera_status_broadcaster import camera_status_broadcaster
+            from ..core.database import get_db_session
+            from ..models.database import Camera
+            from sqlalchemy import select
+            
+            # Get site_id for this camera
+            async with get_db_session() as db_session:
+                result = await db_session.execute(
+                    select(Camera.site_id, Camera.tenant_id).where(Camera.camera_id == camera_id)
+                )
+                camera_info = result.first()
+                
+                if camera_info:
+                    site_id_str = str(camera_info.site_id)
+                    
+                    status_data = {
+                        "camera_id": camera_id,
+                        "stream_active": is_streaming,
+                        "worker_id": worker_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "source": "proxy_service"
+                    }
+                    
+                    await camera_status_broadcaster.broadcast_camera_status_change(
+                        site_id_str, camera_id, status_data
+                    )
+                    
+                    logger.debug(f"Broadcasted camera {camera_id} status change: streaming={is_streaming}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to broadcast camera status change: {e}")
 
 
 # Global camera proxy service

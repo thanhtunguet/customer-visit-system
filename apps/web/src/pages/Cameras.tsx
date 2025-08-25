@@ -54,62 +54,113 @@ export const Cameras: React.FC = () => {
     }
   }, [selectedSite]);
 
-  // Check stream statuses periodically using new comprehensive API
+  // Real-time camera status updates using Server-Sent Events
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let eventSource: EventSource | null = null;
     
     if (selectedSite && cameras.length > 0) {
-      const checkStreamStatuses = async () => {
+      const setupSSE = async () => {
         try {
-          // Use the new comprehensive streaming status endpoint
+          // Get initial status
           const response = await apiClient.get(`/sites/${selectedSite}/streaming/status`);
           const streamingData = response;
           
           const statuses: Record<string, boolean> = {};
           
-          // Update stream statuses from comprehensive API response
+          // Update stream and processing statuses from initial response
+          const processingStatuses: Record<string, boolean> = {};
           if (streamingData.cameras && Array.isArray(streamingData.cameras)) {
             streamingData.cameras.forEach((cameraInfo: any) => {
               statuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
+              processingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
             });
           }
           
           setStreamStatuses(statuses);
+          setProcessingStatuses(processingStatuses);
           
-          // Log worker streaming info for debugging
-          if (streamingData.workers) {
-            console.log('Worker streaming status:', streamingData.workers);
-          }
+          // Set up SSE for real-time updates
+          const token = localStorage.getItem('access_token');
+          eventSource = new EventSource(`${apiClient.baseURL}/sites/${selectedSite}/cameras/status-stream`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          } as any);
+          
+          eventSource.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              
+              if (data.type === 'camera_status_update') {
+                // Update both streaming and processing status
+                setStreamStatuses(prev => ({
+                  ...prev,
+                  [data.camera_id]: data.data.stream_active
+                }));
+                setProcessingStatuses(prev => ({
+                  ...prev,
+                  [data.camera_id]: data.data.processing_active || false
+                }));
+                console.log('Real-time camera status update:', data);
+              } else if (data.type === 'site_status_update') {
+                const newStatuses: Record<string, boolean> = {};
+                const newProcessingStatuses: Record<string, boolean> = {};
+                if (data.data.cameras && Array.isArray(data.data.cameras)) {
+                  data.data.cameras.forEach((cameraInfo: any) => {
+                    newStatuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
+                    newProcessingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
+                  });
+                }
+                setStreamStatuses(newStatuses);
+                setProcessingStatuses(newProcessingStatuses);
+                console.log('Real-time site status update:', data.data);
+              } else if (data.type === 'connected') {
+                console.log('Connected to camera status stream for site:', data.site_id);
+              } else if (data.type === 'keepalive') {
+                // Handle keepalive
+              }
+            } catch (err) {
+              console.error('Error parsing SSE data:', err);
+            }
+          };
+          
+          eventSource.onerror = (error) => {
+            console.error('SSE connection error:', error);
+            eventSource?.close();
+            
+            // Fallback to polling on SSE failure
+            setTimeout(setupSSE, 5000);
+          };
           
         } catch (err) {
-          console.error('Failed to get comprehensive streaming status:', err);
+          console.error('Failed to setup real-time updates:', err);
           
           // Fallback to individual camera status checks
           const statuses: Record<string, boolean> = {};
+          const processingStatuses: Record<string, boolean> = {};
           
           for (const camera of cameras) {
             try {
               const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
               statuses[camera.camera_id] = status.stream_active;
+              processingStatuses[camera.camera_id] = status.processing_active || false;
             } catch (err) {
               statuses[camera.camera_id] = false;
+              processingStatuses[camera.camera_id] = false;
             }
           }
           
           setStreamStatuses(statuses);
+          setProcessingStatuses(processingStatuses);
         }
       };
       
-      // Check immediately
-      checkStreamStatuses();
-      
-      // Then check every 10 seconds
-      interval = setInterval(checkStreamStatuses, 10000);
+      setupSSE();
     }
     
     return () => {
-      if (interval) {
-        clearInterval(interval);
+      if (eventSource) {
+        eventSource.close();
       }
     };
   }, [selectedSite, cameras]);

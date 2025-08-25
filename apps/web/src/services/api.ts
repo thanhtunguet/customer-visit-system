@@ -233,6 +233,7 @@ class ApiClient {
   async getCameraStreamStatus(siteId: string, cameraId: number): Promise<{
     camera_id: number;
     stream_active: boolean;
+    processing_active?: boolean;
     stream_info: {
       camera_id: number;
       is_active: boolean;

@@ -260,6 +260,8 @@ class WorkerRegistry:
         current_camera_id: Optional[int] = None,
         active_camera_streams: Optional[List[str]] = None,
         total_active_streams: Optional[int] = None,
+        active_camera_processing: Optional[List[str]] = None,
+        total_active_processing: Optional[int] = None,
     ) -> Optional[WorkerInfo]:
         """Update worker heartbeat"""
         
@@ -269,6 +271,9 @@ class WorkerRegistry:
             return None
         
         old_status = worker.status
+        old_streaming_info = worker.capabilities.get("active_camera_streams", []) if worker.capabilities else []
+        old_processing_info = worker.capabilities.get("active_camera_processing", []) if worker.capabilities else []
+        
         worker.update_heartbeat(
             status=status,
             faces_processed_count=faces_processed_count,
@@ -277,13 +282,21 @@ class WorkerRegistry:
             current_camera_id=current_camera_id,
         )
         
-        # Store streaming status in capabilities for frontend access
+        # Store streaming and processing status in capabilities for frontend access
+        streaming_status_changed = False
+        processing_status_changed = False
+        
         if active_camera_streams is not None or total_active_streams is not None:
             streaming_info = {
                 "active_camera_streams": active_camera_streams or [],
                 "total_active_streams": total_active_streams or 0,
                 "streaming_status_updated": datetime.utcnow().isoformat()
             }
+            
+            # Check if streaming status changed
+            new_streaming_info = streaming_info["active_camera_streams"]
+            if set(old_streaming_info) != set(new_streaming_info):
+                streaming_status_changed = True
             
             # Update capabilities with streaming info
             if not worker.capabilities:
@@ -292,12 +305,104 @@ class WorkerRegistry:
             
             logger.debug(f"Updated streaming status for worker {worker_id}: {total_active_streams} active streams")
         
+        if active_camera_processing is not None or total_active_processing is not None:
+            processing_info = {
+                "active_camera_processing": active_camera_processing or [],
+                "total_active_processing": total_active_processing or 0,
+                "processing_status_updated": datetime.utcnow().isoformat()
+            }
+            
+            # Check if processing status changed
+            new_processing_info = processing_info["active_camera_processing"]
+            if set(old_processing_info) != set(new_processing_info):
+                processing_status_changed = True
+            
+            # Update capabilities with processing info
+            if not worker.capabilities:
+                worker.capabilities = {}
+            worker.capabilities.update(processing_info)
+            
+            logger.debug(f"Updated processing status for worker {worker_id}: {total_active_processing} active processing")
+        
+        # Broadcast camera status changes if streaming or processing status changed
+        if streaming_status_changed or processing_status_changed:
+            asyncio.create_task(self._broadcast_camera_status_changes(
+                worker, 
+                active_camera_streams or [], 
+                active_camera_processing or []
+            ))
+        
         # Notify callbacks if status changed or if it's an error
         if old_status != status or status == WorkerStatus.ERROR:
             await self._notify_callbacks("worker_status_changed", worker)
         
         logger.debug(f"Heartbeat updated for worker {worker_id}: {status}")
         return worker
+
+    async def _broadcast_camera_status_changes(self, worker: WorkerInfo, active_camera_streams: List[str], active_camera_processing: List[str] = None):
+        """Broadcast camera status changes to SSE clients"""
+        try:
+            from .camera_status_broadcaster import camera_status_broadcaster
+            from ..core.database import get_db_session
+            from ..models.database import Camera
+            from sqlalchemy import select
+            
+            if active_camera_processing is None:
+                active_camera_processing = []
+            
+            # Get all unique camera IDs from streaming and processing lists
+            all_camera_ids = set(active_camera_streams + active_camera_processing)
+            
+            if not all_camera_ids:
+                return
+            
+            # Get site_id and other info for these cameras from database
+            async with get_db_session() as db_session:
+                # Convert string IDs to integers
+                camera_int_ids = []
+                for camera_id_str in all_camera_ids:
+                    try:
+                        camera_int_ids.append(int(camera_id_str))
+                    except ValueError:
+                        logger.warning(f"Invalid camera_id in worker capabilities: {camera_id_str}")
+                        continue
+                
+                if not camera_int_ids:
+                    return
+                
+                # Query cameras to get site_id for broadcasting
+                result = await db_session.execute(
+                    select(Camera.camera_id, Camera.site_id, Camera.tenant_id)
+                    .where(Camera.camera_id.in_(camera_int_ids))
+                )
+                cameras = result.fetchall()
+                
+                # Broadcast status for each camera
+                for camera_row in cameras:
+                    camera_id = camera_row.camera_id
+                    site_id = str(camera_row.site_id)
+                    camera_id_str = str(camera_id)
+                    
+                    status_data = {
+                        "camera_id": camera_id,
+                        "stream_active": camera_id_str in active_camera_streams,
+                        "processing_active": camera_id_str in active_camera_processing,
+                        "worker_id": worker.worker_id,
+                        "worker_status": worker.status.value,
+                        "worker_healthy": worker.is_healthy,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "source": "worker_heartbeat"
+                    }
+                    
+                    # Broadcast to SSE clients for this site
+                    await camera_status_broadcaster.broadcast_camera_status_change(
+                        site_id, camera_id, status_data
+                    )
+                    
+                    logger.debug(f"Broadcasted camera status change for camera {camera_id} in site {site_id}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to broadcast camera status changes: {e}")
     
     def get_worker(self, worker_id: str) -> Optional[WorkerInfo]:
         """Get worker by ID"""
