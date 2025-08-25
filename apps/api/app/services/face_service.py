@@ -108,7 +108,7 @@ class FaceMatchingService:
         """Create a new customer record and return the auto-generated customer_id"""
         customer = Customer(
             tenant_id=tenant_id,
-            first_seen=datetime.now(timezone.utc),
+            first_seen=datetime.utcnow(),
             visit_count=0,
         )
         db_session.add(customer)
@@ -134,7 +134,7 @@ class FaceMatchingService:
             person_type=person_type,
             site_id=event.site_id,
             camera_id=event.camera_id,
-            timestamp=event.timestamp,
+            timestamp=event.timestamp.replace(tzinfo=None) if event.timestamp.tzinfo else event.timestamp,
             confidence_score=confidence_score,
             face_embedding=json.dumps(event.embedding),
             bbox_x=event.bbox[0] if len(event.bbox) >= 4 else None,
@@ -158,7 +158,7 @@ class FaceMatchingService:
             update(Customer)
             .where(Customer.tenant_id == tenant_id, Customer.customer_id == customer_id)
             .values(
-                last_seen=datetime.now(timezone.utc),
+                last_seen=datetime.utcnow(),
                 visit_count=Customer.visit_count + 1,
             )
         )
