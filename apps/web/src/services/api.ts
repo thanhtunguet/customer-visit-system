@@ -120,6 +120,8 @@ class ApiClient {
         this.currentTenantId = null; // Global view
       } else if (stored) {
         this.currentTenantId = stored; // Specific tenant
+      } else {
+        this.currentTenantId = null; // Default to global view
       }
     }
     return this.currentTenantId;

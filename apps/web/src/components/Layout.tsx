@@ -30,7 +30,7 @@ export const AppLayout: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('__global__');
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
 
   useEffect(() => {
@@ -48,13 +48,14 @@ export const AppLayout: React.FC = () => {
       const userData = await apiClient.getCurrentUser();
       setUser(userData);
       
-      // For system admin, use stored tenant context or default to null (global view)
+      // For system admin, use stored tenant context or default to global view
       if (userData.role === UserRole.SYSTEM_ADMIN) {
         const storedTenantId = apiClient.getCurrentTenant();
-        setSelectedTenantId(storedTenantId);
+        // Convert null to '__global__' for Select component
+        setSelectedTenantId(storedTenantId ?? '__global__');
       } else {
         // For non-system admins, use their assigned tenant
-        setSelectedTenantId(userData.tenant_id || null);
+        setSelectedTenantId(userData.tenant_id ?? '__global__');
         apiClient.setCurrentTenant(userData.tenant_id || null);
       }
     } catch (error) {
@@ -75,7 +76,7 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  const handleTenantChange = async (tenantId: string | null) => {
+  const handleTenantChange = async (tenantId: string | undefined) => {
     try {
       // Only system admins can switch views
       if (user?.role !== UserRole.SYSTEM_ADMIN) {
@@ -83,13 +84,17 @@ export const AppLayout: React.FC = () => {
         return;
       }
 
+      // Convert '__global__' or undefined to null for API
+      const actualTenantId = (tenantId === '__global__' || tenantId === undefined) ? null : tenantId;
+
       // Use the switchView API to get new token
-      await apiClient.switchView(tenantId);
-      setSelectedTenantId(tenantId);
+      await apiClient.switchView(actualTenantId);
+      // Convert back to '__global__' for state (to match Select component expectation)
+      setSelectedTenantId(actualTenantId ?? '__global__');
       
-      if (tenantId) {
-        const tenant = tenants.find(t => t.tenant_id === tenantId);
-        message.success(`Switched to tenant: ${tenant?.name || tenantId}`);
+      if (actualTenantId) {
+        const tenant = tenants.find(t => t.tenant_id === actualTenantId);
+        message.success(`Switched to tenant: ${tenant?.name || actualTenantId}`);
         
         // If user is on a global page, redirect to tenant dashboard
         const currentPath = location.pathname;
@@ -189,7 +194,7 @@ export const AppLayout: React.FC = () => {
     
     if (user.role === UserRole.SYSTEM_ADMIN) {
       // System admin menu depends on tenant selection
-      if (selectedTenantId) {
+      if (selectedTenantId !== '__global__') {
         // Tenant-specific view: only show tenant-specific features
         return tenantSpecificMenuItems;
       } else {
@@ -209,7 +214,7 @@ export const AppLayout: React.FC = () => {
       label: `${user?.sub || 'User'} (${user?.role})`,
       disabled: true,
     },
-    ...(user?.role === UserRole.SYSTEM_ADMIN && selectedTenantId ? [{
+    ...(user?.role === UserRole.SYSTEM_ADMIN && selectedTenantId !== '__global__' ? [{
       key: 'tenant-context',
       icon: <ShopOutlined />,
       label: `Context: ${tenants.find(t => t.tenant_id === selectedTenantId)?.name || selectedTenantId}`,
@@ -265,7 +270,7 @@ export const AppLayout: React.FC = () => {
             </h1>
             {!collapsed && user?.role === UserRole.SYSTEM_ADMIN && (
               <div className="text-xs text-gray-500 mt-1">
-                {selectedTenantId ? (
+                {selectedTenantId !== '__global__' ? (
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
                     {tenants.find(t => t.tenant_id === selectedTenantId)?.name || 'Tenant View'}
                   </span>
@@ -303,14 +308,15 @@ export const AppLayout: React.FC = () => {
               <Space>
                 <Text strong className="text-gray-700">Tenant:</Text>
                 <Select
-                  value={selectedTenantId}
+                  value={selectedTenantId === '__global__' ? undefined : selectedTenantId}
                   onChange={handleTenantChange}
+                  onClear={() => handleTenantChange('__global__')}
                   placeholder="Select tenant"
                   style={{ minWidth: 200 }}
                   loading={tenants.length === 0}
                   allowClear
                   options={[
-                    { value: null, label: 'All Tenants (Global View)' },
+                    { value: '__global__', label: 'All Tenants (Global View)' },
                     ...tenants.map(tenant => ({
                       value: tenant.tenant_id,
                       label: `${tenant.name} (${tenant.tenant_id})`,
