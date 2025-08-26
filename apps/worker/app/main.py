@@ -101,7 +101,7 @@ class WorkerConfig:
         self.site_id = int(site_id_str.split('-')[1]) if site_id_str.startswith('s-') else int(site_id_str)
         # camera_id is now assigned by backend, not from env
         self.camera_id = None  # Will be set by WorkerClient after registration
-        self.worker_api_key = os.getenv("WORKER_API_KEY", "dev-api-key")
+        self.worker_api_key = os.getenv("WORKER_API_KEY", "dev-secret")
         
         # Worker Configuration
         self.detector_type = os.getenv("DETECTOR_TYPE", "yunet")  # yunet, mock
@@ -128,7 +128,7 @@ class WorkerConfig:
     
     def validate(self):
         """Validate configuration and log warnings for important settings"""
-        if not self.worker_api_key or self.worker_api_key == "dev-api-key":
+        if not self.worker_api_key or self.worker_api_key == "dev-secret":
             logger.warning("Using default API key - this should be changed in production")
         
         if self.mock_mode:
