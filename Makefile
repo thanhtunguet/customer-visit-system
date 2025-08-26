@@ -39,3 +39,13 @@ worker-dev:
 
 web-dev:
 	bash scripts/dev/web_dev.sh
+
+# Admin account management
+init-admin:
+	@cd apps/api && bash scripts/init-admin.sh create-admin
+
+reset-password:
+	@cd apps/api && bash scripts/init-admin.sh reset-password $(username) $(password)
+
+list-users:
+	@cd apps/api && bash scripts/init-admin.sh list-users
