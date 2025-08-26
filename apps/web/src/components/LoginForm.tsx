@@ -112,6 +112,29 @@ export const LoginForm: React.FC = () => {
             tenant_id: 't-dev'
           }}
         >
+        <Form.Item
+            name="role"
+            label="Role"
+            rules={[{ required: true, message: 'Please select role!' }]}
+            validateStatus={fieldErrors.role ? 'error' : ''}
+            help={fieldErrors.role}
+          >
+            <Select 
+              placeholder="Select your role"
+              onChange={(value) => {
+                setSelectedRole(value);
+                // Clear tenant_id when switching to system admin
+                if (value === UserRole.SYSTEM_ADMIN) {
+                  form.setFieldValue('tenant_id', undefined);
+                }
+              }}
+            >
+              <Select.Option value={UserRole.SYSTEM_ADMIN}>System Admin</Select.Option>
+              <Select.Option value={UserRole.TENANT_ADMIN}>Tenant Admin</Select.Option>
+              <Select.Option value={UserRole.SITE_MANAGER}>Site Manager</Select.Option>
+            </Select>
+          </Form.Item>
+          
           {selectedRole !== UserRole.SYSTEM_ADMIN && (
             <Form.Item
               name="tenant_id"
@@ -153,28 +176,7 @@ export const LoginForm: React.FC = () => {
             />
           </Form.Item>
 
-          <Form.Item
-            name="role"
-            label="Role"
-            rules={[{ required: true, message: 'Please select role!' }]}
-            validateStatus={fieldErrors.role ? 'error' : ''}
-            help={fieldErrors.role}
-          >
-            <Select 
-              placeholder="Select your role"
-              onChange={(value) => {
-                setSelectedRole(value);
-                // Clear tenant_id when switching to system admin
-                if (value === UserRole.SYSTEM_ADMIN) {
-                  form.setFieldValue('tenant_id', undefined);
-                }
-              }}
-            >
-              <Select.Option value={UserRole.SYSTEM_ADMIN}>System Admin</Select.Option>
-              <Select.Option value={UserRole.TENANT_ADMIN}>Tenant Admin</Select.Option>
-              <Select.Option value={UserRole.SITE_MANAGER}>Site Manager</Select.Option>
-            </Select>
-          </Form.Item>
+          
 
           <Form.Item className="mb-0">
             <Button
