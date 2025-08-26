@@ -6,7 +6,7 @@ from typing import Optional
 
 try:
     from minio import Minio
-    from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
+    from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration, Filter
     MINIO_AVAILABLE = True
 except ImportError:
     MINIO_AVAILABLE = False
@@ -31,6 +31,10 @@ except ImportError:
     
     class Expiration:
         def __init__(self, *args):
+            pass
+    
+    class Filter:
+        def __init__(self, *args, **kwargs):
             pass
 
 from .config import settings
@@ -71,6 +75,7 @@ class MinIOClient:
                     Rule(
                         rule_id="delete-raw-after-30-days",
                         status="Enabled",
+                        rule_filter=Filter(prefix=""),  # Apply to all objects in bucket
                         expiration=Expiration(days=30),
                     )
                 ]
