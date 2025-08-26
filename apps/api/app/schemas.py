@@ -31,6 +31,51 @@ class TokenResponse(BaseModel):
 
 
 # ===============================
+# API Key Management Models
+# ===============================
+
+class ApiKeyCreate(BaseModel):
+    name: str
+    role: str = "worker"
+    expires_at: Optional[datetime] = None
+
+
+class ApiKeyResponse(BaseModel):
+    key_id: str
+    tenant_id: str
+    name: str
+    role: str
+    is_active: bool
+    last_used: Optional[datetime]
+    expires_at: Optional[datetime]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyCreateResponse(BaseModel):
+    """Response when creating API key - includes the plain text key"""
+    key_id: str
+    tenant_id: str
+    name: str
+    role: str
+    api_key: str  # Plain text key - only shown once
+    is_active: bool
+    expires_at: Optional[datetime]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    expires_at: Optional[datetime] = None
+
+
+# ===============================
 # User Management Models
 # ===============================
 

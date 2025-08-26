@@ -176,6 +176,11 @@ export const AppLayout: React.FC = () => {
       icon: <BarChartOutlined />,
       label: 'Reports',
     },
+    {
+      key: '/api-keys',
+      icon: <KeyOutlined />,
+      label: 'API Keys',
+    },
   ];
 
   // Filter menu items based on user role and tenant context

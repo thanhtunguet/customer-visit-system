@@ -14,6 +14,7 @@ import { Reports } from '../pages/Reports';
 import { TenantsPage } from '../pages/Tenants';
 import { Users } from '../pages/Users';
 import Workers from '../pages/Workers';
+import ApiKeys from '../pages/ApiKeys';
 import '../styles.css';
 
 // Protected Route component
@@ -89,6 +90,7 @@ export function App() {
                   </SystemAdminRoute>
                 } 
               />
+              <Route path="api-keys" element={<ApiKeys />} />
             </Route>
 
             {/* Catch all route */}

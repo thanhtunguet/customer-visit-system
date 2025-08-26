@@ -121,6 +121,34 @@ export interface TokenResponse {
   token_type: string;
 }
 
+// API Key Types
+export interface ApiKey {
+  key_id: string;
+  tenant_id: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  last_used?: string;
+  expires_at?: string;
+  created_at: string;
+}
+
+export interface ApiKeyCreate {
+  name: string;
+  role?: string;
+  expires_at?: string;
+}
+
+export interface ApiKeyCreateResponse extends ApiKey {
+  api_key: string; // Plain text key - only shown once
+}
+
+export interface ApiKeyUpdate {
+  name?: string;
+  is_active?: boolean;
+  expires_at?: string;
+}
+
 export interface StaffFaceImage {
   tenant_id: string;
   image_id: string;

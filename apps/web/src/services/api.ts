@@ -4,7 +4,8 @@ import {
   AuthUser, LoginRequest, TokenResponse, CameraType,
   StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
   SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate,
-  User, UserCreate, UserUpdate, UserPasswordUpdate
+  User, UserCreate, UserUpdate, UserPasswordUpdate,
+  ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate
 } from '../types/api';
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
 import axios, { AxiosInstance } from 'axios';
@@ -480,6 +481,31 @@ class ApiClient {
   async toggleUserStatus(userId: string): Promise<User> {
     const response = await this.client.put<User>(`/users/${userId}/toggle-status`);
     return response.data;
+  }
+
+  // API Key Management
+  async getApiKeys(): Promise<ApiKey[]> {
+    const response = await this.client.get<ApiKey[]>('/api-keys');
+    return response.data;
+  }
+
+  async createApiKey(data: ApiKeyCreate): Promise<ApiKeyCreateResponse> {
+    const response = await this.client.post<ApiKeyCreateResponse>('/api-keys', data);
+    return response.data;
+  }
+
+  async getApiKey(keyId: string): Promise<ApiKey> {
+    const response = await this.client.get<ApiKey>(`/api-keys/${keyId}`);
+    return response.data;
+  }
+
+  async updateApiKey(keyId: string, data: ApiKeyUpdate): Promise<ApiKey> {
+    const response = await this.client.put<ApiKey>(`/api-keys/${keyId}`, data);
+    return response.data;
+  }
+
+  async deleteApiKey(keyId: string): Promise<void> {
+    await this.client.delete(`/api-keys/${keyId}`);
   }
 
   // Workers Management

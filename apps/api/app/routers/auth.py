@@ -1,6 +1,6 @@
 import os
 import hashlib
-import os
+import secrets
 from datetime import datetime
 from typing import List
 
@@ -22,7 +22,11 @@ from ..schemas import (
     UserCreate, 
     UserUpdate, 
     UserPasswordUpdate, 
-    UserResponse
+    UserResponse,
+    ApiKeyCreate,
+    ApiKeyResponse,
+    ApiKeyCreateResponse,
+    ApiKeyUpdate
 )
 
 router = APIRouter(prefix="/v1", tags=["Authentication"])
@@ -327,4 +331,186 @@ async def toggle_user_status(
     db.refresh(user)
     
     return user
+
+
+# ===============================
+# API Key Management Endpoints
+# ===============================
+
+@router.get("/api-keys", response_model=List[ApiKeyResponse])
+async def list_api_keys(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    """List API keys for current user's tenant"""
+    # System admins can optionally specify tenant_id, others use their own tenant
+    tenant_id = user.tenant_id
+    if user.role.value == "system_admin":
+        # For system admins in global view, we might need to handle this differently
+        # For now, let's require them to be in a tenant context for API key management
+        if not tenant_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Please switch to a tenant view to manage API keys"
+            )
+    
+    api_keys = db.query(ApiKey).filter(
+        ApiKey.tenant_id == tenant_id
+    ).offset(skip).limit(limit).all()
+    
+    return api_keys
+
+
+@router.post("/api-keys", response_model=ApiKeyCreateResponse)
+async def create_api_key(
+    api_key_data: ApiKeyCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    """Create a new API key"""
+    # Only tenant_admin and system_admin can create API keys
+    if user.role.value not in ["tenant_admin", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only tenant administrators can create API keys"
+        )
+    
+    tenant_id = user.tenant_id
+    if user.role.value == "system_admin":
+        if not tenant_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Please switch to a tenant view to create API keys"
+            )
+    
+    # Generate a secure random API key
+    plain_key = secrets.token_urlsafe(32)  # 32 bytes = 256 bits of entropy
+    hashed_key = hashlib.sha256(plain_key.encode()).hexdigest()
+    
+    # Create API key record
+    api_key = ApiKey(
+        tenant_id=tenant_id,
+        hashed_key=hashed_key,
+        name=api_key_data.name,
+        role=api_key_data.role,
+        expires_at=api_key_data.expires_at
+    )
+    
+    db.add(api_key)
+    db.commit()
+    db.refresh(api_key)
+    
+    # Return response with plain text key (only time it's shown)
+    return ApiKeyCreateResponse(
+        key_id=api_key.key_id,
+        tenant_id=api_key.tenant_id,
+        name=api_key.name,
+        role=api_key.role,
+        api_key=plain_key,  # Plain text key - only shown once
+        is_active=api_key.is_active,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at
+    )
+
+
+@router.get("/api-keys/{key_id}", response_model=ApiKeyResponse)
+async def get_api_key(
+    key_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    """Get API key by ID"""
+    tenant_id = user.tenant_id
+    if user.role.value == "system_admin" and not tenant_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please switch to a tenant view to access API keys"
+        )
+    
+    api_key = db.query(ApiKey).filter(
+        ApiKey.key_id == key_id,
+        ApiKey.tenant_id == tenant_id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    return api_key
+
+
+@router.put("/api-keys/{key_id}", response_model=ApiKeyResponse)
+async def update_api_key(
+    key_id: str,
+    api_key_data: ApiKeyUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    """Update API key"""
+    # Only tenant_admin and system_admin can update API keys
+    if user.role.value not in ["tenant_admin", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only tenant administrators can update API keys"
+        )
+    
+    tenant_id = user.tenant_id
+    if user.role.value == "system_admin" and not tenant_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please switch to a tenant view to update API keys"
+        )
+    
+    api_key = db.query(ApiKey).filter(
+        ApiKey.key_id == key_id,
+        ApiKey.tenant_id == tenant_id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    # Update fields
+    for field, value in api_key_data.dict(exclude_unset=True).items():
+        setattr(api_key, field, value)
+    
+    db.commit()
+    db.refresh(api_key)
+    
+    return api_key
+
+
+@router.delete("/api-keys/{key_id}")
+async def delete_api_key(
+    key_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    """Delete API key"""
+    # Only tenant_admin and system_admin can delete API keys
+    if user.role.value not in ["tenant_admin", "system_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only tenant administrators can delete API keys"
+        )
+    
+    tenant_id = user.tenant_id
+    if user.role.value == "system_admin" and not tenant_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please switch to a tenant view to delete API keys"
+        )
+    
+    api_key = db.query(ApiKey).filter(
+        ApiKey.key_id == key_id,
+        ApiKey.tenant_id == tenant_id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    db.delete(api_key)
+    db.commit()
+    
+    return {"message": "API key deleted successfully"}
 
