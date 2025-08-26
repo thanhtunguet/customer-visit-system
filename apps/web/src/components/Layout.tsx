@@ -310,7 +310,7 @@ export const AppLayout: React.FC = () => {
                   loading={tenants.length === 0}
                   allowClear
                   options={[
-                    { value: undefined, label: 'All Tenants (Global View)' },
+                    { value: null, label: 'All Tenants (Global View)' },
                     ...tenants.map(tenant => ({
                       value: tenant.tenant_id,
                       label: `${tenant.name} (${tenant.tenant_id})`,

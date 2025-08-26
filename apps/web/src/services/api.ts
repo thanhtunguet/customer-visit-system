@@ -108,11 +108,20 @@ class ApiClient {
     if (tenantId) {
       localStorage.setItem('current_tenant_id', tenantId);
     } else {
-      localStorage.removeItem('current_tenant_id');
+      localStorage.setItem('current_tenant_id', 'null'); // Store 'null' string for global view
     }
   }
 
   getCurrentTenant(): string | null {
+    // If currentTenantId is not set, try to get it from localStorage
+    if (this.currentTenantId === undefined || this.currentTenantId === null) {
+      const stored = localStorage.getItem('current_tenant_id');
+      if (stored === 'null') {
+        this.currentTenantId = null; // Global view
+      } else if (stored) {
+        this.currentTenantId = stored; // Specific tenant
+      }
+    }
     return this.currentTenantId;
   }
 
@@ -127,10 +136,11 @@ class ApiClient {
     const tenantId = getTenantIdFromToken(this.token);
     this.currentTenantId = tenantId;
     
+    // Always store the tenant context (null for global view, tenantId for tenant view)
     if (tenantId) {
       localStorage.setItem('current_tenant_id', tenantId);
     } else {
-      localStorage.removeItem('current_tenant_id');
+      localStorage.setItem('current_tenant_id', 'null'); // Store 'null' string for global view
     }
   }
 
