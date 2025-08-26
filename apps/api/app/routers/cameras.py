@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user, get_current_user_for_stream
 from ..models.database import Camera
-from ..schemas import CameraCreate, CameraResponse, WebcamInfo
+from ..schemas import CameraCreate, CameraResponse, WebcamInfo, WebcamListResponse
 from ..services.camera_proxy_service import camera_proxy_service
 from ..services.camera_diagnostics import camera_diagnostics
+from ..services.camera_streaming_service import streaming_service
 
 router = APIRouter(prefix="/v1", tags=["Camera Management"])
 logger = logging.getLogger(__name__)
@@ -837,31 +838,80 @@ async def run_camera_diagnostics(
     }
 
 
-@router.get("/devices/webcams", response_model=List[WebcamInfo])
+@router.get("/devices/webcams", response_model=WebcamListResponse)
 async def list_available_webcams(
+    site_id: Optional[int] = None,
     user: Dict = Depends(get_current_user)
 ):
-    """List available webcam devices on the API host with basic info and whether currently in use by streaming service."""
-    # Enumerate devices using diagnostics helper
-    devices = camera_diagnostics.enumerate_cameras()
-    # Overlay current usage from streaming service
-    device_status = streaming_service.get_device_status()
-    device_locks: Dict[int, str] = device_status.get("device_locks", {}) if isinstance(device_status, dict) else {}
-
+    """
+    List available webcam devices with fallback strategy:
+    1. Try to get devices from workers assigned to the site (if site_id provided)
+    2. Try to get devices from any available workers for the tenant
+    3. Return empty list with message indicating manual input required
+    """
+    from ..services.worker_registry import worker_registry
+    from ..services.camera_delegation_service import camera_delegation_service
+    
+    tenant_id = user["tenant_id"]
+    
+    # Try to get device information from workers
     webcams: List[WebcamInfo] = []
-    for device_index, info in devices.items():
-        webcams.append(WebcamInfo(
-            device_index=device_index,
-            width=info.get("width"),
-            height=info.get("height"),
-            fps=info.get("fps"),
-            backend=info.get("backend"),
-            is_working=bool(info.get("is_working", False)),
-            frame_captured=bool(info.get("frame_captured", False)),
-            in_use=device_index in device_locks,
-            in_use_by=device_locks.get(device_index)
-        ))
-
-    # Sort stable by working first then index
+    worker_sources = []
+    
+    # Strategy 1: If site_id provided, try workers assigned to that site
+    if site_id:
+        site_workers = worker_registry.list_workers(tenant_id=tenant_id, site_id=site_id)
+        for worker in site_workers:
+            if worker.is_healthy and worker.capabilities:
+                device_info = worker.capabilities.get("available_webcam_devices", {})
+                if device_info:
+                    worker_sources.append(f"site_{site_id}_worker_{worker.worker_id}")
+                    for device_index, info in device_info.items():
+                        webcams.append(WebcamInfo(
+                            device_index=int(device_index),
+                            width=info.get("width"),
+                            height=info.get("height"),
+                            fps=info.get("fps"),
+                            backend=info.get("backend"),
+                            is_working=bool(info.get("is_working", False)),
+                            frame_captured=bool(info.get("frame_captured", False)),
+                            in_use=info.get("in_use", False),
+                            in_use_by=info.get("in_use_by")
+                        ))
+    
+    # Strategy 2: If no devices from site workers, try any healthy workers for tenant
+    if not webcams:
+        tenant_workers = worker_registry.list_workers(tenant_id=tenant_id)
+        for worker in tenant_workers:
+            if worker.is_healthy and worker.capabilities:
+                device_info = worker.capabilities.get("available_webcam_devices", {})
+                if device_info:
+                    worker_sources.append(f"worker_{worker.worker_id}")
+                    for device_index, info in device_info.items():
+                        webcams.append(WebcamInfo(
+                            device_index=int(device_index),
+                            width=info.get("width"),
+                            height=info.get("height"),
+                            fps=info.get("fps"),
+                            backend=info.get("backend"),
+                            is_working=bool(info.get("is_working", False)),
+                            frame_captured=bool(info.get("frame_captured", False)),
+                            in_use=info.get("in_use", False),
+                            in_use_by=info.get("in_use_by")
+                        ))
+                    break  # Use first available worker's device info
+    
+    # Sort by working status first, then by device index
     webcams.sort(key=lambda d: (not d.is_working, d.device_index))
-    return webcams
+    
+    return {
+        "devices": webcams,
+        "source": "workers" if webcams else "none",
+        "worker_sources": worker_sources,
+        "manual_input_required": len(webcams) == 0,
+        "message": (
+            f"Found {len(webcams)} webcam devices from workers: {', '.join(worker_sources)}" 
+            if webcams 
+            else "No workers available to enumerate webcam devices. Manual device index input required."
+        )
+    }

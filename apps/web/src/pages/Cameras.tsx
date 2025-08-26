@@ -19,6 +19,7 @@ import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, Ey
 import { CameraStream } from '../components/CameraStream';
 import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
 import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
+import { CameraForm } from '../components/CameraForm';
 import { apiClient } from '../services/api';
 import { Camera, Site, CameraType, WebcamInfo, CameraCreate } from '../types/api';
 import dayjs from 'dayjs';
@@ -40,9 +41,7 @@ export const Cameras: React.FC = () => {
   const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
   const [multiStreamModalVisible, setMultiStreamModalVisible] = useState(false);
-  const [webcams, setWebcams] = useState<WebcamInfo[]>([]);
-  const [webcamsLoading, setWebcamsLoading] = useState(false);
-  const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});
+const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadSites();
@@ -605,103 +604,7 @@ export const Cameras: React.FC = () => {
           layout="vertical"
           onFinish={handleCreateCamera}
         >
-
-
-          <Form.Item
-            name="name"
-            label="Camera Name"
-            rules={[{ required: true, message: 'Please input camera name!' }]}
-          >
-            <Input placeholder="e.g. Entrance Camera" />
-          </Form.Item>
-
-          <Form.Item
-            name="camera_type"
-            label="Camera Type"
-            rules={[{ required: true, message: 'Please select camera type!' }]}
-          >
-            <Radio.Group onChange={async (e) => {
-              if (e.target.value === CameraType.WEBCAM) {
-                try {
-                  setWebcamsLoading(true);
-                  const list = await apiClient.getWebcams();
-                  setWebcams(list);
-                } finally {
-                  setWebcamsLoading(false);
-                }
-              }
-            }}>
-              <Radio value={CameraType.RTSP}>RTSP Camera</Radio>
-              <Radio value={CameraType.WEBCAM}>Webcam</Radio>
-            </Radio.Group>
-          </Form.Item>
-
-          <Form.Item
-            noStyle
-            shouldUpdate={true}
-          >
-            {({ getFieldValue }) => {
-              const cameraType = getFieldValue('camera_type');
-              
-              if (cameraType === CameraType.RTSP) {
-                return (
-                  <Form.Item
-                    name="rtsp_url"
-                    label="RTSP URL"
-                    rules={[{ required: true, message: 'Please input RTSP URL!' }]}
-                  >
-                    <Input placeholder="e.g. rtsp://192.168.1.100:554/stream" />
-                  </Form.Item>
-                );
-              }
-              
-              if (cameraType === CameraType.WEBCAM) {
-                return (
-                  <Form.Item
-                    name="device_index"
-                    label="Webcam Device"
-                    tooltip="Select the physical webcam device. Device index matches system enumeration."
-                    rules={[{ required: true, message: 'Please select a webcam!' }]}
-                  >
-                    <Select
-                      loading={webcamsLoading}
-                      placeholder={webcamsLoading ? 'Scanning webcams...' : 'Select a webcam device'}
-                      showSearch
-                      filterOption={(input, option) => 
-                        option?.label?.toString().toLowerCase().indexOf(input.toLowerCase()) >= 0
-                      }
-                      onDropdownVisibleChange={async (open) => {
-                        if (open && webcams.length === 0) {
-                          try {
-                            setWebcamsLoading(true);
-                            const list = await apiClient.getWebcams();
-                            setWebcams(list);
-                          } finally {
-                            setWebcamsLoading(false);
-                          }
-                        }
-                      }}
-                      options={webcams.map((w) => ({
-                        value: w.device_index,
-                        disabled: !w.is_working || w.in_use,
-                        label: `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim()
-                      }))}
-                    />
-                  </Form.Item>
-                );
-              }
-              
-              return null;
-            }}
-          </Form.Item>
-
-          <Form.Item
-            name="rtsp_url"
-            label="RTSP URL (legacy)"
-            style={{ display: 'none' }}
-          >
-            <Input placeholder="e.g. rtsp://192.168.1.100:554/stream" />
-          </Form.Item>
+          <CameraForm form={form} selectedSite={selectedSite} />
         </Form>
       </Modal>
 

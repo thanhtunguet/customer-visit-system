@@ -49,6 +49,14 @@ export interface WebcamInfo {
   in_use_by?: string;
 }
 
+export interface WebcamListResponse {
+  devices: WebcamInfo[];
+  source: 'workers' | 'none';
+  worker_sources: string[];
+  manual_input_required: boolean;
+  message: string;
+}
+
 export interface Staff {
   staff_id: number;
   tenant_id: string;

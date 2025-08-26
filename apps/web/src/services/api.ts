@@ -225,8 +225,15 @@ class ApiClient {
   }
 
   // Devices
-  async getWebcams(): Promise<WebcamInfo[]> {
-    const response = await this.client.get<WebcamInfo[]>('/devices/webcams');
+  async getWebcams(siteId?: number): Promise<{
+    devices: WebcamInfo[];
+    source: 'workers' | 'none';
+    worker_sources: string[];
+    manual_input_required: boolean;
+    message: string;
+  }> {
+    const params = siteId ? { site_id: siteId } : {};
+    const response = await this.client.get('/devices/webcams', { params });
     return response.data;
   }
 

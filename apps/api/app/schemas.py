@@ -156,6 +156,14 @@ class WebcamInfo(BaseModel):
     in_use_by: Optional[str] = None
 
 
+class WebcamListResponse(BaseModel):
+    devices: List[WebcamInfo]
+    source: str  # "workers" or "none"
+    worker_sources: List[str]
+    manual_input_required: bool
+    message: str
+
+
 class StaffCreate(BaseModel):
     name: str
     site_id: Optional[int] = None
