@@ -12,7 +12,8 @@ import {
   Select, 
   Switch,
   Tooltip,
-  Card
+  Card,
+  Typography
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -20,7 +21,8 @@ import {
   DeleteOutlined, 
   KeyOutlined,
   StopOutlined,
-  PlayCircleOutlined 
+  PlayCircleOutlined,
+  UsergroupAddOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -28,6 +30,7 @@ import { apiClient } from '../services/api';
 import { User, UserCreate, UserUpdate, UserPasswordUpdate, UserRole, Tenant } from '../types/api';
 
 const { Option } = Select;
+const { Title } = Typography;
 
 export const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -288,18 +291,28 @@ export const Users: React.FC = () => {
   ];
 
   return (
-    <div>
-      <Card>
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'between' }}>
-          <h2>User Management</h2>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setCreateModalVisible(true)}
-          >
-            Create User
-          </Button>
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <Title level={2} className="flex items-center gap-2 mb-0">
+            <UsergroupAddOutlined />
+            User Management
+          </Title>
+          <p className="text-gray-600 mt-1">
+            Manage system users and their access permissions
+          </p>
         </div>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setCreateModalVisible(true)}
+          size="large"
+        >
+          Create User
+        </Button>
+      </div>
+
+      <Card>
 
         <Table
           columns={columns}
