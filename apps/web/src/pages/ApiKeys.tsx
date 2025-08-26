@@ -51,15 +51,23 @@ const ApiKeys: React.FC = () => {
   const [editForm] = Form.useForm<ApiKeyUpdate>();
 
   useEffect(() => {
-    loadApiKeys();
+    // Add a small delay to ensure tenant context is properly set
+    const timer = setTimeout(() => {
+      loadApiKeys();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const loadApiKeys = async () => {
     setLoading(true);
     try {
+
+      
       const data = await apiClient.getApiKeys();
       setApiKeys(data);
     } catch (error: any) {
+      console.error('API Keys load error:', error.response?.data || error.message);
       if (error.response?.status === 400) {
         message.error('Please switch to a tenant view to manage API keys');
       } else {

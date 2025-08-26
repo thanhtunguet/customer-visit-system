@@ -6,7 +6,7 @@ from typing import Dict, Optional, List
 from functools import wraps
 
 import jwt
-from fastapi import HTTPException, Depends, Header, Query
+from fastapi import HTTPException, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -160,6 +160,11 @@ def require_system_admin(current_user: User = Depends(get_current_active_user)) 
     if current_user.role != UserRole.SYSTEM_ADMIN:
         raise HTTPException(status_code=403, detail="System administrator access required")
     return current_user
+
+
+def get_tenant_context(request: Request) -> Optional[str]:
+    """Get tenant context from request state (set by tenant_context_middleware)"""
+    return getattr(request.state, 'tenant_id', None)
 
 
 def require_tenant_admin_or_above(current_user: User = Depends(get_current_active_user)) -> User:

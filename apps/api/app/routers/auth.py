@@ -2,7 +2,7 @@ import os
 import hashlib
 import secrets
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,7 +11,8 @@ from ..core.security import (
     mint_jwt, 
     get_current_user, 
     get_current_active_user, 
-    require_system_admin
+    require_system_admin,
+    get_tenant_context
 )
 from ..core.database import get_db
 from ..models.database import User, UserRole, ApiKey
@@ -30,6 +31,27 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/v1", tags=["Authentication"])
+
+
+def _get_effective_tenant_id(user: User, tenant_context: Optional[str]) -> str:
+    """Get effective tenant ID for API operations"""
+    if user.role.value == "system_admin":
+        # System admins can operate in any tenant context
+        tenant_id = tenant_context or user.tenant_id
+        if not tenant_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Please switch to a tenant view to manage API keys"
+            )
+        return tenant_id
+    else:
+        # Non-system admins can only operate in their own tenant
+        if not user.tenant_id:
+            raise HTTPException(
+                status_code=400,
+                detail="User must be assigned to a tenant"
+            )
+        return user.tenant_id
 
 
 @router.post("/auth/token", response_model=TokenResponse)
@@ -341,20 +363,12 @@ async def toggle_user_status(
 async def list_api_keys(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_active_user),
+    tenant_context: Optional[str] = Depends(get_tenant_context),
     skip: int = 0,
     limit: int = 100
 ):
     """List API keys for current user's tenant"""
-    # System admins can optionally specify tenant_id, others use their own tenant
-    tenant_id = user.tenant_id
-    if user.role.value == "system_admin":
-        # For system admins in global view, we might need to handle this differently
-        # For now, let's require them to be in a tenant context for API key management
-        if not tenant_id:
-            raise HTTPException(
-                status_code=400, 
-                detail="Please switch to a tenant view to manage API keys"
-            )
+    tenant_id = _get_effective_tenant_id(user, tenant_context)
     
     api_keys = db.query(ApiKey).filter(
         ApiKey.tenant_id == tenant_id
@@ -367,7 +381,8 @@ async def list_api_keys(
 async def create_api_key(
     api_key_data: ApiKeyCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
+    tenant_context: Optional[str] = Depends(get_tenant_context)
 ):
     """Create a new API key"""
     # Only tenant_admin and system_admin can create API keys
@@ -377,13 +392,8 @@ async def create_api_key(
             detail="Only tenant administrators can create API keys"
         )
     
-    tenant_id = user.tenant_id
-    if user.role.value == "system_admin":
-        if not tenant_id:
-            raise HTTPException(
-                status_code=400, 
-                detail="Please switch to a tenant view to create API keys"
-            )
+    tenant_id = _get_effective_tenant_id(user, tenant_context)
+
     
     # Generate a secure random API key
     plain_key = secrets.token_urlsafe(32)  # 32 bytes = 256 bits of entropy
@@ -419,15 +429,11 @@ async def create_api_key(
 async def get_api_key(
     key_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
+    tenant_context: Optional[str] = Depends(get_tenant_context)
 ):
     """Get API key by ID"""
-    tenant_id = user.tenant_id
-    if user.role.value == "system_admin" and not tenant_id:
-        raise HTTPException(
-            status_code=400, 
-            detail="Please switch to a tenant view to access API keys"
-        )
+    tenant_id = _get_effective_tenant_id(user, tenant_context)
     
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
@@ -445,7 +451,8 @@ async def update_api_key(
     key_id: str,
     api_key_data: ApiKeyUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
+    tenant_context: Optional[str] = Depends(get_tenant_context)
 ):
     """Update API key"""
     # Only tenant_admin and system_admin can update API keys
@@ -455,12 +462,7 @@ async def update_api_key(
             detail="Only tenant administrators can update API keys"
         )
     
-    tenant_id = user.tenant_id
-    if user.role.value == "system_admin" and not tenant_id:
-        raise HTTPException(
-            status_code=400, 
-            detail="Please switch to a tenant view to update API keys"
-        )
+    tenant_id = _get_effective_tenant_id(user, tenant_context)
     
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
@@ -484,7 +486,8 @@ async def update_api_key(
 async def delete_api_key(
     key_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
+    tenant_context: Optional[str] = Depends(get_tenant_context)
 ):
     """Delete API key"""
     # Only tenant_admin and system_admin can delete API keys
@@ -494,12 +497,7 @@ async def delete_api_key(
             detail="Only tenant administrators can delete API keys"
         )
     
-    tenant_id = user.tenant_id
-    if user.role.value == "system_admin" and not tenant_id:
-        raise HTTPException(
-            status_code=400, 
-            detail="Please switch to a tenant view to delete API keys"
-        )
+    tenant_id = _get_effective_tenant_id(user, tenant_context)
     
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
