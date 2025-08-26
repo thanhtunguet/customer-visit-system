@@ -37,6 +37,7 @@ const { Option } = Select;
 const { Text } = Typography;
 
 const ApiKeys: React.FC = () => {
+  const { message } = App.useApp();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -59,7 +60,11 @@ const ApiKeys: React.FC = () => {
       const data = await apiClient.getApiKeys();
       setApiKeys(data);
     } catch (error: any) {
-      message.error('Failed to load API keys: ' + error.message);
+      if (error.response?.status === 400) {
+        message.error('Please switch to a tenant view to manage API keys');
+      } else {
+        message.error('Failed to load API keys: ' + (error.response?.data?.detail || error.message));
+      }
     } finally {
       setLoading(false);
     }
@@ -67,7 +72,14 @@ const ApiKeys: React.FC = () => {
 
   const handleCreateApiKey = async (values: ApiKeyCreate) => {
     try {
-      const newApiKey = await apiClient.createApiKey(values);
+      // Convert dayjs to ISO string if expires_at is provided
+      const payload = {
+        ...values,
+        expires_at: values.expires_at ? values.expires_at.toISOString() : undefined
+      };
+      
+      console.log('Creating API key with payload:', payload);
+      const newApiKey = await apiClient.createApiKey(payload);
       setNewApiKeyData(newApiKey);
       setCreateModalVisible(false);
       setKeyDisplayModalVisible(true);
@@ -75,7 +87,9 @@ const ApiKeys: React.FC = () => {
       message.success('API key created successfully!');
       loadApiKeys();
     } catch (error: any) {
-      message.error('Failed to create API key: ' + error.message);
+      console.error('API key creation error:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
+      message.error('Failed to create API key: ' + errorMessage);
     }
   };
 
@@ -194,7 +208,7 @@ const ApiKeys: React.FC = () => {
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Tooltip title="Edit API Key">
+          <Tooltip title="Edit API Key" key="edit">
             <Button
               type="text"
               icon={<EditOutlined />}
@@ -209,7 +223,7 @@ const ApiKeys: React.FC = () => {
               }}
             />
           </Tooltip>
-          <Tooltip title="Delete API Key">
+          <Tooltip title="Delete API Key" key="delete">
             <Popconfirm
               title="Delete API Key"
               description="Are you sure you want to delete this API key? This action cannot be undone."
@@ -232,6 +246,16 @@ const ApiKeys: React.FC = () => {
   return (
     <div>
       <Card>
+        {apiKeys.length === 0 && !loading && (
+          <Alert
+            message="No API Keys Found"
+            description="If you're a system administrator, please switch to a tenant view to manage API keys. Only tenant administrators and system admins in tenant context can manage API keys."
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h2>API Key Management</h2>
@@ -306,10 +330,10 @@ const ApiKeys: React.FC = () => {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit">
+              <Button key="create" type="primary" htmlType="submit">
                 Create API Key
               </Button>
-              <Button onClick={() => {
+              <Button key="cancel" onClick={() => {
                 setCreateModalVisible(false);
                 createForm.resetFields();
               }}>
@@ -365,10 +389,10 @@ const ApiKeys: React.FC = () => {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit">
+              <Button key="update" type="primary" htmlType="submit">
                 Update API Key
               </Button>
-              <Button onClick={() => {
+              <Button key="cancel" onClick={() => {
                 setEditModalVisible(false);
                 setSelectedApiKey(null);
                 editForm.resetFields();
