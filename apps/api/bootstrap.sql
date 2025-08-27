@@ -1,14 +1,14 @@
 
 -- Insert tenant
 INSERT INTO tenants (tenant_id, name, description, is_active, created_at, updated_at)
-VALUES ('t-dev', 'Development Tenant', 'Development tenant for workers', true, '2025-08-26T09:04:17.947235', '2025-08-26T09:04:17.947235')
+VALUES ('t-dev', 'Development Tenant', 'Development tenant for workers', true, '2025-08-27T02:25:49.612726', '2025-08-27T02:25:49.612726')
 ON CONFLICT (tenant_id) DO UPDATE SET
     name = EXCLUDED.name,
     updated_at = EXCLUDED.updated_at;
 
 -- Insert API key
 INSERT INTO api_keys (tenant_id, hashed_key, name, role, is_active, created_at)
-VALUES ('t-dev', '298754db2dbab6ec62605ceb0379eb7ee376580359449efe0caa3aa06cd56736', 'worker-dev-key', 'worker', true, '2025-08-26T09:04:17.947235')
+VALUES ('t-dev', '298754db2dbab6ec62605ceb0379eb7ee376580359449efe0caa3aa06cd56736', 'worker-dev-key', 'worker', true, '2025-08-27T02:25:49.612726')
 ON CONFLICT (tenant_id, hashed_key) DO NOTHING;
 
 -- Verify

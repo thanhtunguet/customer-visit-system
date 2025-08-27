@@ -155,6 +155,7 @@ app.include_router(workers.router)
 app.include_router(worker_registry_router.router)
 app.include_router(worker_camera_management.router)
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -9,6 +9,14 @@ import httpx
 from pydantic import BaseModel
 from common.models import FaceDetectedEvent
 
+# Load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, continue with environment variables only
+    pass
+
 
 API_URL = os.getenv("API_URL", "http://api:8080")
 TENANT_ID = os.getenv("TENANT_ID", "t-dev")
