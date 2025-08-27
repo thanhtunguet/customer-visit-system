@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -541,3 +541,165 @@ async def cancel_command(
     except Exception as e:
         logger.error(f"Error cancelling command: {e}")
         raise HTTPException(status_code=500, detail="Failed to cancel command")
+
+@router.get("/workers/{worker_id}/logs/recent")
+async def get_worker_recent_logs(
+    worker_id: str,
+    limit: int = 100,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Get recent log entries from a worker"""
+    import httpx
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only admins and the worker itself can access logs
+    if current_user.role not in ["system_admin", "tenant_admin"] and current_user.sub != "worker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins or workers can access logs"
+        )
+    
+    try:
+        # Get worker info to find its HTTP endpoint
+        worker_info = worker_registry.get_worker(worker_id)
+        if not worker_info:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        # Check if worker is online and has HTTP server
+        if not worker_info.is_healthy or not worker_info.ip_address:
+            raise HTTPException(status_code=503, detail="Worker is not available")
+        
+        # Get worker HTTP port (default 8090)
+        worker_port = 8090  # Could be configurable per worker
+        worker_url = f"http://{worker_info.ip_address}:{worker_port}"
+        
+        # Proxy request to worker
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{worker_url}/logs/recent",
+                params={"limit": limit}
+            )
+            response.raise_for_status()
+            
+            return response.json()
+            
+    except httpx.RequestError as e:
+        logger.error(f"Error connecting to worker {worker_id}: {e}")
+        raise HTTPException(status_code=503, detail="Unable to connect to worker")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Worker {worker_id} returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="Worker request failed")
+    except Exception as e:
+        logger.error(f"Error fetching logs from worker {worker_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch worker logs")
+
+
+@router.get("/workers/{worker_id}/logs/stream")
+async def stream_worker_logs(
+    worker_id: str,
+    request: Request,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Stream real-time logs from a worker via Server-Sent Events"""
+    import httpx
+    from fastapi.responses import StreamingResponse
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    # Only admins and the worker itself can access logs
+    if current_user.role not in ["system_admin", "tenant_admin"] and current_user.sub != "worker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins or workers can access logs"
+        )
+    
+    try:
+        # Get worker info to find its HTTP endpoint
+        worker_info = worker_registry.get_worker(worker_id)
+        if not worker_info:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        if not worker_info.is_healthy or not worker_info.ip_address:
+            raise HTTPException(status_code=503, detail="Worker is not available")
+        
+        worker_port = 8090
+        worker_url = f"http://{worker_info.ip_address}:{worker_port}"
+        
+        # Stream proxy to worker's log stream
+        async def log_proxy_generator():
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    async with client.stream("GET", f"{worker_url}/logs/stream") as response:
+                        response.raise_for_status()
+                        
+                        async for chunk in response.aiter_text():
+                            # Check if client disconnected
+                            if await request.is_disconnected():
+                                break
+                            yield chunk
+                            
+            except httpx.RequestError as e:
+                logger.error(f"Error streaming from worker {worker_id}: {e}")
+                yield f"event: error\ndata: Unable to connect to worker\n\n"
+            except Exception as e:
+                logger.error(f"Error in log stream proxy: {e}")
+                yield f"event: error\ndata: Stream connection lost\n\n"
+        
+        return StreamingResponse(
+            log_proxy_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up log stream for worker {worker_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to setup log stream")
+
+
+@router.post("/workers/{worker_id}/logs/test") 
+async def trigger_worker_test_logs(
+    worker_id: str,
+    current_user_dict: dict = Depends(get_current_user),
+):
+    """Trigger test log generation on worker (for testing)"""
+    import httpx
+    
+    current_user = UserInfo(**current_user_dict)
+    
+    if current_user.role not in ["system_admin", "tenant_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can trigger test logs"
+        )
+    
+    try:
+        worker_info = worker_registry.get_worker(worker_id)
+        if not worker_info:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        if not worker_info.is_healthy or not worker_info.ip_address:
+            raise HTTPException(status_code=503, detail="Worker is not available")
+        
+        worker_port = 8090
+        worker_url = f"http://{worker_info.ip_address}:{worker_port}"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(f"{worker_url}/logs/test")
+            response.raise_for_status()
+            
+            return response.json()
+            
+    except httpx.RequestError as e:
+        logger.error(f"Error connecting to worker {worker_id}: {e}")
+        raise HTTPException(status_code=503, detail="Unable to connect to worker")
+    except Exception as e:
+        logger.error(f"Error triggering test logs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to trigger test logs")

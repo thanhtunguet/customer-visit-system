@@ -651,6 +651,47 @@ def create_worker_app(worker: EnhancedFaceRecognitionWorker) -> FastAPI:
         version="1.0.0"
     )
     
+    # Log streaming storage
+    from collections import deque
+    import threading
+    import json
+    from datetime import datetime
+    
+    # Circular buffer to store recent log entries
+    log_buffer = deque(maxlen=1000)  # Keep last 1000 log entries
+    log_buffer_lock = threading.Lock()
+    
+    # Custom log handler to capture logs for streaming
+    class LogStreamHandler(logging.Handler):
+        def emit(self, record):
+            try:
+                log_entry = {
+                    "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                    "module": getattr(record, 'module', ''),
+                    "funcName": getattr(record, 'funcName', ''),
+                    "lineno": getattr(record, 'lineno', 0)
+                }
+                
+                # Add exception info if present
+                if record.exc_info:
+                    log_entry["exception"] = self.format(record)
+                
+                with log_buffer_lock:
+                    log_buffer.append(log_entry)
+            except Exception:
+                pass  # Avoid logging errors in log handler
+    
+    # Install the log handler
+    log_stream_handler = LogStreamHandler()
+    log_stream_handler.setLevel(logging.DEBUG)  # Capture all log levels
+    
+    # Add to root logger to capture all worker logs
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_stream_handler)
+    
     @app.get("/health")
     async def health_check():
         """Health check endpoint"""
@@ -723,6 +764,135 @@ def create_worker_app(worker: EnhancedFaceRecognitionWorker) -> FastAPI:
             "device_status": worker.streaming_service.get_device_status(),
             "conflicts": worker.streaming_service.diagnose_device_conflicts()
         }
+    
+    @app.get("/logs/recent")
+    async def get_recent_logs(limit: int = 100):
+        """Get recent log entries"""
+        with log_buffer_lock:
+            # Get last N entries
+            recent_logs = list(log_buffer)[-limit:] if limit > 0 else list(log_buffer)
+        
+        return {
+            "logs": recent_logs,
+            "total_count": len(recent_logs),
+            "buffer_size": len(log_buffer)
+        }
+    
+    @app.get("/logs/stream")
+    async def stream_logs(request: Request):
+        """Server-Sent Events stream for real-time logs"""
+        try:
+            from sse_starlette import EventSourceResponse
+            
+            async def log_stream_generator():
+                # Send recent logs first
+                with log_buffer_lock:
+                    recent_logs = list(log_buffer)[-50:]  # Last 50 entries
+                
+                # Send initial batch
+                if recent_logs:
+                    yield {
+                        "event": "initial_logs",
+                        "data": json.dumps({
+                            "logs": recent_logs,
+                            "message": "Initial log entries"
+                        })
+                    }
+                
+                # Track the last position we sent
+                last_sent_count = len(log_buffer)
+                
+                try:
+                    while True:
+                        # Check for client disconnect
+                        if await request.is_disconnected():
+                            break
+                        
+                        # Check for new log entries
+                        with log_buffer_lock:
+                            current_count = len(log_buffer)
+                            if current_count > last_sent_count:
+                                # Send new entries
+                                new_logs = list(log_buffer)[last_sent_count:]
+                                yield {
+                                    "event": "new_logs", 
+                                    "data": json.dumps({
+                                        "logs": new_logs,
+                                        "timestamp": datetime.now().isoformat()
+                                    })
+                                }
+                                last_sent_count = current_count
+                        
+                        # Wait before checking again
+                        await asyncio.sleep(0.5)  # Check every 500ms
+                        
+                except asyncio.CancelledError:
+                    pass  # Client disconnected
+            
+            return EventSourceResponse(log_stream_generator())
+            
+        except ImportError:
+            # Manual SSE implementation fallback
+            async def manual_sse_generator():
+                # Send SSE headers manually
+                yield "data: " + json.dumps({
+                    "event": "connection_established", 
+                    "message": "Log stream connected"
+                }) + "\n\n"
+                
+                # Send recent logs first
+                with log_buffer_lock:
+                    recent_logs = list(log_buffer)[-50:]
+                
+                if recent_logs:
+                    yield "event: initial_logs\n"
+                    yield "data: " + json.dumps({
+                        "logs": recent_logs,
+                        "message": "Initial log entries"
+                    }) + "\n\n"
+                
+                last_sent_count = len(log_buffer)
+                
+                try:
+                    while True:
+                        if await request.is_disconnected():
+                            break
+                        
+                        with log_buffer_lock:
+                            current_count = len(log_buffer)
+                            if current_count > last_sent_count:
+                                new_logs = list(log_buffer)[last_sent_count:]
+                                yield "event: new_logs\n"
+                                yield "data: " + json.dumps({
+                                    "logs": new_logs,
+                                    "timestamp": datetime.now().isoformat()
+                                }) + "\n\n"
+                                last_sent_count = current_count
+                        
+                        await asyncio.sleep(0.5)
+                        
+                except asyncio.CancelledError:
+                    pass
+            
+            return StreamingResponse(
+                manual_sse_generator(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream"
+                }
+            )
+    
+    @app.post("/logs/test")
+    async def test_log_generation():
+        """Generate test log entries for testing"""
+        logger.info("Test INFO log entry from API endpoint")
+        logger.warning("Test WARNING log entry from API endpoint") 
+        logger.error("Test ERROR log entry from API endpoint")
+        logger.debug("Test DEBUG log entry from API endpoint")
+        
+        return {"message": "Test log entries generated"}
     
     return app
 

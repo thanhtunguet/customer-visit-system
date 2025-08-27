@@ -26,11 +26,13 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   CloseCircleOutlined,
-  SyncOutlined
+  SyncOutlined,
+  BugOutlined
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import type { ColumnsType } from 'antd/es/table';
 import { WorkerStatus, WorkerStatusHelper } from '@shared/common';
+import WorkerLogViewer from '../components/WorkerLogViewer';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -92,6 +94,10 @@ const Workers: React.FC = () => {
   
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  
+  // Log viewer modal state
+  const [logViewerVisible, setLogViewerVisible] = useState(false);
+  const [selectedWorkerForLogs, setSelectedWorkerForLogs] = useState<Worker | null>(null);
   
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [siteFilter, setSiteFilter] = useState<number | undefined>(undefined);
@@ -518,9 +524,19 @@ const Workers: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       render: (_, record: Worker) => (
         <Space size="small">
+          <Tooltip title="View Logs">
+            <Button
+              type="text"
+              icon={<BugOutlined />}
+              onClick={() => {
+                setSelectedWorkerForLogs(record);
+                setLogViewerVisible(true);
+              }}
+            />
+          </Tooltip>
           <Tooltip title="View Details">
             <Button
               type="text"
@@ -803,6 +819,17 @@ const Workers: React.FC = () => {
             </div>
           )}
         </Modal>
+
+        {/* Worker Log Viewer Modal */}
+        <WorkerLogViewer
+          visible={logViewerVisible}
+          workerId={selectedWorkerForLogs?.worker_id}
+          workerName={selectedWorkerForLogs?.worker_name}
+          onClose={() => {
+            setLogViewerVisible(false);
+            setSelectedWorkerForLogs(null);
+          }}
+        />
       </div>
     </div>
   );
