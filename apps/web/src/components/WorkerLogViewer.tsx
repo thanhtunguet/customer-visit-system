@@ -87,10 +87,23 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
     setError(null);
     
     try {
+      console.log('Loading logs for worker:', workerId);
+      console.log('API call URL:', `/worker-management/workers/${workerId}/logs/recent?limit=100`);
       const response = await apiClient.get(`/worker-management/workers/${workerId}/logs/recent?limit=100`);
-      setLogs(response.data.logs || []);
+      console.log('API response:', response);
+      console.log('Response type:', typeof response);
+      console.log('Response.logs:', response.logs);
+      
+      if (response && response.logs) {
+        setLogs(response.logs);
+      } else {
+        console.error('Unexpected response structure:', response);
+        setLogs([]);
+      }
       setTimeout(scrollToBottom, 100); // Allow DOM to update
     } catch (err: any) {
+      console.error('Error loading logs:', err);
+      console.error('Error response:', err.response);
       const errorMsg = err.response?.data?.detail || 'Failed to load logs';
       setError(errorMsg);
       notification.error({
@@ -108,12 +121,9 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
     
     try {
       const token = localStorage.getItem('access_token');
-      const streamUrl = `${apiClient.baseURL}/worker-management/workers/${workerId}/logs/stream`;
+      const streamUrl = `${apiClient.baseURL}/worker-management/workers/${workerId}/logs/stream?access_token=${encodeURIComponent(token || '')}`;
       
-      const eventSource = new EventSource(streamUrl, {
-        // Note: EventSource doesn't support custom headers, so we'd need to pass token via query param
-        // For now, we'll rely on cookie auth or modify the backend to support token via query param
-      });
+      const eventSource = new EventSource(streamUrl);
       
       eventSource.onopen = () => {
         setStreaming(true);
@@ -349,7 +359,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
             type="error"
             closable
             onClose={() => setError(null)}
-            style={{ margin: 16, marginBottom: 0 }}
+            className="my-4"
           />
         )}
 
@@ -371,7 +381,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
                 </div>
               ) : (
                 filteredLogs.map((log, index) => (
-                  <div key={index} className="mb-1 leading-relaxed hover:bg-gray-800 px-2 py-1 rounded">
+                  <div key={`${log.timestamp}-${index}-${log.message.slice(0, 50)}`} className="mb-1 leading-relaxed hover:bg-gray-800 px-2 py-1 rounded">
                     <span className="text-gray-400 mr-2">
                       {formatTimestamp(log.timestamp)}
                     </span>

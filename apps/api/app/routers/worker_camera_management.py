@@ -4,13 +4,13 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db, get_db_session
-from ..core.security import get_current_user
+from ..core.security import get_current_user, get_current_user_for_stream
 from ..services.camera_delegation_service import camera_delegation_service
 from ..services.worker_command_service import worker_command_service, WorkerCommandMessage
 from ..services.worker_registry import worker_registry
@@ -599,7 +599,8 @@ async def get_worker_recent_logs(
 async def stream_worker_logs(
     worker_id: str,
     request: Request,
-    current_user_dict: dict = Depends(get_current_user),
+    token: str = Query(None),
+    current_user_dict: dict = Depends(get_current_user_for_stream),
 ):
     """Stream real-time logs from a worker via Server-Sent Events"""
     import httpx
