@@ -32,21 +32,63 @@ class CameraDelegationService:
         Assign an available camera to a worker in the registry system.
         Only one camera per worker, and one worker per camera.
         """
+        # Import structured logging
+        from ..core.correlation import get_structured_logger, get_or_create_correlation_id
+        struct_logger = get_structured_logger(__name__)
+        correlation_id = get_or_create_correlation_id()
+        
+        struct_logger.info(
+            "assignment_start",
+            worker_id=worker_id,
+            tenant_id=tenant_id,
+            site_id=site_id,
+            correlation_id=correlation_id
+        )
         
         # Get worker info from registry
         worker = worker_registry.get_worker(worker_id)
         if not worker:
+            struct_logger.warning(
+                "assignment_failed_worker_not_found",
+                worker_id=worker_id,
+                reason="worker_not_in_registry",
+                correlation_id=correlation_id
+            )
             logger.warning(f"Worker {worker_id} not found in registry")
             return None
         
+        struct_logger.info(
+            "worker_found",
+            worker_id=worker_id,
+            worker_status=worker.status.value,
+            worker_tenant=worker.tenant_id,
+            worker_site=worker.site_id,
+            correlation_id=correlation_id
+        )
+        
         # Ensure worker belongs to the right tenant
         if worker.tenant_id != tenant_id:
+            struct_logger.warning(
+                "assignment_failed_tenant_mismatch",
+                worker_id=worker_id,
+                worker_tenant=worker.tenant_id,
+                expected_tenant=tenant_id,
+                reason="tenant_mismatch",
+                correlation_id=correlation_id
+            )
             logger.warning(f"Worker {worker_id} belongs to different tenant")
             return None
         
         # Check if worker already has a camera assigned
         if worker_id in self.worker_cameras:
             current_camera_id = self.worker_cameras[worker_id]
+            struct_logger.info(
+                "assignment_already_exists",
+                worker_id=worker_id,
+                camera_id=current_camera_id,
+                reason="worker_already_assigned",
+                correlation_id=correlation_id
+            )
             logger.info(f"Worker {worker_id} already has camera {current_camera_id} assigned")
             # Return the currently assigned camera
             result = await db.execute(
@@ -72,11 +114,36 @@ class CameraDelegationService:
         )
         available_cameras = result.scalars().all()
         
+        struct_logger.info(
+            "cameras_query_result",
+            tenant_id=tenant_id,
+            site_id=site_id,
+            total_cameras=len(available_cameras),
+            correlation_id=correlation_id
+        )
+        
         logger.info(f"Found {len(available_cameras)} cameras in site {site_id} for tenant {tenant_id}")
         for cam in available_cameras:
-            logger.info(f"  Camera {cam.camera_id}: {cam.name} (assigned: {cam.camera_id in self.assignments})")
+            is_assigned = cam.camera_id in self.assignments
+            assigned_worker = self.assignments.get(cam.camera_id)
+            struct_logger.info(
+                "camera_status",
+                camera_id=cam.camera_id,
+                camera_name=cam.name,
+                is_assigned=is_assigned,
+                assigned_worker=assigned_worker,
+                correlation_id=correlation_id
+            )
+            logger.info(f"  Camera {cam.camera_id}: {cam.name} (assigned: {is_assigned})")
         
         if not available_cameras:
+            struct_logger.warning(
+                "assignment_failed_no_cameras",
+                tenant_id=tenant_id,
+                site_id=site_id,
+                reason="no_cameras_in_site",
+                correlation_id=correlation_id
+            )
             logger.info(f"No cameras available in site {site_id} for tenant {tenant_id}")
             return None
         
@@ -89,6 +156,15 @@ class CameraDelegationService:
                 
                 # Update worker info in registry
                 worker.camera_id = camera.camera_id
+                
+                struct_logger.info(
+                    "assignment_successful",
+                    worker_id=worker_id,
+                    camera_id=camera.camera_id,
+                    camera_name=camera.name,
+                    camera_type=camera.camera_type.value if camera.camera_type else "webcam",
+                    correlation_id=correlation_id
+                )
                 
                 # Send ASSIGN_CAMERA command to worker to start processing
                 try:
@@ -103,10 +179,20 @@ class CameraDelegationService:
                             "camera_name": camera.name,
                             "rtsp_url": camera.rtsp_url,
                             "device_index": camera.device_index,
-                            "camera_type": camera.camera_type.value if camera.camera_type else "webcam"
+                            "camera_type": camera.camera_type.value if camera.camera_type else "webcam",
+                            "correlation_id": correlation_id
                         },
                         priority=CommandPriority.HIGH,
                         requested_by="system_auto_assignment"
+                    )
+                    
+                    struct_logger.info(
+                        "command_sent",
+                        command_id=command_id,
+                        worker_id=worker_id,
+                        camera_id=camera.camera_id,
+                        command="ASSIGN_CAMERA",
+                        correlation_id=correlation_id
                     )
                     logger.info(f"Sent ASSIGN_CAMERA command {command_id} to worker {worker_id} for camera {camera.camera_id}")
                     
@@ -120,22 +206,51 @@ class CameraDelegationService:
                             "worker_id": worker_id,
                             "worker_status": "assigned",
                             "timestamp": datetime.utcnow().isoformat(),
-                            "source": "camera_assignment"
+                            "source": "camera_assignment",
+                            "correlation_id": correlation_id
                         }
                         asyncio.create_task(
                             camera_status_broadcaster.broadcast_camera_status_change(
                                 str(camera.site_id), camera.camera_id, status_data
                             )
                         )
+                        
+                        struct_logger.info(
+                            "status_broadcast_queued",
+                            camera_id=camera.camera_id,
+                            worker_id=worker_id,
+                            correlation_id=correlation_id
+                        )
                     except Exception as broadcast_error:
+                        struct_logger.error(
+                            "status_broadcast_failed",
+                            camera_id=camera.camera_id,
+                            error=str(broadcast_error),
+                            correlation_id=correlation_id
+                        )
                         logger.warning(f"Failed to broadcast camera assignment status: {broadcast_error}")
                         
                 except Exception as e:
+                    struct_logger.error(
+                        "command_send_failed",
+                        worker_id=worker_id,
+                        camera_id=camera.camera_id,
+                        error=str(e),
+                        correlation_id=correlation_id
+                    )
                     logger.error(f"Failed to send ASSIGN_CAMERA command to worker {worker_id}: {e}")
                 
                 logger.info(f"Assigned camera {camera.camera_id} to worker {worker_id}")
                 return camera
         
+        struct_logger.warning(
+            "assignment_failed_all_assigned",
+            tenant_id=tenant_id,
+            site_id=site_id,
+            total_cameras=len(available_cameras),
+            reason="all_cameras_assigned",
+            correlation_id=correlation_id
+        )
         logger.info(f"All cameras in site {site_id} are already assigned")
         return None
 

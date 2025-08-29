@@ -19,7 +19,7 @@ from .services.worker_monitor_service import worker_monitor_service
 from .services.worker_registry import worker_registry
 from .services.worker_command_service import worker_command_service
 from .services.camera_delegation_service import camera_delegation_service
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management
 
 
 async def initialize_camera_proxy():
@@ -77,6 +77,14 @@ async def lifespan(app: FastAPI):
         logging.info("Started camera delegation service")
     except Exception as e:
         logging.warning(f"Failed to start camera delegation service: {e}")
+    
+    # Start assignment service (lease-based delegation)
+    try:
+        from .services.assignment_service import assignment_service
+        await assignment_service.start()
+        logging.info("Started lease-based assignment service")
+    except Exception as e:
+        logging.warning(f"Failed to start assignment service: {e}")
     
     logging.info("API startup completed")
     
@@ -154,6 +162,7 @@ app.include_router(files.router)
 app.include_router(workers.router)
 app.include_router(worker_registry_router.router)
 app.include_router(worker_camera_management.router)
+app.include_router(lease_management.router)
 
 
 # Configure logging

@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, BigInteger, ForeignKey, ForeignKeyConstraint, Text, Index, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer, BigInteger, ForeignKey, ForeignKeyConstraint, Text, Index, Enum, JSON, TIMESTAMP
+from sqlalchemy.sql import func
 import enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -127,6 +128,11 @@ class Camera(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
+    # New fields for enhanced camera management
+    caps = Column(JSON, nullable=True)  # Camera capabilities: {"codec":"h264","res":"1920x1080","fps":25}
+    last_probe_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_state_change_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    
     # Foreign key constraints
     __table_args__ = (
         ForeignKeyConstraint(['tenant_id'], ['tenants.tenant_id'], ondelete='CASCADE'),
@@ -135,6 +141,53 @@ class Camera(Base):
     
     # Relationships
     site = relationship("Site", back_populates="cameras")
+    session = relationship("CameraSession", back_populates="camera", uselist=False)
+
+class CameraSession(Base):
+    """
+    Camera session model for tracking camera assignments with lease-based delegation
+    
+    States:
+    - PENDING: Camera available but not assigned
+    - ACTIVE: Camera assigned and worker confirmed active
+    - PAUSED: Temporarily paused (worker issue, etc.)
+    - ORPHANED: Worker disconnected but still within grace period
+    - TERMINATED: Session ended, camera available for reassignment
+    """
+    __tablename__ = 'camera_sessions'
+    
+    camera_id = Column(Integer, ForeignKey('cameras.camera_id'), primary_key=True)
+    tenant_id = Column(String, ForeignKey('tenants.tenant_id'), nullable=False)
+    site_id = Column(Integer, ForeignKey('sites.site_id'), nullable=False)
+    worker_id = Column(String, nullable=True)
+    generation = Column(BigInteger, nullable=False, default=0)
+    state = Column(String(20), nullable=False, default='PENDING')
+    lease_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    reason = Column(Text, nullable=True)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    
+    # Relationships
+    camera = relationship("Camera", back_populates="session")
+    tenant = relationship("Tenant")
+    site = relationship("Site")
+    
+    def __repr__(self):
+        return f"<CameraSession(camera_id={self.camera_id}, worker_id={self.worker_id}, state={self.state}, generation={self.generation})>"
+    
+    def to_dict(self):
+        return {
+            'camera_id': self.camera_id,
+            'tenant_id': self.tenant_id,
+            'site_id': self.site_id,
+            'worker_id': self.worker_id,
+            'generation': self.generation,
+            'state': self.state,
+            'lease_expires_at': self.lease_expires_at.isoformat() if self.lease_expires_at else None,
+            'reason': self.reason,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 
 class Staff(Base):
