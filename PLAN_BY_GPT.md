@@ -111,12 +111,11 @@ UPDATE camera_sessions
 If rowcount=0 → retry with next candidate.
 
 	•	POST /leases/renew: extend lease_expires_at for the tuple(s) included in heartbeat.
-	•	POST /leases/reclaim: cron/scheduler to mark ORPHANED when expired; HARD reclaim after 10 min.
+	•	POST /leases/reclaim: cron/scheduler to mark ORPHANED when expired; HARD reclaim after 90s.
 
 4.2 Timers
 	•	lease_ttl: 90s (renew every 10s with heartbeat).
-	•	soft_reclaim_window: assign only if capacity constrained when expired < 10m.
-	•	hard_reclaim: >10m → reassign immediately.
+	•	hard_reclaim: >90s → reassign immediately (simplified from original 10m window).
 
 Claude action: implement AssignmentService with site & capacity filters + retries; unit tests for race conditions.
 
@@ -281,9 +280,7 @@ class WorkerFSM:
 	•	Worker connects; within ≤3s receives START when an eligible camera exists.
 	•	Pipeline emits pipeline_ready within ≤10s, backend marks camera ACTIVE.
 	•	Lease renews every 10s; if worker disconnects:
-	•	<90s: lease remains; no reassignment.
-	•	90s–10m: soft reclaim (no reassignment unless capacity pressure).
-	•	10m: hard reclaim; different worker starts camera within ≤20s.
+	•	>90s: hard reclaim; different worker starts camera within ≤20s.
 	•	Observability: dashboard shows per-camera state, lease TTL, worker health.
 	•	No plaintext RTSP creds in logs. All intents/event logs include correlation IDs.
 	•	Test suite passes locally and in CI; integration test covers the above flows.
