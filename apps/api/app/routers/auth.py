@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ..core.security import (
     mint_jwt, 
@@ -14,7 +16,7 @@ from ..core.security import (
     require_system_admin,
     get_tenant_context
 )
-from ..core.database import get_db
+from ..core.database import get_db, get_db_session
 from ..models.database import User, UserRole, ApiKey
 from ..schemas import (
     TokenRequest, 
@@ -150,7 +152,7 @@ async def get_current_user_info(user: User = Depends(get_current_active_user)):
 @router.put("/me/password")
 async def change_my_password(
     password_data: UserPasswordUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user)
 ):
     """Change current user's password (requires current password)"""

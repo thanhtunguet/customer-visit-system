@@ -18,6 +18,10 @@ class Database:
             settings.database_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=10,  # Limit concurrent connections
+            max_overflow=20,  # Allow temporary overflow
+            pool_timeout=30,  # Timeout for getting connections
+            echo_pool=True if getattr(settings, 'log_level', 'INFO') == "DEBUG" else False,
         )
         self.session_maker = sessionmaker(
             self.engine,
@@ -31,6 +35,10 @@ class Database:
             sync_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=5,  # Smaller pool for sync operations
+            max_overflow=10,
+            pool_timeout=30,
+            echo_pool=True if getattr(settings, 'log_level', 'INFO') == "DEBUG" else False,
         )
         self.sync_session_maker = sessionmaker(
             self.sync_engine,

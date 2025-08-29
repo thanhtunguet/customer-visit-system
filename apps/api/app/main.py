@@ -19,6 +19,7 @@ from .services.worker_monitor_service import worker_monitor_service
 from .services.worker_registry import worker_registry
 from .services.worker_command_service import worker_command_service
 from .services.camera_delegation_service import camera_delegation_service
+from .core.task_manager import task_manager
 from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management
 
 
@@ -49,6 +50,10 @@ async def lifespan(app: FastAPI):
     
     # Initialize camera proxy service
     await initialize_camera_proxy()
+    
+    # Start task manager
+    await task_manager.start()
+    logging.info("Task manager started")
     
     # Start worker monitoring service
     try:
@@ -104,6 +109,7 @@ async def lifespan(app: FastAPI):
     # Service cleanup task  
     async def cleanup_services():
         try:
+            await task_manager.stop()
             await worker_monitor_service.stop()
             await worker_registry.stop()
             await worker_command_service.stop()

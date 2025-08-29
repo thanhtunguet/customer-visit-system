@@ -52,52 +52,56 @@ class WorkerShutdownService:
             dict: Shutdown request status
         """
         
-        db = next(get_db())
         try:
-            # Find the worker
-            worker = db.query(Worker).filter(Worker.worker_id == worker_id).first()
-            if not worker:
-                return {"success": False, "error": "Worker not found"}
-            
-            # Create shutdown request
-            shutdown_request = {
-                "worker_id": worker_id,
-                "worker_name": worker.worker_name,
-                "hostname": worker.hostname,
-                "signal": signal,
-                "timeout": timeout,
-                "requested_by": requested_by,
-                "requested_at": datetime.utcnow(),
-                "status": "pending"
-            }
-            
-            # Store pending shutdown
-            self.pending_shutdowns[worker_id] = shutdown_request
-            
-            # Update worker status to indicate shutdown requested
-            worker.status = "shutting_down"
-            worker.last_error = f"Shutdown requested by {requested_by}"
-            worker.updated_at = datetime.utcnow()
-            db.commit()
-            
-            logger.info(f"Shutdown requested for worker {worker_id} ({worker.worker_name}) by {requested_by}")
-            
-            # Start timeout monitoring
-            asyncio.create_task(self._monitor_shutdown_timeout(worker_id, timeout))
-            
-            return {
-                "success": True,
-                "message": f"Shutdown requested for worker {worker.worker_name}",
-                "shutdown_id": f"{worker_id}_{int(datetime.utcnow().timestamp())}",
-                "timeout": timeout
-            }
-            
+            async with get_db_session() as db:
+                # Find the worker
+                from sqlalchemy import select
+                result = await db.execute(select(Worker).where(Worker.worker_id == worker_id))
+                worker = result.scalar_one_or_none()
+                if not worker:
+                    return {"success": False, "error": "Worker not found"}
+                
+                # Create shutdown request
+                shutdown_request = {
+                    "worker_id": worker_id,
+                    "worker_name": worker.worker_name,
+                    "hostname": worker.hostname,
+                    "signal": signal,
+                    "timeout": timeout,
+                    "requested_by": requested_by,
+                    "requested_at": datetime.utcnow(),
+                    "status": "pending"
+                }
+                
+                # Store pending shutdown
+                self.pending_shutdowns[worker_id] = shutdown_request
+                
+                # Update worker status to indicate shutdown requested
+                worker.status = "shutting_down"
+                worker.last_error = f"Shutdown requested by {requested_by}"
+                worker.updated_at = datetime.utcnow()
+                await db.commit()
+                
+                logger.info(f"Shutdown requested for worker {worker_id} ({worker.worker_name}) by {requested_by}")
+                
+                # Start timeout monitoring with task manager
+                from ..core.task_manager import create_task
+                create_task(
+                    self._monitor_shutdown_timeout(worker_id, timeout),
+                    name=f"shutdown_monitor_{worker_id}",
+                    timeout=timeout + 10  # Extra buffer for cleanup
+                )
+                
+                return {
+                    "success": True,
+                    "message": f"Shutdown requested for worker {worker.worker_name}",
+                    "shutdown_id": f"{worker_id}_{int(datetime.utcnow().timestamp())}",
+                    "timeout": timeout
+                }
+        
         except Exception as e:
             logger.error(f"Error requesting worker shutdown: {e}")
-            db.rollback()
             return {"success": False, "error": str(e)}
-        finally:
-            db.close()
     
     async def get_shutdown_signal(self, worker_id: str) -> Optional[dict]:
         """
@@ -166,33 +170,37 @@ class WorkerShutdownService:
         shutdown_request["status"] = "completed"
         shutdown_request["completed_at"] = datetime.utcnow()
         
-        # Remove from pending shutdowns after a delay (for logging)
-        asyncio.create_task(self._cleanup_shutdown_request(worker_id, delay=60))
+        # Remove from pending shutdowns after a delay (for logging) with task manager
+        from ..core.task_manager import create_task
+        create_task(
+            self._cleanup_shutdown_request(worker_id, delay=60),
+            name=f"shutdown_cleanup_{worker_id}",
+            timeout=70  # Slightly more than delay
+        )
         
         # Update worker status in database
-        db = next(get_db())
-        try:
-            worker = db.query(Worker).filter(Worker.worker_id == worker_id).first()
+        async with get_db_session() as db:
+            from sqlalchemy import select
+            result = await db.execute(select(Worker).where(Worker.worker_id == worker_id))
+            worker = result.scalar_one_or_none()
             if worker:
                 worker.status = "offline"
                 worker.camera_id = None  # Release camera
                 worker.updated_at = datetime.utcnow()
-                db.commit()
+                await db.commit()
                 
-                # Broadcast worker update
+                # Broadcast worker update with task manager
                 try:
                     from ..routers.workers import broadcast_worker_status_update
-                    import asyncio
-                    asyncio.create_task(broadcast_worker_status_update(worker, worker.tenant_id))
+                    from ..core.task_manager import create_broadcast_task
+                    create_broadcast_task(
+                        broadcast_worker_status_update(worker, worker.tenant_id),
+                        name=f"shutdown_broadcast_{worker_id}"
+                    )
                 except Exception as broadcast_error:
                     logger.error(f"Error broadcasting worker shutdown update: {broadcast_error}")
                 
                 logger.info(f"Worker {worker_id} shutdown completed gracefully")
-        except Exception as e:
-            logger.error(f"Error updating worker status after shutdown: {e}")
-            db.rollback()
-        finally:
-            db.close()
         
         return True
     
@@ -213,30 +221,29 @@ class WorkerShutdownService:
         shutdown_request["timeout_at"] = datetime.utcnow()
         
         # Force worker offline status
-        db = next(get_db())
-        try:
-            worker = db.query(Worker).filter(Worker.worker_id == worker_id).first()
+        async with get_db_session() as db:
+            from sqlalchemy import select
+            result = await db.execute(select(Worker).where(Worker.worker_id == worker_id))
+            worker = result.scalar_one_or_none()
             if worker:
                 worker.status = "offline"
                 worker.camera_id = None
                 worker.last_error = f"Shutdown timeout after {timeout}s"
                 worker.updated_at = datetime.utcnow()
-                db.commit()
+                await db.commit()
                 
-                # Broadcast worker update for timeout
+                # Broadcast worker update for timeout with task manager
                 try:
                     from ..routers.workers import broadcast_worker_status_update
-                    import asyncio
-                    asyncio.create_task(broadcast_worker_status_update(worker, worker.tenant_id))
+                    from ..core.task_manager import create_broadcast_task
+                    create_broadcast_task(
+                        broadcast_worker_status_update(worker, worker.tenant_id),
+                        name=f"timeout_broadcast_{worker_id}"
+                    )
                 except Exception as broadcast_error:
                     logger.error(f"Error broadcasting worker timeout update: {broadcast_error}")
                 
                 logger.warning(f"Forced worker {worker_id} offline due to shutdown timeout")
-        except Exception as e:
-            logger.error(f"Error forcing worker offline: {e}")
-            db.rollback()
-        finally:
-            db.close()
         
         # Cleanup after delay
         await self._cleanup_shutdown_request(worker_id, delay=60)

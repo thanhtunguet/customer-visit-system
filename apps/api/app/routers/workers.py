@@ -10,8 +10,9 @@ from typing import Dict, List, Optional, Any, Set
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.database import get_db
+from ..core.database import get_db, get_db_session
 from ..core.security import get_current_user
 from ..models.database import Worker, UserRole, Camera
 from ..services.worker_shutdown_service import worker_shutdown_service, ShutdownSignal
@@ -403,7 +404,7 @@ async def register_worker(
 async def send_heartbeat(
     worker_id: str,
     heartbeat: WorkerHeartbeatRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Send worker heartbeat to update status"""
@@ -416,13 +417,15 @@ async def send_heartbeat(
             detail="Only workers or system admins can send heartbeats"
         )
     
-    # Find worker
-    worker = db.query(Worker).filter(
+    # Find worker using async query
+    from sqlalchemy import select, and_
+    result = await db.execute(select(Worker).where(
         and_(
             Worker.worker_id == worker_id,
             Worker.tenant_id == current_user.tenant_id
         )
-    ).first()
+    ))
+    worker = result.scalar_one_or_none()
     
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -440,9 +443,8 @@ async def send_heartbeat(
             worker.camera_id = None
         elif heartbeat.status in ["idle", "online"] and not worker.camera_id:
             # Worker becoming idle/online but has no camera - try to assign one
-            assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker.worker_id)
-            if assigned_camera:
-                worker.camera_id = assigned_camera.camera_id
+            # TODO: Convert assign_camera_to_worker to async or disable temporarily
+            pass
         elif heartbeat.status == "processing" and heartbeat.current_camera_id:
             # Verify worker is processing the correct assigned camera
             if worker.camera_id and worker.camera_id != heartbeat.current_camera_id:
@@ -465,15 +467,9 @@ async def send_heartbeat(
         # Clear error when worker comes back online
         worker.last_error = None
     
-    # Additional check: if worker is idle/online but still has no camera, try to assign one
-    # This handles cases where cameras became available after worker was already idle
-    if heartbeat.status in ["idle", "online"] and not worker.camera_id and worker.site_id:
-        assigned_camera = assign_camera_to_worker(db, current_user.tenant_id, worker.site_id, worker.worker_id)
-        if assigned_camera:
-            worker.camera_id = assigned_camera.camera_id
-    
-    db.commit()
-    db.refresh(worker)
+    # Commit changes
+    await db.commit()
+    await db.refresh(worker)
     
     # Broadcast worker update to WebSocket clients
     try:
@@ -504,8 +500,12 @@ async def send_heartbeat(
             "is_healthy": is_worker_healthy(worker)
         }
         
-        # Use asyncio.create_task to avoid blocking
-        asyncio.create_task(connection_manager.broadcast_worker_update(current_user.tenant_id, worker_data))
+        # Use task manager to avoid blocking and prevent resource leaks
+        from ..core.task_manager import create_broadcast_task
+        create_broadcast_task(
+            connection_manager.broadcast_worker_update(current_user.tenant_id, worker_data),
+            name="worker_broadcast"
+        )
     except Exception as e:
         print(f"Error broadcasting worker update: {e}")
     
@@ -1105,9 +1105,9 @@ async def websocket_endpoint(
         
         # Send initial worker status
         try:
-            db = next(get_db())
-            query = db.query(Worker).filter(Worker.tenant_id == tenant_id)
-            workers = query.all()
+            async with get_db_session() as db:
+                result = await db.execute(select(Worker).where(Worker.tenant_id == tenant_id))
+                workers = result.scalars().all()
             
             initial_data = []
             for worker in workers:

@@ -8,9 +8,11 @@ from functools import wraps
 import jwt
 from fastapi import HTTPException, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from .config import settings
-from .database import get_db
+from .database import get_db, get_db_session
 from ..models.database import User, UserRole
 
 
@@ -124,7 +126,7 @@ def require_roles(allowed_roles: List[UserRole]):
     return decorator
 
 
-def get_current_active_user(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)) -> User:
+async def get_current_active_user(db: AsyncSession = Depends(get_db_session), current_user: dict = Depends(get_current_user)) -> User:
     """Get current authenticated user from database"""
     if not current_user.get("sub"):
         raise HTTPException(status_code=401, detail="Invalid authentication")
@@ -141,16 +143,19 @@ def get_current_active_user(db: Session = Depends(get_db), current_user: dict = 
         return user
     
     # For regular user authentication, fetch from database
-    user = db.query(User).filter(User.username == current_user["sub"]).first()
+    from sqlalchemy import select
+    result = await db.execute(select(User).where(User.username == current_user["sub"]))
+    user = result.scalar_one_or_none()
+    
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     
     if not user.is_active:
         raise HTTPException(status_code=401, detail="User account is disabled")
     
-    # Update last login
-    user.last_login = datetime.utcnow()
-    db.commit()
+    # Update last login (temporarily disabled to prevent blocking)
+    # user.last_login = datetime.utcnow()
+    # await db.commit()
     
     return user
 

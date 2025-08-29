@@ -209,10 +209,12 @@ class CameraDelegationService:
                             "source": "camera_assignment",
                             "correlation_id": correlation_id
                         }
-                        asyncio.create_task(
+                        from ..core.task_manager import create_broadcast_task
+                        create_broadcast_task(
                             camera_status_broadcaster.broadcast_camera_status_change(
                                 str(camera.site_id), camera.camera_id, status_data
-                            )
+                            ),
+                            name=f"camera_status_{camera.camera_id}"
                         )
                         
                         struct_logger.info(

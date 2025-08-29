@@ -351,11 +351,17 @@ class WorkerRegistry:
         
         # Broadcast camera status changes if streaming or processing status changed
         if streaming_status_changed or processing_status_changed:
-            asyncio.create_task(self._broadcast_camera_status_changes(
-                worker, 
-                active_camera_streams or [], 
-                active_camera_processing or []
-            ))
+            # Use task manager with DB task handling to prevent backend lockup
+            from ..core.task_manager import create_db_task
+            create_db_task(
+                self._broadcast_camera_status_changes(
+                    worker, 
+                    active_camera_streams or [], 
+                    active_camera_processing or []
+                ),
+                name=f"camera_broadcast_{worker.worker_id}",
+                timeout=10.0  # 10 second timeout for database operations
+            )
         
         # Notify callbacks if status changed or if it's an error
         if old_status != status or status == WorkerStatus.ERROR:
@@ -366,6 +372,19 @@ class WorkerRegistry:
 
     async def _broadcast_camera_status_changes(self, worker: WorkerInfo, active_camera_streams: List[str], active_camera_processing: List[str] = None):
         """Broadcast camera status changes to SSE clients"""
+        try:
+            # Add timeout to prevent hanging database operations
+            return await asyncio.wait_for(
+                self._do_broadcast_camera_status_changes(worker, active_camera_streams, active_camera_processing),
+                timeout=5.0  # 5 second timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Camera status broadcast timed out for worker {worker.worker_id}")
+        except Exception as e:
+            logger.error(f"Failed to broadcast camera status changes: {e}")
+
+    async def _do_broadcast_camera_status_changes(self, worker: WorkerInfo, active_camera_streams: List[str], active_camera_processing: List[str] = None):
+        """Internal method to perform the actual broadcast"""
         try:
             from .camera_status_broadcaster import camera_status_broadcaster
             from ..core.database import get_db_session
@@ -427,7 +446,18 @@ class WorkerRegistry:
                     logger.debug(f"Broadcasted camera status change for camera {camera_id} in site {site_id}")
                     
         except Exception as e:
-            logger.error(f"Failed to broadcast camera status changes: {e}")
+            logger.error(f"Failed to do broadcast camera status changes: {e}")
+
+    def _handle_broadcast_task_result(self, task: asyncio.Task):
+        """Handle results from broadcast tasks to prevent unhandled exceptions"""
+        try:
+            if task.exception():
+                logger.error(f"Broadcast task failed with exception: {task.exception()}")
+            else:
+                logger.debug("Broadcast task completed successfully")
+        except Exception as e:
+            # Fallback error handling in case task.exception() itself fails
+            logger.error(f"Error handling broadcast task result: {e}")
     
     def get_worker(self, worker_id: str) -> Optional[WorkerInfo]:
         """Get worker by ID"""
