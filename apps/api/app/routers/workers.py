@@ -910,7 +910,16 @@ async def receive_worker_stop_signal(
     db: Session = Depends(get_db),
     current_user_dict: dict = Depends(get_current_user),
 ):
-    """Receive stop signal from worker (sent during shutdown process)"""
+    """
+    Receive stop signal from worker (sent during shutdown process)
+    
+    This endpoint:
+    1. Acknowledges receipt of shutdown signal from worker
+    2. Triggers backend cleanup tasks 
+    3. Releases camera assignments
+    4. Updates worker status
+    5. Broadcasts status updates
+    """
     
     current_user = UserInfo(**current_user_dict)
     
@@ -932,27 +941,60 @@ async def receive_worker_stop_signal(
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     
-    # Log the stop signal
-    logger.info(f"Received stop signal from worker {worker_id} ({worker.worker_name}): {stop_signal.reason}")
+    # Log the stop signal reception
+    logger.info(f"✅ Received stop signal from worker {worker_id} ({worker.worker_name}): {stop_signal.reason}")
     
-    # Update worker status to indicate shutdown in progress
-    worker.status = "shutting_down"
-    worker.last_error = f"Stop signal received: {stop_signal.reason}"
+    # 1. Release camera assignment immediately
+    assigned_camera_id = worker.camera_id
+    if assigned_camera_id:
+        logger.info(f"🔓 Releasing camera {assigned_camera_id} from shutting down worker {worker_id}")
+        worker.camera_id = None
+        
+        # Also trigger cleanup in camera delegation service
+        try:
+            from ..services.camera_delegation_service import camera_delegation_service
+            camera_delegation_service.release_camera_from_worker(worker_id)
+            logger.info(f"✅ Camera {assigned_camera_id} released via delegation service")
+        except Exception as e:
+            logger.error(f"❌ Error releasing camera via delegation service: {e}")
+    
+    # 2. Update worker status and clear from registries
+    worker.status = "offline"
+    worker.last_error = f"Worker shutdown: {stop_signal.reason}"
+    worker.last_heartbeat = datetime.utcnow()  # Mark final heartbeat
     worker.updated_at = datetime.utcnow()
     
+    # 3. Clean up from worker registry if present
+    try:
+        from ..services.worker_registry import worker_registry
+        if worker_registry.get_worker(worker_id):
+            await worker_registry.remove_worker(worker_id)
+            logger.info(f"✅ Worker {worker_id} removed from worker registry")
+    except Exception as e:
+        logger.error(f"❌ Error removing worker from registry: {e}")
+    
+    # 4. Update database
     db.commit()
     db.refresh(worker)
     
-    # Broadcast worker status update
+    # 5. Broadcast worker status update to frontend
     try:
         await broadcast_worker_status_update(worker, current_user.tenant_id)
+        logger.info(f"📢 Broadcasted worker shutdown status for {worker_id}")
     except Exception as e:
-        logger.error(f"Error broadcasting worker stop signal update: {e}")
+        logger.error(f"❌ Error broadcasting worker stop signal update: {e}")
     
+    # 6. Log successful cleanup completion
+    logger.info(f"🎉 Worker {worker_id} shutdown cleanup completed successfully")
+    
+    # 7. Return acknowledgment to worker
     return {
-        "message": "Stop signal received and acknowledged",
+        "message": "Stop signal received and acknowledged - backend cleanup completed",
         "worker_id": worker_id,
-        "status": "acknowledged",
+        "status": "acknowledged_and_cleaned",
+        "camera_released": assigned_camera_id is not None,
+        "released_camera_id": assigned_camera_id,
+        "backend_cleanup_completed": True,
         "timestamp": datetime.utcnow().isoformat()
     }
 

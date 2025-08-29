@@ -63,7 +63,6 @@ async def simulate_event_post(token: str, client: httpx.AsyncClient) -> None:
 import asyncio
 import cv2
 import logging
-import os
 import signal
 import sys
 import time
@@ -467,7 +466,6 @@ class FaceRecognitionWorker:
                         
                         # Exit the process
                         logger.info("Exiting worker process")
-                        import os
                         os._exit(0)
                 
                 await asyncio.sleep(check_interval)
@@ -480,13 +478,13 @@ class FaceRecognitionWorker:
                 await asyncio.sleep(check_interval)
 
     async def _send_stop_signal_to_backend(self):
-        """Send stop signal to backend with 3 retry attempts, 1-second timeout each"""
+        """Send stop signal to backend with 3 retry attempts, wait for acknowledgment"""
         max_retries = 3
         timeout = 1.0  # 1 second timeout for each request as requested
         
         for attempt in range(max_retries):
             try:
-                logger.info(f"Sending stop signal to backend (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"🚪 Sending stop signal to backend (attempt {attempt + 1}/{max_retries})")
                 
                 # Ensure we have authentication
                 await self._ensure_authenticated()
@@ -504,21 +502,36 @@ class FaceRecognitionWorker:
                 )
                 response.raise_for_status()
                 
-                logger.info(f"Successfully sent stop signal to backend on attempt {attempt + 1}")
+                # Parse response to check backend cleanup status
+                response_data = response.json()
+                backend_cleanup_completed = response_data.get("backend_cleanup_completed", False)
+                camera_released = response_data.get("camera_released", False)
+                
+                logger.info(f"✅ Successfully sent stop signal to backend (attempt {attempt + 1})")
+                logger.info(f"📄 Backend response: {response_data.get('message', 'No message')}")
+                
+                if backend_cleanup_completed:
+                    logger.info("🎉 Backend confirmed cleanup completed - safe to shutdown")
+                    if camera_released:
+                        released_camera = response_data.get("released_camera_id")
+                        logger.info(f"🔓 Backend released camera {released_camera}")
+                else:
+                    logger.info("⚠️  Backend cleanup status unknown - proceeding with shutdown")
+                
                 return True
                 
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout sending stop signal (attempt {attempt + 1}/{max_retries})")
+                logger.warning(f"⏱️  Timeout sending stop signal (attempt {attempt + 1}/{max_retries})")
             except httpx.TimeoutException:
-                logger.warning(f"Request timeout sending stop signal (attempt {attempt + 1}/{max_retries})")  
+                logger.warning(f"⏱️  Request timeout sending stop signal (attempt {attempt + 1}/{max_retries})")  
             except Exception as e:
-                logger.warning(f"Error sending stop signal (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(f"❌ Error sending stop signal (attempt {attempt + 1}/{max_retries}): {e}")
             
             # Don't wait after the last attempt
             if attempt < max_retries - 1:
                 await asyncio.sleep(0.1)  # Brief delay before retry
         
-        logger.error(f"Failed to send stop signal to backend after {max_retries} attempts")
+        logger.error(f"💥 Failed to send stop signal to backend after {max_retries} attempts - proceeding with local cleanup")
         return False
     
     def should_shutdown(self) -> bool:
@@ -787,7 +800,6 @@ async def main():
             # Second signal - force exit immediately
             elapsed = asyncio.get_event_loop().time() - shutdown_start_time
             logger.warning(f"Second signal received after {elapsed:.1f}s - forcing immediate exit")
-            import os
             os._exit(1)
     
     signal.signal(signal.SIGINT, signal_handler)
@@ -818,11 +830,9 @@ async def main():
             logger.info("Worker shutdown completed successfully")
         except asyncio.TimeoutError:
             logger.error("Worker shutdown timeout - forcing exit")
-            import os
             os._exit(1)
         except Exception as e:
             logger.error(f"Error during worker shutdown: {e}")
-            import os
             os._exit(1)
 
 
@@ -831,10 +841,8 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt - exiting")
-        import os
         os._exit(0)
     except Exception as e:
         logger.error(f"Unhandled exception in main: {e}")
-        import os
         os._exit(1)
 
