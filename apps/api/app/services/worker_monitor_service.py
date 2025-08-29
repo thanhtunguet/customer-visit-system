@@ -66,68 +66,71 @@ class WorkerMonitorService:
     
     async def _check_worker_health(self):
         """Check health of all workers and update their status"""
-        db = next(get_db())
-        try:
-            # Get all workers that might need status updates
-            current_time = datetime.utcnow()
-            stale_threshold = current_time - timedelta(minutes=self.stale_threshold_minutes)
-            offline_threshold = current_time - timedelta(minutes=self.offline_threshold_minutes)
-            
-            # Find workers that should be marked as stale or offline
-            workers = db.query(Worker).filter(
-                Worker.status.in_(["idle", "processing", "online"])
-            ).all()
-            
-            updates_made = 0
-            workers_by_tenant: Dict[str, Set[str]] = {}
-            
-            for worker in workers:
-                old_status = worker.status
-                new_status = None
+        from ..core.database import get_db_session
+        async with get_db_session() as db:
+            try:
+                # Get all workers that might need status updates
+                current_time = datetime.utcnow()
+                stale_threshold = current_time - timedelta(minutes=self.stale_threshold_minutes)
+                offline_threshold = current_time - timedelta(minutes=self.offline_threshold_minutes)
                 
-                # Determine new status based on last heartbeat
-                if not worker.last_heartbeat:
-                    new_status = "offline"
-                elif worker.last_heartbeat < offline_threshold:
-                    new_status = "offline"
-                elif worker.last_heartbeat < stale_threshold and worker.status in ["idle", "processing"]:
-                    # Worker is stale but not fully offline yet
-                    logger.warning(f"Worker {worker.worker_id} ({worker.hostname}) is stale - last heartbeat: {worker.last_heartbeat}")
-                    continue  # Don't change status yet, give it more time
+                # Find workers that should be marked as stale or offline
+                from sqlalchemy import select
+                result = await db.execute(
+                    select(Worker).where(
+                        Worker.status.in_(["idle", "processing", "online"])
+                    )
+                )
+                workers = result.scalars().all()
                 
-                if new_status and new_status != old_status:
-                    # Update worker status
-                    worker.status = new_status
-                    worker.updated_at = current_time
-                    
-                    # Release camera assignment if going offline
-                    if new_status == "offline" and worker.camera_id:
-                        logger.info(f"Releasing camera {worker.camera_id} from offline worker {worker.worker_id}")
-                        worker.camera_id = None
-                    
-                    updates_made += 1
-                    
-                    # Track tenants that need WebSocket updates
-                    if worker.tenant_id not in workers_by_tenant:
-                        workers_by_tenant[worker.tenant_id] = set()
-                    workers_by_tenant[worker.tenant_id].add(worker.worker_id)
-                    
-                    logger.info(f"Worker {worker.worker_id} ({worker.hostname}) status changed: {old_status} -> {new_status}")
-            
-            if updates_made > 0:
-                db.commit()
-                logger.info(f"Updated status for {updates_made} workers")
+                updates_made = 0
+                workers_by_tenant: Dict[str, Set[str]] = {}
                 
-                # Trigger WebSocket updates for affected tenants
-                await self._broadcast_worker_updates(workers_by_tenant, db)
-            
-        except Exception as e:
-            logger.error(f"Error checking worker health: {e}")
-            db.rollback()
-        finally:
-            db.close()
+                for worker in workers:
+                    old_status = worker.status
+                    new_status = None
+                    
+                    # Determine new status based on last heartbeat
+                    if not worker.last_heartbeat:
+                        new_status = "offline"
+                    elif worker.last_heartbeat < offline_threshold:
+                        new_status = "offline"
+                    elif worker.last_heartbeat < stale_threshold and worker.status in ["idle", "processing"]:
+                        # Worker is stale but not fully offline yet
+                        logger.warning(f"Worker {worker.worker_id} ({worker.hostname}) is stale - last heartbeat: {worker.last_heartbeat}")
+                        continue  # Don't change status yet, give it more time
+                    
+                    if new_status and new_status != old_status:
+                        # Update worker status
+                        worker.status = new_status
+                        worker.updated_at = current_time
+                        
+                        # Release camera assignment if going offline
+                        if new_status == "offline" and worker.camera_id:
+                            logger.info(f"Releasing camera {worker.camera_id} from offline worker {worker.worker_id}")
+                            worker.camera_id = None
+                        
+                        updates_made += 1
+                        
+                        # Track tenants that need WebSocket updates
+                        if worker.tenant_id not in workers_by_tenant:
+                            workers_by_tenant[worker.tenant_id] = set()
+                        workers_by_tenant[worker.tenant_id].add(worker.worker_id)
+                        
+                        logger.info(f"Worker {worker.worker_id} ({worker.hostname}) status changed: {old_status} -> {new_status}")
+                
+                if updates_made > 0:
+                    await db.commit()
+                    logger.info(f"Updated status for {updates_made} workers")
+                    
+                    # Trigger WebSocket updates for affected tenants
+                    await self._broadcast_worker_updates(workers_by_tenant, db)
+                    
+            except Exception as e:
+                logger.error(f"Error checking worker health: {e}")
+                await db.rollback()
     
-    async def _broadcast_worker_updates(self, workers_by_tenant: Dict[str, Set[str]], db: Session):
+    async def _broadcast_worker_updates(self, workers_by_tenant: Dict[str, Set[str]], db):
         """Broadcast worker status updates via WebSocket"""
         try:
             # Import here to avoid circular imports
@@ -136,12 +139,16 @@ class WorkerMonitorService:
             
             for tenant_id, worker_ids in workers_by_tenant.items():
                 # Get updated worker data
-                workers = db.query(Worker).filter(
-                    and_(
-                        Worker.tenant_id == tenant_id,
-                        Worker.worker_id.in_(worker_ids)
+                from sqlalchemy import select
+                result = await db.execute(
+                    select(Worker).where(
+                        and_(
+                            Worker.tenant_id == tenant_id,
+                            Worker.worker_id.in_(worker_ids)
+                        )
                     )
-                ).all()
+                )
+                workers = result.scalars().all()
                 
                 for worker in workers:
                     # Parse capabilities
@@ -180,37 +187,40 @@ class WorkerMonitorService:
     
     async def cleanup_stale_workers(self, minutes_threshold: int = 10):
         """Manually cleanup workers that haven't sent heartbeat for specified minutes"""
-        db = next(get_db())
-        try:
-            threshold_time = datetime.utcnow() - timedelta(minutes=minutes_threshold)
-            
-            updated_count = 0
-            workers = db.query(Worker).filter(
-                and_(
-                    Worker.status.in_(["idle", "processing", "online"]),
-                    Worker.last_heartbeat < threshold_time
+        from ..core.database import get_db_session
+        async with get_db_session() as db:
+            try:
+                threshold_time = datetime.utcnow() - timedelta(minutes=minutes_threshold)
+                
+                updated_count = 0
+                from sqlalchemy import select, and_
+                result = await db.execute(
+                    select(Worker).where(
+                        and_(
+                            Worker.status.in_(["idle", "processing", "online"]),
+                            Worker.last_heartbeat < threshold_time
+                        )
+                    )
                 )
-            ).all()
-            
-            for worker in workers:
-                worker.status = "offline"
-                worker.camera_id = None  # Release camera
-                worker.updated_at = datetime.utcnow()
-                updated_count += 1
-                logger.info(f"Cleaned up stale worker: {worker.worker_id} ({worker.hostname})")
-            
-            if updated_count > 0:
-                db.commit()
-                logger.info(f"Cleaned up {updated_count} stale workers")
-            
-            return updated_count
-            
-        except Exception as e:
-            logger.error(f"Error cleaning up stale workers: {e}")
-            db.rollback()
-            return 0
-        finally:
-            db.close()
+                workers = result.scalars().all()
+                
+                for worker in workers:
+                    worker.status = "offline"
+                    worker.camera_id = None  # Release camera
+                    worker.updated_at = datetime.utcnow()
+                    updated_count += 1
+                    logger.info(f"Cleaned up stale worker: {worker.worker_id} ({worker.hostname})")
+                
+                if updated_count > 0:
+                    await db.commit()
+                    logger.info(f"Cleaned up {updated_count} stale workers")
+                
+                return updated_count
+                
+            except Exception as e:
+                logger.error(f"Error cleaning up stale workers: {e}")
+                await db.rollback()
+                return 0
 
 
 # Global instance
