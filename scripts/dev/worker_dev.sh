@@ -8,6 +8,14 @@ source .venv/bin/activate
 python -m pip install --upgrade pip >/dev/null
 pip install -r requirements.txt >/dev/null || true
 
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+    echo "Loading environment variables from .env file..."
+    set -o allexport
+    source .env
+    set +o allexport
+fi
+
 export API_URL=${API_URL:-http://localhost:8080}
 export TENANT_ID=${TENANT_ID:-t-dev}
 export SITE_ID=${SITE_ID:-s-1}
