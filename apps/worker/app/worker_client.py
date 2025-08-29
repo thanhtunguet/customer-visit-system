@@ -113,38 +113,58 @@ class WorkerClient:
             logger.error("Failed to register worker, heartbeat not started")
     
     async def shutdown(self):
-        """Cleanup worker client"""
+        """Cleanup worker client with aggressive timeouts"""
         logger.info("Starting worker client shutdown...")
         
-        # Cancel heartbeat task
+        # Set shutdown flag immediately
+        self.shutdown_requested = True
+        
+        # Cancel heartbeat task immediately
         if self.heartbeat_task and not self.heartbeat_task.done():
+            logger.info("Cancelling heartbeat task...")
             self.heartbeat_task.cancel()
             try:
-                await asyncio.wait_for(self.heartbeat_task, timeout=1.0)
+                await asyncio.wait_for(self.heartbeat_task, timeout=0.5)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
+            logger.info("Heartbeat task cancelled")
         
-        # Send final offline status with timeout
+        # Try to send offline status with very short timeout - max 3 attempts as mentioned in log
         if self.worker_id:
-            try:
-                await asyncio.wait_for(
-                    self._send_heartbeat(status=WorkerStatus.OFFLINE),
-                    timeout=2.0
-                )
-                logger.info("Sent offline status to backend")
-            except asyncio.TimeoutError:
-                logger.warning("Timeout sending offline status")
-            except Exception as e:
-                logger.warning(f"Failed to send offline status: {e}")
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    logger.info(f"Sending offline status (attempt {attempt + 1}/{max_attempts})")
+                    await asyncio.wait_for(
+                        self._send_heartbeat(status=WorkerStatus.OFFLINE),
+                        timeout=1.0  # Very short timeout per attempt
+                    )
+                    logger.info("Successfully sent offline status to backend")
+                    break
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout sending offline status (attempt {attempt + 1})")
+                    if attempt == max_attempts - 1:
+                        logger.warning("Max attempts reached, proceeding with shutdown")
+                except Exception as e:
+                    logger.warning(f"Failed to send offline status (attempt {attempt + 1}): {e}")
+                    if attempt == max_attempts - 1:
+                        logger.warning("Max attempts reached, proceeding with shutdown")
         
-        # Close HTTP client with timeout
+        # Close HTTP client with very short timeout
         if self.http_client:
             try:
-                await asyncio.wait_for(self.http_client.aclose(), timeout=1.0)
+                logger.info("Closing HTTP client...")
+                await asyncio.wait_for(self.http_client.aclose(), timeout=0.5)
+                logger.info("HTTP client closed successfully")
             except asyncio.TimeoutError:
-                logger.warning("HTTP client close timeout")
+                logger.warning("HTTP client close timeout - forcing close")
+                # Force close without waiting
+                try:
+                    self.http_client._client.close()
+                except:
+                    pass
             except Exception as e:
-                logger.error(f"Error closing HTTP client: {e}")
+                logger.warning(f"Error closing HTTP client: {e}")
         
         logger.info("Worker client shutdown complete")
     

@@ -90,68 +90,78 @@ class EnhancedFaceRecognitionWorker:
         logger.info("Enhanced worker initialized successfully")
     
     async def shutdown(self):
-        """Cleanup resources"""
-        logger.info("Starting enhanced worker shutdown...")
+        """Cleanup resources with aggressive timeouts to prevent hanging"""
+        logger.info("Starting enhanced worker shutdown... We should not wait too long before terminate the process. Just retry maximum 3 times to acknowledge the backend what worker will shutdown, then clean process (close camera streaming, memory, etc.) then shutdown process")
         
-        # Set shutdown flag to stop any ongoing operations
+        # Set shutdown flag to stop any ongoing operations immediately
         self._shutdown_requested = True
         
-        # Stop all camera streams first
+        # 1. Stop all camera streams first - this should be fast
         try:
+            logger.info("Cleaning up camera streams...")
             self.streaming_service.cleanup_all_streams()
-            logger.info("Camera streams cleaned up")
+            logger.info("✅ Camera streams cleaned up successfully")
         except Exception as e:
-            logger.error(f"Error cleaning up camera streams: {e}")
+            logger.error(f"❌ Error cleaning up camera streams: {e}")
         
-        # Cancel and wait for tasks with timeout
+        # 2. Cancel and wait for background tasks with very short timeout
         tasks_to_cancel = []
         
         if self.queue_processor_task and not self.queue_processor_task.done():
-            tasks_to_cancel.append(self.queue_processor_task)
+            tasks_to_cancel.append(("queue_processor", self.queue_processor_task))
         
         if hasattr(self, 'shutdown_monitor_task') and self.shutdown_monitor_task and not self.shutdown_monitor_task.done():
-            tasks_to_cancel.append(self.shutdown_monitor_task)
+            tasks_to_cancel.append(("shutdown_monitor", self.shutdown_monitor_task))
         
         if hasattr(self, 'face_processing_task') and self.face_processing_task and not self.face_processing_task.done():
-            tasks_to_cancel.append(self.face_processing_task)
+            tasks_to_cancel.append(("face_processing", self.face_processing_task))
         
         # Cancel all tasks
-        for task in tasks_to_cancel:
-            task.cancel()
-        
-        # Wait for tasks to complete with timeout
         if tasks_to_cancel:
+            logger.info(f"Cancelling {len(tasks_to_cancel)} background tasks...")
+            for task_name, task in tasks_to_cancel:
+                logger.info(f"Cancelling {task_name} task...")
+                task.cancel()
+            
+            # Wait for tasks to complete with very short timeout
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*tasks_to_cancel, return_exceptions=True), 
-                    timeout=2.0
+                    asyncio.gather(*[task for _, task in tasks_to_cancel], return_exceptions=True), 
+                    timeout=1.0  # Only wait 1 second
                 )
-                logger.info("Background tasks cancelled successfully")
+                logger.info("✅ Background tasks cancelled successfully")
             except asyncio.TimeoutError:
-                logger.warning("Timeout waiting for background tasks to cancel")
+                logger.warning("⚠️  Timeout waiting for background tasks - proceeding anyway")
             except Exception as e:
-                logger.error(f"Error cancelling background tasks: {e}")
+                logger.warning(f"⚠️  Error cancelling background tasks: {e}")
         
-        # Shutdown worker client with timeout
+        # 3. Shutdown worker client with short timeout (this does the 3-attempt backend notification)
         try:
-            await asyncio.wait_for(self.worker_client.shutdown(), timeout=3.0)
-            logger.info("Worker client shutdown complete")
+            logger.info("Shutting down worker client...")
+            await asyncio.wait_for(self.worker_client.shutdown(), timeout=5.0)  # Allow time for 3 attempts
+            logger.info("✅ Worker client shutdown complete")
         except asyncio.TimeoutError:
-            logger.warning("Worker client shutdown timeout")
+            logger.warning("⚠️  Worker client shutdown timeout - forcing shutdown")
         except Exception as e:
-            logger.error(f"Error shutting down worker client: {e}")
+            logger.warning(f"⚠️  Error shutting down worker client: {e}")
         
-        # Close HTTP client
+        # 4. Close HTTP client with very short timeout
         if self.http_client:
             try:
-                await asyncio.wait_for(self.http_client.aclose(), timeout=1.0)
-                logger.info("HTTP client closed")
+                logger.info("Closing main HTTP client...")
+                await asyncio.wait_for(self.http_client.aclose(), timeout=0.5)
+                logger.info("✅ HTTP client closed")
             except asyncio.TimeoutError:
-                logger.warning("HTTP client close timeout")
+                logger.warning("⚠️  HTTP client close timeout - forcing close")
+                try:
+                    # Force close without waiting
+                    self.http_client._client.close()
+                except:
+                    pass
             except Exception as e:
-                logger.error(f"Error closing HTTP client: {e}")
+                logger.warning(f"⚠️  Error closing HTTP client: {e}")
         
-        logger.info("Enhanced worker shutdown complete")
+        logger.info("🎉 Enhanced worker shutdown complete - process should exit cleanly now")
     
     async def _authenticate(self):
         """Get JWT token for API access"""

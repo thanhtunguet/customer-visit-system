@@ -770,13 +770,25 @@ async def main():
     # Fallback to basic worker
     worker = FaceRecognitionWorker(config)
     
-    # Set up signal handlers for graceful shutdown
+    # Set up signal handlers for graceful shutdown with force-exit timeout
+    shutdown_start_time = None
+    
     def signal_handler(signum, frame):
+        nonlocal shutdown_start_time
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-        worker._shutdown_requested = True
         
-        # Create a task to send stop signal to backend immediately
-        asyncio.create_task(worker._send_stop_signal_to_backend())
+        if shutdown_start_time is None:
+            shutdown_start_time = asyncio.get_event_loop().time()
+            worker._shutdown_requested = True
+            
+            # Create a task to send stop signal to backend immediately
+            asyncio.create_task(worker._send_stop_signal_to_backend())
+        else:
+            # Second signal - force exit immediately
+            elapsed = asyncio.get_event_loop().time() - shutdown_start_time
+            logger.warning(f"Second signal received after {elapsed:.1f}s - forcing immediate exit")
+            import os
+            os._exit(1)
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -799,9 +811,30 @@ async def main():
         logger.error(f"Worker error: {e}")
         
     finally:
-        await worker.shutdown()
+        # Add timeout for shutdown to prevent hanging
+        try:
+            logger.info("Starting worker shutdown with 10-second timeout...")
+            await asyncio.wait_for(worker.shutdown(), timeout=10.0)
+            logger.info("Worker shutdown completed successfully")
+        except asyncio.TimeoutError:
+            logger.error("Worker shutdown timeout - forcing exit")
+            import os
+            os._exit(1)
+        except Exception as e:
+            logger.error(f"Error during worker shutdown: {e}")
+            import os
+            os._exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Received KeyboardInterrupt - exiting")
+        import os
+        os._exit(0)
+    except Exception as e:
+        logger.error(f"Unhandled exception in main: {e}")
+        import os
+        os._exit(1)
 
