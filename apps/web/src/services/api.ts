@@ -434,9 +434,17 @@ class ApiClient {
     start_time?: string;
     end_time?: string;
     limit?: number;
-    offset?: number;
-  }): Promise<Visit[]> {
-    const response = await this.client.get<Visit[]>('/visits', { params });
+    cursor?: string;
+  }): Promise<{
+    visits: Visit[];
+    has_more: boolean;
+    next_cursor?: string;
+  }> {
+    const response = await this.client.get<{
+      visits: Visit[];
+      has_more: boolean;
+      next_cursor?: string;
+    }>('/visits', { params });
     return response.data;
   }
 

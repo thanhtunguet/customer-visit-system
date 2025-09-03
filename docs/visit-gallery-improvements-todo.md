@@ -1,75 +1,68 @@
 # Visit Gallery Improvements - Detailed TODO List
 
-## Issue 1: Face Images Not Displayed
+## Issue 1: Face Images Not Displayed ✅ COMPLETED
 **Problem**: Visits are not showing face images in the gallery
-**Root Cause Analysis Needed**: 
-- [ ] Check if image_path is being properly set in database
-- [ ] Verify MinIO presigned URL generation is working
-- [ ] Check if frontend is properly handling image URLs
-- [ ] Investigate CORS/authentication issues for image loading
+**Root Cause Found**: Worker was sending `snapshot_url=None` in face detection events
 
 **Implementation Tasks**:
-- [ ] Debug image_path population in face_service.py
-- [ ] Test MinIO presigned URL generation manually
-- [ ] Add proper error handling for image loading in frontend
-- [ ] Implement fallback mechanism for failed image loads
-- [ ] Add image loading states (skeleton/spinner)
-- [ ] Verify image formats and compression are compatible
+- [x] Debug image_path population in face_service.py - Found worker sends null URLs
+- [x] Added image upload API endpoints (/v1/files/upload-url, /v1/files/download-url)
+- [x] Enhanced worker with face image capture and upload functionality
+- [x] Modified process_frame() to upload face crops to MinIO
+- [x] Updated FaceDetectedEvent to include actual snapshot URLs
+- [x] Test MinIO presigned URL generation - Working properly
 
-## Issue 2: Visit Deduplication/Merging Logic
+## Issue 2: Visit Deduplication/Merging Logic ✅ COMPLETED
 **Problem**: Each face detection event creates a separate visit record, need to merge continuous appearances
 **Business Rule**: If same person appears within 30 minutes, treat as one visit
 
 **Database Changes**:
-- [ ] Add visit_session_id field to visits table
-- [ ] Add last_seen timestamp to visits table  
-- [ ] Add visit_duration calculated field
-- [ ] Create database migration for new schema changes
+- [x] Added visit_session_id, first_seen, last_seen, visit_duration_seconds, detection_count, highest_confidence fields
+- [x] Created database migration (009_add_visit_session_fields.py)
+- [x] Added indexes for efficient session queries
 
 **Backend Logic Changes**:
-- [ ] Modify face_service.py to implement visit merging logic:
-  - [ ] Check for existing visits within 30-minute window
-  - [ ] If found, update existing visit's last_seen timestamp
-  - [ ] If not found, create new visit record
-  - [ ] Update visit_duration calculation
-- [ ] Add configuration for visit merge time window (30 minutes default)
-- [ ] Implement visit session management:
-  - [ ] Generate session IDs for continuous appearances
-  - [ ] Track first_seen and last_seen for each session
-  - [ ] Update confidence scores (use highest confidence in session)
+- [x] Modified face_service.py _create_visit_record() method with visit merging logic:
+  - [x] Check for existing visits within 30-minute window
+  - [x] If found, update existing visit's last_seen timestamp, duration, detection count
+  - [x] If not found, create new visit record with session ID
+  - [x] Track confidence scores (use highest confidence in session)
+  - [x] Update image paths to use best quality detection
 
 **API Changes**:
-- [ ] Update VisitResponse schema to include session information
-- [ ] Modify visits endpoint to return merged visit data
-- [ ] Add visit duration and session count to response
-- [ ] Update filtering logic to work with merged visits
+- [x] Updated VisitResponse schema to include session information
+- [x] Modified visits endpoint to return merged visit data with session fields
+- [x] Added visit duration and detection count to response
 
-## Issue 3: Infinite Pagination Scroll
+**Frontend Changes**:
+- [x] Updated Visit interface with new session fields
+- [x] Enhanced visit cards to show detection count and duration
+- [x] Updated modal to display session statistics and peak confidence
+
+## Issue 3: Infinite Pagination Scroll ✅ COMPLETED
 **Problem**: Currently loads all visits at once, need efficient pagination
 **Goal**: Implement infinite scroll with proper performance
 
 **Backend Pagination**:
-- [ ] Optimize visits query with proper indexing
-- [ ] Implement cursor-based pagination for better performance
-- [ ] Add total count endpoint for progress indicators
-- [ ] Optimize database queries with proper JOINs
-- [ ] Add caching layer for frequently accessed visits
+- [x] Implemented cursor-based pagination using `last_seen` timestamp
+- [x] Added VisitsPaginatedResponse schema with has_more and next_cursor
+- [x] Updated visits endpoint to support cursor parameter
+- [x] Reduced default limit to 50 visits per page for better performance
+- [x] Optimized queries with existing database indexes
 
 **Frontend Implementation**:
-- [ ] Install react-infinite-scroll-component or similar
-- [ ] Implement infinite scroll container in Visits.tsx
-- [ ] Add loading states for pagination
-- [ ] Implement pull-to-refresh functionality
-- [ ] Add proper error handling for failed page loads
-- [ ] Optimize rendering with React.memo and virtualization
-- [ ] Add scroll-to-top functionality
+- [x] Implemented native infinite scroll with scroll event listener
+- [x] Added loading states for initial load and pagination
+- [x] Added proper error handling for failed page loads
+- [x] Implemented cursor-based pagination state management
+- [x] Added scroll detection within 200px of bottom
 
 **UX Improvements**:
-- [ ] Add loading skeletons for new items
-- [ ] Implement smooth scrolling transitions
-- [ ] Add "Load More" button as fallback
-- [ ] Show loading progress indicator
-- [ ] Handle empty states and error states gracefully
+- [x] Added loading spinner for "loading more" state
+- [x] Added "Load More" button as fallback option
+- [x] Show progress indicator ("Scroll for more..." / "All visits loaded")
+- [x] Handle empty states gracefully
+- [x] Updated stats to show loaded visits count
 
 ## Testing & Quality Assurance
 - [ ] Unit tests for visit merging logic

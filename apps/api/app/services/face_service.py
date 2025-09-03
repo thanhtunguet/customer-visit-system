@@ -124,32 +124,94 @@ class FaceMatchingService:
         person_type: str,
         confidence_score: float,
     ) -> str:
-        """Create a visit record"""
-        visit_id = f"v_{uuid.uuid4().hex[:8]}"
+        """Create or update a visit record with session-based deduplication"""
+        from datetime import timedelta
+        
+        visit_merge_window = timedelta(minutes=30)  # 30-minute merge window
+        current_time = event.timestamp.replace(tzinfo=None) if event.timestamp.tzinfo else event.timestamp
         
         # Convert snapshot_url to string if present
         image_path = str(event.snapshot_url) if event.snapshot_url else None
         
-        visit = Visit(
-            tenant_id=tenant_id,
-            visit_id=visit_id,
-            person_id=person_id,
-            person_type=person_type,
-            site_id=event.site_id,
-            camera_id=event.camera_id,
-            timestamp=event.timestamp.replace(tzinfo=None) if event.timestamp.tzinfo else event.timestamp,
-            confidence_score=confidence_score,
-            face_embedding=json.dumps(event.embedding),
-            image_path=image_path,  # Now properly setting the image path
-            bbox_x=event.bbox[0] if len(event.bbox) >= 4 else None,
-            bbox_y=event.bbox[1] if len(event.bbox) >= 4 else None,
-            bbox_w=event.bbox[2] if len(event.bbox) >= 4 else None,
-            bbox_h=event.bbox[3] if len(event.bbox) >= 4 else None,
-        )
+        # Look for existing visit session within the merge window
+        cutoff_time = current_time - visit_merge_window
         
-        db_session.add(visit)
-        await db_session.commit()
-        return visit_id
+        existing_visit_query = select(Visit).where(
+            Visit.tenant_id == tenant_id,
+            Visit.person_id == person_id,
+            Visit.person_type == person_type,
+            Visit.site_id == event.site_id,
+            Visit.last_seen >= cutoff_time
+        ).order_by(Visit.last_seen.desc()).limit(1)
+        
+        result = await db_session.execute(existing_visit_query)
+        existing_visit = result.scalar_one_or_none()
+        
+        if existing_visit:
+            # Update existing visit session
+            duration_seconds = int((current_time - existing_visit.first_seen).total_seconds())
+            
+            # Update fields
+            existing_visit.last_seen = current_time
+            existing_visit.visit_duration_seconds = duration_seconds
+            existing_visit.detection_count += 1
+            
+            # Update confidence score if this detection is better
+            if confidence_score > (existing_visit.highest_confidence or 0):
+                existing_visit.highest_confidence = confidence_score
+                existing_visit.confidence_score = confidence_score  # Update main confidence too
+                
+            # Update image path if this detection has an image and previous didn't, or if confidence is higher
+            if image_path and (not existing_visit.image_path or confidence_score > existing_visit.confidence_score):
+                existing_visit.image_path = image_path
+                # Update bounding box info for the best detection
+                existing_visit.bbox_x = event.bbox[0] if len(event.bbox) >= 4 else None
+                existing_visit.bbox_y = event.bbox[1] if len(event.bbox) >= 4 else None
+                existing_visit.bbox_w = event.bbox[2] if len(event.bbox) >= 4 else None
+                existing_visit.bbox_h = event.bbox[3] if len(event.bbox) >= 4 else None
+                existing_visit.face_embedding = json.dumps(event.embedding)
+            
+            await db_session.commit()
+            
+            logger.info(f"Updated existing visit session {existing_visit.visit_session_id}: "
+                       f"duration={duration_seconds}s, detections={existing_visit.detection_count}, "
+                       f"confidence={existing_visit.highest_confidence:.3f}")
+            
+            return existing_visit.visit_id
+        else:
+            # Create new visit session
+            visit_id = f"v_{uuid.uuid4().hex[:8]}"
+            session_id = f"session_{uuid.uuid4().hex[:8]}"
+            
+            visit = Visit(
+                tenant_id=tenant_id,
+                visit_id=visit_id,
+                visit_session_id=session_id,
+                person_id=person_id,
+                person_type=person_type,
+                site_id=event.site_id,
+                camera_id=event.camera_id,
+                timestamp=current_time,
+                first_seen=current_time,
+                last_seen=current_time,
+                visit_duration_seconds=0,
+                detection_count=1,
+                confidence_score=confidence_score,
+                highest_confidence=confidence_score,
+                face_embedding=json.dumps(event.embedding),
+                image_path=image_path,
+                bbox_x=event.bbox[0] if len(event.bbox) >= 4 else None,
+                bbox_y=event.bbox[1] if len(event.bbox) >= 4 else None,
+                bbox_w=event.bbox[2] if len(event.bbox) >= 4 else None,
+                bbox_h=event.bbox[3] if len(event.bbox) >= 4 else None,
+            )
+            
+            db_session.add(visit)
+            await db_session.commit()
+            
+            logger.info(f"Created new visit session {session_id} for person {person_id}")
+            
+            return visit_id
 
     async def _update_customer_last_seen(
         self, 

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user
 from ..models.database import Visit
-from ..schemas import FaceEventResponse, VisitResponse
+from ..schemas import FaceEventResponse, VisitResponse, VisitsPaginatedResponse
 from ..services.face_service import face_service
 from common.models import FaceDetectedEvent
 
@@ -44,14 +44,14 @@ async def process_face_event(
 # Visits
 # ===============================
 
-@router.get("/visits", response_model=List[VisitResponse])
+@router.get("/visits", response_model=VisitsPaginatedResponse)
 async def list_visits(
     site_id: Optional[str] = Query(None),
     person_id: Optional[str] = Query(None),
     start_time: Optional[datetime] = Query(None),
     end_time: Optional[datetime] = Query(None),
-    limit: int = Query(100, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(50, le=100),  # Reduced max limit for better performance
+    cursor: Optional[str] = Query(None, description="Cursor for pagination (visit timestamp)"),
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
@@ -61,19 +61,37 @@ async def list_visits(
     
     query = select(Visit).where(Visit.tenant_id == user["tenant_id"])
     
+    # Apply filters
     if site_id:
         query = query.where(Visit.site_id == site_id)
     if person_id:
         query = query.where(Visit.person_id == person_id)
     if start_time:
-        query = query.where(Visit.timestamp >= to_naive_utc(start_time))
+        query = query.where(Visit.last_seen >= to_naive_utc(start_time))  # Use last_seen for better filtering
     if end_time:
-        query = query.where(Visit.timestamp <= to_naive_utc(end_time))
+        query = query.where(Visit.last_seen <= to_naive_utc(end_time))
     
-    query = query.order_by(Visit.timestamp.desc()).limit(limit).offset(offset)
+    # Cursor-based pagination
+    if cursor:
+        try:
+            cursor_time = datetime.fromisoformat(cursor.replace('Z', '+00:00')).replace(tzinfo=None)
+            query = query.where(Visit.last_seen < cursor_time)
+        except Exception as e:
+            logger.warning(f"Invalid cursor format: {cursor}, error: {e}")
+            # If cursor is invalid, ignore it and start from the beginning
+    
+    # Order by last_seen DESC for most recent visits first
+    query = query.order_by(Visit.last_seen.desc()).limit(limit)
     
     result = await db_session.execute(query)
     visits = result.scalars().all()
+    
+    # Determine if there are more results
+    has_more = len(visits) == limit
+    next_cursor = None
+    if has_more and visits:
+        # Use the last visit's timestamp as cursor for next page
+        next_cursor = visits[-1].last_seen.isoformat()
     
     # Convert visits to response format with presigned URLs
     visit_responses = []
@@ -105,17 +123,27 @@ async def list_visits(
         visit_response = VisitResponse(
             tenant_id=visit.tenant_id,
             visit_id=visit.visit_id,
+            visit_session_id=visit.visit_session_id,
             person_id=visit.person_id,
             person_type=visit.person_type,
             site_id=visit.site_id,
             camera_id=visit.camera_id,
             timestamp=visit.timestamp,
+            first_seen=visit.first_seen,
+            last_seen=visit.last_seen,
+            visit_duration_seconds=visit.visit_duration_seconds,
+            detection_count=visit.detection_count,
             confidence_score=visit.confidence_score,
+            highest_confidence=visit.highest_confidence,
             image_path=image_url
         )
         visit_responses.append(visit_response)
     
-    return visit_responses
+    return VisitsPaginatedResponse(
+        visits=visit_responses,
+        has_more=has_more,
+        next_cursor=next_cursor
+    )
 
 
 # ===============================

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, 
   Row, 
@@ -133,66 +133,78 @@ const SEED_SITES: Site[] = [
 
 export const VisitsPage: React.FC = () => {
   const [visits, setVisits] = useState<Visit[]>([]);
-  const [filteredVisits, setFilteredVisits] = useState<Visit[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[string | null, string | null]>([null, null]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
 
-  // Load data from API
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        // Load sites and visits from API
-        const [fetchedSites, fetchedVisits] = await Promise.all([
-          apiClient.getSites(),
-          apiClient.getVisits({ limit: 1000 }) // Load more visits for better UX
-        ]);
-        
-        setSites(fetchedSites);
-        setVisits(fetchedVisits);
-        setFilteredVisits(fetchedVisits);
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        
-        // Fallback to seed data on error for development
-        setSites(SEED_SITES);
-        setVisits(SEED_VISITS);
-        setFilteredVisits(SEED_VISITS);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  // Apply filters
-  useEffect(() => {
-    let result = [...visits];
+  // Load initial data from API
+  const loadInitialData = useCallback(async () => {
+    setLoading(true);
+    setVisits([]);
+    setNextCursor(undefined);
+    setHasMore(true);
     
-    // Apply site filter
-    if (selectedSites.length > 0) {
-      result = result.filter(visit => selectedSites.includes(visit.site_id.toString()));
-    }
-    
-    // Apply date filter
-    if (dateRange[0] && dateRange[1]) {
-      const startDate = new Date(dateRange[0]);
-      const endDate = new Date(dateRange[1]);
-      endDate.setHours(23, 59, 59, 999); // End of day
+    try {
+      // Load sites and initial visits
+      const [fetchedSites, visitsResponse] = await Promise.all([
+        apiClient.getSites(),
+        apiClient.getVisits({
+          limit: 50,
+          site_id: selectedSites.length > 0 ? selectedSites.join(',') : undefined,
+          start_time: dateRange[0] || undefined,
+          end_time: dateRange[1] || undefined,
+        })
+      ]);
       
-      result = result.filter(visit => {
-        const visitDate = new Date(visit.timestamp);
-        return visitDate >= startDate && visitDate <= endDate;
-      });
+      setSites(fetchedSites);
+      setVisits(visitsResponse.visits);
+      setHasMore(visitsResponse.has_more);
+      setNextCursor(visitsResponse.next_cursor);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      
+      // Fallback to seed data on error for development
+      setSites(SEED_SITES);
+      setVisits(SEED_VISITS);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
     }
+  }, [selectedSites, dateRange]);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  // Load more visits for infinite scroll
+  const loadMoreVisits = useCallback(async () => {
+    if (!hasMore || loadingMore || !nextCursor) return;
     
-    setFilteredVisits(result);
-  }, [selectedSites, dateRange, visits]);
+    setLoadingMore(true);
+    try {
+      const response = await apiClient.getVisits({
+        limit: 50,
+        cursor: nextCursor,
+        site_id: selectedSites.length > 0 ? selectedSites.join(',') : undefined,
+        start_time: dateRange[0] || undefined,
+        end_time: dateRange[1] || undefined,
+      });
+      
+      setVisits(prev => [...prev, ...response.visits]);
+      setHasMore(response.has_more);
+      setNextCursor(response.next_cursor);
+    } catch (error) {
+      console.error('Failed to load more visits:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, nextCursor, selectedSites, dateRange]);
 
   const handleSiteChange = (value: string[]) => {
     setSelectedSites(value);
@@ -203,22 +215,32 @@ export const VisitsPage: React.FC = () => {
   };
 
   const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      const fetchedVisits = await apiClient.getVisits({ limit: 1000 });
-      setVisits(fetchedVisits);
-      setFilteredVisits(fetchedVisits);
-    } catch (error) {
-      console.error('Failed to refresh data:', error);
-    } finally {
-      setLoading(false);
-    }
+    await loadInitialData();
   };
 
   const handleClearFilters = () => {
     setSelectedSites([]);
     setDateRange([null, null]);
   };
+
+  // Handle scroll for infinite loading
+  const handleScroll = useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
+    
+    const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+    const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+    const clientHeight = document.documentElement.clientHeight || window.innerHeight;
+    
+    // Load more when user scrolls to within 200px of bottom
+    if (scrollTop + clientHeight >= scrollHeight - 200) {
+      loadMoreVisits();
+    }
+  }, [loading, loadingMore, hasMore, loadMoreVisits]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date();
@@ -300,20 +322,25 @@ export const VisitsPage: React.FC = () => {
       {/* Stats */}
       <Card className="mb-6">
         <Row gutter={16}>
-          <Col span={8}>
-            <Text strong>Total Visits: </Text>
-            <Text>{filteredVisits.length}</Text>
+          <Col span={6}>
+            <Text strong>Loaded Visits: </Text>
+            <Text>{visits.length}</Text>
           </Col>
-          <Col span={8}>
+          <Col span={6}>
             <Text strong>Customers: </Text>
             <Text>
-              {filteredVisits.filter(v => v.person_type === 'customer').length}
+              {visits.filter(v => v.person_type === 'customer').length}
             </Text>
           </Col>
-          <Col span={8}>
+          <Col span={6}>
             <Text strong>Staff: </Text>
             <Text>
-              {filteredVisits.filter(v => v.person_type === 'staff').length}
+              {visits.filter(v => v.person_type === 'staff').length}
+            </Text>
+          </Col>
+          <Col span={6}>
+            <Text type="secondary" className="text-sm">
+              {hasMore ? 'Scroll for more...' : 'All visits loaded'}
             </Text>
           </Col>
         </Row>
@@ -325,7 +352,7 @@ export const VisitsPage: React.FC = () => {
           <div className="flex justify-center items-center h-64">
             <Spin size="large" />
           </div>
-        ) : filteredVisits.length === 0 ? (
+        ) : visits.length === 0 ? (
           <Empty 
             description="No visits found" 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -335,8 +362,9 @@ export const VisitsPage: React.FC = () => {
             </Button>
           </Empty>
         ) : (
-          <Row gutter={[16, 16]}>
-            {filteredVisits.map(visit => (
+          <>
+            <Row gutter={[16, 16]}>
+              {visits.map(visit => (
               <Col xs={24} sm={12} md={8} lg={6} key={visit.visit_id}>
                 <Card 
                   size="small" 
@@ -407,11 +435,50 @@ export const VisitsPage: React.FC = () => {
                         Confidence: {(visit.confidence_score * 100).toFixed(1)}%
                       </Text>
                     </div>
+                    
+                    {visit.detection_count > 1 && (
+                      <div className="mt-1">
+                        <Text type="secondary" className="text-xs">
+                          {visit.detection_count} detections
+                        </Text>
+                      </div>
+                    )}
+                    
+                    {visit.visit_duration_seconds && visit.visit_duration_seconds > 0 && (
+                      <div className="mt-1">
+                        <Text type="secondary" className="text-xs">
+                          Duration: {Math.floor(visit.visit_duration_seconds / 60)}m {visit.visit_duration_seconds % 60}s
+                        </Text>
+                      </div>
+                    )}
                   </div>
                 </Card>
               </Col>
             ))}
           </Row>
+          
+          {/* Loading more indicator */}
+          {loadingMore && (
+            <div className="flex justify-center items-center mt-8">
+              <Spin size="large" />
+              <Text className="ml-3">Loading more visits...</Text>
+            </div>
+          )}
+          
+          {/* Load more button as fallback */}
+          {hasMore && !loadingMore && (
+            <div className="flex justify-center mt-8">
+              <Button 
+                type="default" 
+                size="large"
+                onClick={loadMoreVisits}
+                icon={<ReloadOutlined />}
+              >
+                Load More Visits
+              </Button>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -482,11 +549,35 @@ export const VisitsPage: React.FC = () => {
                   </Text>
                 </div>
                 
-                <div className="flex items-center">
+                <div className="flex items-center mb-2">
                   <Text>
                     <strong>Confidence:</strong> {(selectedVisit.confidence_score * 100).toFixed(1)}%
                   </Text>
                 </div>
+                
+                {selectedVisit.detection_count > 1 && (
+                  <div className="flex items-center mb-2">
+                    <Text>
+                      <strong>Detections:</strong> {selectedVisit.detection_count}
+                    </Text>
+                  </div>
+                )}
+                
+                {selectedVisit.visit_duration_seconds && selectedVisit.visit_duration_seconds > 0 && (
+                  <div className="flex items-center mb-2">
+                    <Text>
+                      <strong>Duration:</strong> {Math.floor(selectedVisit.visit_duration_seconds / 60)}m {selectedVisit.visit_duration_seconds % 60}s
+                    </Text>
+                  </div>
+                )}
+                
+                {selectedVisit.highest_confidence && selectedVisit.highest_confidence !== selectedVisit.confidence_score && (
+                  <div className="flex items-center">
+                    <Text>
+                      <strong>Peak Confidence:</strong> {(selectedVisit.highest_confidence * 100).toFixed(1)}%
+                    </Text>
+                  </div>
+                )}
               </div>
             </div>
           </div>

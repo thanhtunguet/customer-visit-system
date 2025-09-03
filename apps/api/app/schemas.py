@@ -288,13 +288,26 @@ class CustomerUpdate(BaseModel):
 class VisitResponse(BaseModel):
     tenant_id: str
     visit_id: str
+    visit_session_id: str
     person_id: int
     person_type: str
     site_id: int
     camera_id: int
     timestamp: datetime
+    first_seen: datetime
+    last_seen: datetime
+    visit_duration_seconds: Optional[int]
+    detection_count: int
     confidence_score: float
+    highest_confidence: Optional[float]
     image_path: Optional[str]
+
+
+class VisitsPaginatedResponse(BaseModel):
+    visits: List[VisitResponse]
+    has_more: bool
+    next_cursor: Optional[str]
+    total_count: Optional[int] = None
 
 
 class FaceEventResponse(BaseModel):

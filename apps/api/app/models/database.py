@@ -272,10 +272,20 @@ class Visit(Base):
     bbox_w = Column(Float)
     bbox_h = Column(Float)
     
+    # Visit session fields for deduplication
+    visit_session_id = Column(String(64), nullable=False, default=lambda: str(uuid.uuid4()))
+    first_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
+    visit_duration_seconds = Column(Integer, nullable=True, default=0)
+    detection_count = Column(Integer, nullable=False, default=1)
+    highest_confidence = Column(Float, nullable=True)
+    
     __table_args__ = (
         Index('idx_visits_timestamp', 'tenant_id', 'timestamp'),
         Index('idx_visits_person', 'tenant_id', 'person_id', 'timestamp'),
         Index('idx_visits_site', 'tenant_id', 'site_id', 'timestamp'),
+        Index('idx_visits_session', 'tenant_id', 'visit_session_id'),
+        Index('idx_visits_person_time', 'tenant_id', 'person_id', 'last_seen'),
     )
 
 

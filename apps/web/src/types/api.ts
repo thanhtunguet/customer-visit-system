@@ -82,12 +82,18 @@ export interface Customer {
 export interface Visit {
   tenant_id: string;
   visit_id: string;
+  visit_session_id: string;
   person_id: number;
   person_type: 'staff' | 'customer';
   site_id: number;
   camera_id: number;
   timestamp: string;
+  first_seen: string;
+  last_seen: string;
+  visit_duration_seconds?: number;
+  detection_count: number;
   confidence_score: number;
+  highest_confidence?: number;
   image_path?: string;
 }
 
