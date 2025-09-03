@@ -1,12 +1,104 @@
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Header
+from datetime import timedelta
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query, Header, Depends
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from ..core.minio_client import minio_client
-from ..core.security import verify_jwt
+from ..core.security import verify_jwt, get_current_user
 
 router = APIRouter(prefix="/v1", tags=["File Management"])
+
+
+class FileUploadRequest(BaseModel):
+    filename: str
+    content_type: str = "image/jpeg"
+
+
+class FileDownloadRequest(BaseModel):
+    filename: str
+
+
+class FileUrlResponse(BaseModel):
+    upload_url: str
+    filename: str
+
+
+class FileDownloadResponse(BaseModel):
+    download_url: str
+    filename: str
+
+
+@router.post("/files/upload-url", response_model=FileUrlResponse)
+async def get_upload_url(
+    request: FileUploadRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Generate a presigned URL for uploading files to MinIO"""
+    try:
+        # Validate filename to prevent path traversal
+        if ".." in request.filename or request.filename.startswith("/"):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        # Ensure the file goes into the tenant's folder
+        if not request.filename.startswith("faces-raw/"):
+            request.filename = f"faces-raw/{request.filename}"
+        
+        # Generate presigned upload URL (valid for 1 hour)
+        upload_url = minio_client.get_presigned_put_url(
+            bucket="faces-raw",
+            object_name=request.filename.replace("faces-raw/", ""),
+            expiry=timedelta(hours=1)
+        )
+        
+        return FileUrlResponse(
+            upload_url=upload_url,
+            filename=request.filename
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {str(e)}")
+
+
+@router.post("/files/download-url", response_model=FileDownloadResponse)
+async def get_download_url(
+    request: FileDownloadRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Generate a presigned URL for downloading files from MinIO"""
+    try:
+        # Validate filename to prevent path traversal
+        if ".." in request.filename or request.filename.startswith("/"):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        # Determine bucket and object name from filename
+        if request.filename.startswith("faces-raw/"):
+            bucket = "faces-raw"
+            object_name = request.filename.replace("faces-raw/", "")
+        elif request.filename.startswith("staff-faces/"):
+            bucket = "faces-derived"
+            object_name = request.filename.replace("staff-faces/", "")
+        else:
+            # Default to faces-raw bucket
+            bucket = "faces-raw"
+            object_name = request.filename
+        
+        # Generate presigned download URL (valid for 1 hour)
+        download_url = minio_client.get_presigned_url(
+            bucket=bucket,
+            object_name=object_name,
+            expiry=timedelta(hours=1)
+        )
+        
+        return FileDownloadResponse(
+            download_url=download_url,
+            filename=request.filename
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate download URL: {str(e)}")
+
+
 
 
 @router.get("/files/{file_path:path}")
