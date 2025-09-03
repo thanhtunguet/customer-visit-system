@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -54,6 +55,8 @@ async def list_visits(
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
+    from ..core.minio_client import minio_client
+    
     await db.set_tenant_context(db_session, user["tenant_id"])
     
     query = select(Visit).where(Visit.tenant_id == user["tenant_id"])
@@ -71,7 +74,48 @@ async def list_visits(
     
     result = await db_session.execute(query)
     visits = result.scalars().all()
-    return visits
+    
+    # Convert visits to response format with presigned URLs
+    visit_responses = []
+    for visit in visits:
+        # Convert MinIO path to presigned URL if image_path exists
+        image_url = None
+        if visit.image_path:
+            try:
+                # Check if it's a MinIO s3:// path or already a URL
+                if visit.image_path.startswith('s3://'):
+                    # Extract bucket and object name from s3://bucket/object format
+                    path_parts = visit.image_path[5:].split('/', 1)  # Remove 's3://' prefix
+                    if len(path_parts) == 2:
+                        bucket, object_name = path_parts
+                        image_url = minio_client.get_presigned_url(bucket, object_name)
+                    else:
+                        image_url = visit.image_path
+                elif visit.image_path.startswith('http'):
+                    # Already a URL, use as-is
+                    image_url = visit.image_path
+                else:
+                    # Assume it's a path in the faces-raw bucket
+                    image_url = minio_client.get_presigned_url('faces-raw', visit.image_path)
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to generate presigned URL for {visit.image_path}: {e}")
+                image_url = None
+        
+        visit_response = VisitResponse(
+            tenant_id=visit.tenant_id,
+            visit_id=visit.visit_id,
+            person_id=visit.person_id,
+            person_type=visit.person_type,
+            site_id=visit.site_id,
+            camera_id=visit.camera_id,
+            timestamp=visit.timestamp,
+            confidence_score=visit.confidence_score,
+            image_path=image_url
+        )
+        visit_responses.append(visit_response)
+    
+    return visit_responses
 
 
 # ===============================

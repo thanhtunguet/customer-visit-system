@@ -141,22 +141,24 @@ export const VisitsPage: React.FC = () => {
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
 
-  // Initialize with seed data
+  // Load data from API
   useEffect(() => {
-    const initializeData = async () => {
+    const loadData = async () => {
       setLoading(true);
       try {
-        // In a real implementation, we would fetch from the API:
-        // const fetchedSites = await apiClient.getSites();
-        // const fetchedVisits = await apiClient.getVisits();
+        // Load sites and visits from API
+        const [fetchedSites, fetchedVisits] = await Promise.all([
+          apiClient.getSites(),
+          apiClient.getVisits({ limit: 1000 }) // Load more visits for better UX
+        ]);
         
-        // For demo purposes, use seed data
-        setSites(SEED_SITES);
-        setVisits(SEED_VISITS);
-        setFilteredVisits(SEED_VISITS);
+        setSites(fetchedSites);
+        setVisits(fetchedVisits);
+        setFilteredVisits(fetchedVisits);
       } catch (error) {
         console.error('Failed to load data:', error);
-        // Fallback to seed data on error
+        
+        // Fallback to seed data on error for development
         setSites(SEED_SITES);
         setVisits(SEED_VISITS);
         setFilteredVisits(SEED_VISITS);
@@ -165,7 +167,7 @@ export const VisitsPage: React.FC = () => {
       }
     };
 
-    initializeData();
+    loadData();
   }, []);
 
   // Apply filters
@@ -174,7 +176,7 @@ export const VisitsPage: React.FC = () => {
     
     // Apply site filter
     if (selectedSites.length > 0) {
-      result = result.filter(visit => selectedSites.includes(visit.site_id));
+      result = result.filter(visit => selectedSites.includes(visit.site_id.toString()));
     }
     
     // Apply date filter
@@ -200,11 +202,17 @@ export const VisitsPage: React.FC = () => {
     setDateRange([dateStrings[0] || null, dateStrings[1] || null]);
   };
 
-  const handleRefresh = () => {
-    // In a real implementation, this would fetch fresh data
-    // For demo, we'll just reset to seed data
-    setVisits(SEED_VISITS);
-    setFilteredVisits(SEED_VISITS);
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const fetchedVisits = await apiClient.getVisits({ limit: 1000 });
+      setVisits(fetchedVisits);
+      setFilteredVisits(fetchedVisits);
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleClearFilters = () => {
@@ -223,9 +231,9 @@ export const VisitsPage: React.FC = () => {
     return `${Math.floor(diffInMinutes / 1440)} day ago`;
   };
 
-  const getSiteName = (siteId: string) => {
+  const getSiteName = (siteId: number) => {
     const site = sites.find(s => s.site_id === siteId);
-    return site ? site.name : siteId;
+    return site ? site.name : `Site ${siteId}`;
   };
 
   const getPersonTypeColor = (personType: string) => {
@@ -265,7 +273,7 @@ export const VisitsPage: React.FC = () => {
               placeholder="Select sites"
               value={selectedSites}
               onChange={handleSiteChange}
-              options={sites.map(site => ({ label: site.name, value: site.site_id }))}
+              options={sites.map(site => ({ label: site.name, value: site.site_id.toString() }))}
             />
             
             <RangePicker
@@ -278,6 +286,7 @@ export const VisitsPage: React.FC = () => {
             <Button 
               icon={<ReloadOutlined />} 
               onClick={handleRefresh}
+              loading={loading}
             >
               Refresh
             </Button>

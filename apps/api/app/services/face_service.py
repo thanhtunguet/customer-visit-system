@@ -127,6 +127,9 @@ class FaceMatchingService:
         """Create a visit record"""
         visit_id = f"v_{uuid.uuid4().hex[:8]}"
         
+        # Convert snapshot_url to string if present
+        image_path = str(event.snapshot_url) if event.snapshot_url else None
+        
         visit = Visit(
             tenant_id=tenant_id,
             visit_id=visit_id,
@@ -137,6 +140,7 @@ class FaceMatchingService:
             timestamp=event.timestamp.replace(tzinfo=None) if event.timestamp.tzinfo else event.timestamp,
             confidence_score=confidence_score,
             face_embedding=json.dumps(event.embedding),
+            image_path=image_path,  # Now properly setting the image path
             bbox_x=event.bbox[0] if len(event.bbox) >= 4 else None,
             bbox_y=event.bbox[1] if len(event.bbox) >= 4 else None,
             bbox_w=event.bbox[2] if len(event.bbox) >= 4 else None,
