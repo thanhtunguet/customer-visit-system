@@ -112,9 +112,14 @@ class CustomerFaceService:
             return face_image
             
         except Exception as e:
-            logger.error(f"Error adding face image for customer {customer_id}: {e}")
-            # Don't rollback here - let the calling code handle the transaction
-            return None
+            # Handle missing table gracefully - this can happen if migrations haven't been run
+            if "relation \"customer_face_images\" does not exist" in str(e):
+                logger.info(f"customer_face_images table does not exist - cannot save face image for customer {customer_id}")
+                return None
+            else:
+                logger.error(f"Error adding face image for customer {customer_id}: {e}")
+                # Don't rollback here - let the calling code handle the transaction
+                return None
     
     async def _calculate_quality_score(
         self, 
@@ -304,8 +309,13 @@ class CustomerFaceService:
             return result.scalars().all()
             
         except Exception as e:
-            logger.error(f"Error getting face images for customer {customer_id}: {e}")
-            return []
+            # Handle missing table gracefully - this can happen if migrations haven't been run
+            if "relation \"customer_face_images\" does not exist" in str(e):
+                logger.info(f"customer_face_images table does not exist - returning empty list for customer {customer_id}")
+                return []
+            else:
+                logger.error(f"Error getting face images for customer {customer_id}: {e}")
+                return []
     
     async def get_best_customer_embeddings(
         self, 

@@ -427,6 +427,24 @@ class ApiClient {
     await this.client.delete(`/customers/${customerId}`);
   }
 
+  async getCustomerFaceImages(customerId: number): Promise<{
+    customer_id: number;
+    total_images: number;
+    images: Array<{
+      image_id: string;
+      image_path: string;
+      confidence_score: number;
+      quality_score: number;
+      created_at: string;
+      visit_id?: string;
+      face_bbox?: number[];
+      detection_metadata?: Record<string, any>;
+    }>;
+  }> {
+    const response = await this.client.get(`/customers/${customerId}/face-images`);
+    return response.data;
+  }
+
   // Visits
   async getVisits(params?: {
     site_id?: string;

@@ -119,22 +119,22 @@ class FaceMatchingService:
         try:
             # Generate unique filename for the face image
             file_extension = face_image_filename.split('.')[-1] if '.' in face_image_filename else 'jpg'
-            unique_filename = f"worker-faces/face-{uuid.uuid4().hex[:8]}.{file_extension}"
+            object_name = f"worker-faces/face-{uuid.uuid4().hex[:8]}.{file_extension}"
             
             # Upload to faces-raw bucket (will be cleaned up after 30 days)
             result = await asyncio.get_event_loop().run_in_executor(
                 None, 
                 minio_client.upload_image,
                 "faces-raw", 
-                unique_filename,
+                object_name,
                 face_image_data,
                 f"image/{file_extension}"
             )
             
             if result:
                 # Update the event with the uploaded image path
-                event.snapshot_url = unique_filename
-                logger.info(f"Successfully uploaded worker face image: {unique_filename}")
+                event.snapshot_url = object_name
+                logger.info(f"Successfully uploaded worker face image: {object_name}")
             else:
                 logger.warning("Failed to upload worker face image, continuing without image")
                 
@@ -185,8 +185,8 @@ class FaceMatchingService:
             try:
                 from ..core.minio_client import minio_client
                 if event.snapshot_url.startswith('worker-faces/'):
-                    object_path = event.snapshot_url.replace('worker-faces/', '')
-                    face_image_bytes = await minio_client.download_file("faces-raw", object_path)
+                    # Use the full path as stored in MinIO
+                    face_image_bytes = await minio_client.download_file("faces-raw", event.snapshot_url)
                     logger.debug(f"Downloaded worker face image: {len(face_image_bytes)} bytes")
             except Exception as e:
                 logger.warning(f"Failed to download worker face image: {e}")
