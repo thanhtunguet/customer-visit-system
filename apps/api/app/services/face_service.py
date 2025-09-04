@@ -133,6 +133,41 @@ class FaceMatchingService:
         # Convert snapshot_url to string if present
         image_path = str(event.snapshot_url) if event.snapshot_url else None
         
+        # If no snapshot URL provided, try to generate a fallback cropped face image
+        logger.info(f"Processing event: snapshot_url={'Present' if event.snapshot_url else 'None'}, bbox={event.bbox}")
+        if not image_path and event.bbox and len(event.bbox) >= 4:
+            logger.info("Attempting to generate fallback face crop from bbox")
+            try:
+                from .image_processing import image_processor
+                from ..core.minio_client import minio_client
+                
+                # Generate synthetic face crop from bbox
+                face_crop_bytes = await image_processor.generate_face_crop_from_bbox(
+                    bbox=event.bbox,
+                    frame_width=640,  # Default camera resolution
+                    frame_height=480,
+                    padding_factor=0.3
+                )
+                
+                if face_crop_bytes:
+                    # Upload the generated image  
+                    image_path = await image_processor.upload_generated_image(
+                        image_bytes=face_crop_bytes,
+                        minio_client=minio_client,
+                        bucket="faces-derived"
+                    )
+                    
+                    if image_path:
+                        logger.info(f"✅ Generated fallback face crop for visit: {image_path}")
+                    else:
+                        logger.warning("❌ Failed to upload generated face crop")
+                        
+            except Exception as e:
+                logger.error(f"❌ Failed to generate fallback face image: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Continue without image - not critical
+        
         # Look for existing visit session within the merge window
         cutoff_time = current_time - visit_merge_window
         
@@ -156,13 +191,16 @@ class FaceMatchingService:
             existing_visit.visit_duration_seconds = duration_seconds
             existing_visit.detection_count += 1
             
+            # Store the original confidence for comparison
+            original_confidence = existing_visit.confidence_score
+            
             # Update confidence score if this detection is better
             if confidence_score > (existing_visit.highest_confidence or 0):
                 existing_visit.highest_confidence = confidence_score
                 existing_visit.confidence_score = confidence_score  # Update main confidence too
                 
             # Update image path if this detection has an image and previous didn't, or if confidence is higher
-            if image_path and (not existing_visit.image_path or confidence_score > existing_visit.confidence_score):
+            if image_path and (not existing_visit.image_path or confidence_score > original_confidence):
                 existing_visit.image_path = image_path
                 # Update bounding box info for the best detection
                 existing_visit.bbox_x = event.bbox[0] if len(event.bbox) >= 4 else None
@@ -175,7 +213,7 @@ class FaceMatchingService:
             
             logger.info(f"Updated existing visit session {existing_visit.visit_session_id}: "
                        f"duration={duration_seconds}s, detections={existing_visit.detection_count}, "
-                       f"confidence={existing_visit.highest_confidence:.3f}")
+                       f"confidence={existing_visit.highest_confidence:.3f}, image_path={'Yes' if existing_visit.image_path else 'No'}")
             
             return existing_visit.visit_id
         else:
@@ -209,7 +247,7 @@ class FaceMatchingService:
             db_session.add(visit)
             await db_session.commit()
             
-            logger.info(f"Created new visit session {session_id} for person {person_id}")
+            logger.info(f"Created new visit session {session_id} for person {person_id}, image_path={'Yes' if image_path else 'No'}")
             
             return visit_id
 

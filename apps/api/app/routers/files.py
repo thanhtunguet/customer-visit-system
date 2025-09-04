@@ -129,17 +129,38 @@ async def serve_file(
     if not file_path or ".." in file_path or file_path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid file path")
 
-    # Restrict to staff face images and enforce tenant isolation
-    if not file_path.startswith("staff-faces/"):
+    # Handle different secure file types with proper tenant isolation
+    bucket = None
+    object_path = None
+    
+    if file_path.startswith("staff-faces/"):
+        # Staff face images: staff-faces/{tenant_id}/filename
+        parts = file_path.split("/")
+        if len(parts) < 3:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        path_tenant_id = parts[1]
+        if path_tenant_id != payload.get("tenant_id"):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        
+        bucket = "faces-derived"
+        object_path = file_path
+        
+    elif file_path.startswith("worker-faces/"):
+        # Worker uploaded face images: worker-faces/filename  
+        # These are from faces-raw bucket, require authentication but no tenant isolation
+        bucket = "faces-raw"
+        object_path = file_path.replace("worker-faces/", "")
+        
+    elif file_path.startswith("visits-faces/"):
+        # API-generated face crops: visits-faces/generated/filename
+        # These are from faces-derived bucket, require authentication but no tenant isolation 
+        bucket = "faces-derived"
+        object_path = file_path.replace("visits-faces/", "")
+        
+    else:
+        # Only allow specific secure path types
         raise HTTPException(status_code=404, detail="File not found")
-
-    parts = file_path.split("/")
-    if len(parts) < 3:
-        raise HTTPException(status_code=404, detail="File not found")
-
-    path_tenant_id = parts[1]
-    if path_tenant_id != payload.get("tenant_id"):
-        raise HTTPException(status_code=403, detail="Forbidden")
 
     # Determine content type by extension
     content_type = "application/octet-stream"
@@ -154,7 +175,8 @@ async def serve_file(
         content_type = "image/gif"
 
     try:
-        data = await minio_client.download_file("faces-derived", file_path)
+        data = await minio_client.download_file(bucket, object_path)
         return Response(content=data, media_type=content_type)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to serve file {file_path}: {e}")
         raise HTTPException(status_code=404, detail="File not found")

@@ -42,125 +42,152 @@ async def get_token(client: httpx.AsyncClient) -> str:
 
 
 async def simulate_event_with_image(token: str, client: httpx.AsyncClient) -> None:
-    """Simulate face detection with actual image upload"""
+    """Simulate face detection with actual image upload and improved reliability"""
     import base64
     import io
     import uuid
     from PIL import Image, ImageDraw
     
-    # Create a mock face image (100x100 pixels)
-    img = Image.new('RGB', (100, 100), color='lightblue')
+    # Create a mock face image (150x150 pixels for better quality)
+    img_size = 150
+    img = Image.new('RGB', (img_size, img_size), color='lightblue')
     draw = ImageDraw.Draw(img)
     
-    # Draw a simple face-like shape
-    draw.ellipse([20, 20, 80, 80], fill='peachpuff', outline='black', width=2)  # face
-    draw.ellipse([35, 35, 45, 45], fill='black')  # left eye
-    draw.ellipse([55, 35, 65, 45], fill='black')  # right eye
-    draw.arc([40, 50, 60, 65], start=0, end=180, fill='black', width=2)  # smile
+    # Draw a more detailed face-like shape
+    face_margin = 20
+    face_size = img_size - 2 * face_margin
     
-    # Convert to bytes
+    # Face outline
+    draw.ellipse([face_margin, face_margin, face_margin + face_size, face_margin + face_size], 
+                fill='peachpuff', outline='darkgoldenrod', width=3)
+    
+    # Eyes
+    eye_size = face_size // 8
+    left_eye_x = face_margin + face_size // 3 - eye_size
+    right_eye_x = face_margin + 2 * face_size // 3 - eye_size
+    eye_y = face_margin + face_size // 3
+    
+    draw.ellipse([left_eye_x, eye_y, left_eye_x + eye_size * 2, eye_y + eye_size], 
+                fill='darkblue', outline='black', width=1)
+    draw.ellipse([right_eye_x, eye_y, right_eye_x + eye_size * 2, eye_y + eye_size], 
+                fill='darkblue', outline='black', width=1)
+    
+    # Nose
+    nose_x = face_margin + face_size // 2
+    nose_y = face_margin + face_size // 2
+    draw.polygon([(nose_x, nose_y - 8), (nose_x - 5, nose_y + 5), (nose_x + 5, nose_y + 5)], 
+                fill='rosybrown', outline='sienna')
+    
+    # Mouth
+    mouth_left = face_margin + face_size // 3
+    mouth_right = face_margin + 2 * face_size // 3
+    mouth_y = face_margin + 2 * face_size // 3
+    mouth_h = face_size // 6
+    
+    draw.arc([mouth_left, mouth_y, mouth_right, mouth_y + mouth_h],
+            start=0, end=180, fill='darkred', width=3)
+    
+    # Convert to bytes with high quality
     img_buffer = io.BytesIO()
-    img.save(img_buffer, format='JPEG')
+    img.save(img_buffer, format='JPEG', quality=95, optimize=True)
     img_bytes = img_buffer.getvalue()
     
-    # Upload image to MinIO via API
-    image_filename = f"faces-raw/face-{uuid.uuid4().hex[:8]}.jpg"
+    # Upload image to MinIO via API with retry logic
+    max_retries = 3
+    image_filename = f"faces-raw/mock-face-{uuid.uuid4().hex[:8]}.jpg"
+    snapshot_url = None
     
-    try:
-        # Get presigned upload URL
-        upload_response = await client.post(
-            f"{API_URL}/v1/files/upload-url",
-            json={"filename": image_filename, "content_type": "image/jpeg"},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        
-        if upload_response.status_code == 200:
-            upload_data = upload_response.json()
-            presigned_url = upload_data["upload_url"]
-            
-            # Upload the image
-            upload_result = await client.put(
-                presigned_url,
-                content=img_bytes,
-                headers={"Content-Type": "image/jpeg"},
-                timeout=30,
+    for attempt in range(max_retries):
+        try:
+            # Get presigned upload URL
+            upload_response = await client.post(
+                f"{API_URL}/v1/files/upload-url",
+                json={"filename": image_filename, "content_type": "image/jpeg"},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=15,
             )
             
-            if upload_result.status_code in [200, 204]:
-                # Create download URL for the event
-                download_response = await client.post(
-                    f"{API_URL}/v1/files/download-url",
-                    json={"filename": image_filename},
-                    headers={"Authorization": f"Bearer {token}"},
-                    timeout=10,
+            if upload_response.status_code == 200:
+                upload_data = upload_response.json()
+                presigned_url = upload_data["upload_url"]
+                
+                # Upload the image
+                upload_result = await client.put(
+                    presigned_url,
+                    content=img_bytes,
+                    headers={"Content-Type": "image/jpeg"},
+                    timeout=30,
                 )
                 
-                snapshot_url = None
-                if download_response.status_code == 200:
-                    snapshot_url = download_response.json()["download_url"]
-                
-                print(f"Successfully uploaded face image: {image_filename}")
-                print(f"Snapshot URL: {snapshot_url}")
-                
-                # Send event with actual image URL
-                evt = FaceDetectedEvent(
-                    tenant_id=TENANT_ID,
-                    site_id=int(SITE_ID),
-                    camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
-                    timestamp=datetime.now(timezone.utc),
-                    embedding=[np.random.random() for _ in range(512)],  # Random but realistic embedding
-                    bbox=[20, 20, 80, 80],  # Match the face coordinates
-                    snapshot_url=snapshot_url,
-                )
+                if upload_result.status_code in [200, 204]:
+                    # Create download URL for the event
+                    download_response = await client.post(
+                        f"{API_URL}/v1/files/download-url",
+                        json={"filename": image_filename},
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=10,
+                    )
+                    
+                    if download_response.status_code == 200:
+                        snapshot_url = download_response.json()["download_url"]
+                        print(f"✅ Successfully uploaded mock face image: {image_filename}")
+                        print(f"📸 Snapshot URL: {snapshot_url[:80]}...")
+                        break
+                    else:
+                        print(f"⚠️ Failed to get download URL (attempt {attempt + 1}): {download_response.status_code}")
+                        if attempt == max_retries - 1:
+                            # Use fallback S3 path format
+                            snapshot_url = f"s3://faces-raw/{image_filename.split('/')[-1]}"
+                            print(f"🔄 Using fallback URL: {snapshot_url}")
+                            break
+                else:
+                    print(f"❌ Failed to upload image (attempt {attempt + 1}): {upload_result.status_code}")
             else:
-                print(f"Failed to upload image: {upload_result.status_code}")
-                # Fallback to no image
-                evt = FaceDetectedEvent(
-                    tenant_id=TENANT_ID,
-                    site_id=int(SITE_ID),
-                    camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
-                    timestamp=datetime.now(timezone.utc),
-                    embedding=[np.random.random() for _ in range(512)],
-                    bbox=[20, 20, 80, 80],
-                    snapshot_url=None,
-                )
-        else:
-            print(f"Failed to get upload URL: {upload_response.status_code}")
-            # Fallback to no image
-            evt = FaceDetectedEvent(
-                tenant_id=TENANT_ID,
-                site_id=int(SITE_ID),
-                camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
-                timestamp=datetime.now(timezone.utc),
-                embedding=[np.random.random() for _ in range(512)],
-                bbox=[20, 20, 80, 80],
-                snapshot_url=None,
-            )
-            
-    except Exception as e:
-        print(f"Error uploading image: {e}")
-        # Fallback to no image
-        evt = FaceDetectedEvent(
-            tenant_id=TENANT_ID,
-            site_id=int(SITE_ID),
-            camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
-            timestamp=datetime.now(timezone.utc),
-            embedding=[np.random.random() for _ in range(512)],
-            bbox=[20, 20, 80, 80],
-            snapshot_url=None,
-        )
+                print(f"❌ Failed to get upload URL (attempt {attempt + 1}): {upload_response.status_code}")
+                
+        except Exception as e:
+            print(f"💥 Upload error (attempt {attempt + 1}): {e}")
+        
+        if attempt < max_retries - 1:
+            print(f"🔄 Retrying upload in 2 seconds...")
+            await asyncio.sleep(2)
+    
+    # Create event with improved coordinates
+    face_bbox = [face_margin, face_margin, face_size, face_size]  # x, y, w, h matching the drawn face
+    
+    evt = FaceDetectedEvent(
+        tenant_id=TENANT_ID,
+        site_id=int(SITE_ID),
+        camera_id=int(CAMERA_ID.split('-')[1]) if CAMERA_ID.startswith('c-') else int(CAMERA_ID),
+        timestamp=datetime.now(timezone.utc),
+        embedding=[np.random.random() for _ in range(512)],  # Random but realistic embedding
+        bbox=face_bbox,  # Coordinates matching the actual face in the image
+        snapshot_url=snapshot_url,
+    )
     
     # Send the face detection event
-    r = await client.post(
-        f"{API_URL}/v1/events/face",
-        json=evt.model_dump(mode="json"),
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=10,
-    )
-    print("POST /v1/events/face =>", r.status_code)
-    if r.status_code != 200:
-        print("Response:", r.text)
+    try:
+        r = await client.post(
+            f"{API_URL}/v1/events/face",
+            json=evt.model_dump(mode="json"),
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        )
+        print(f"📤 POST /v1/events/face => {r.status_code}")
+        if r.status_code == 200:
+            response_data = r.json()
+            print(f"✅ Event processed: person_id={response_data.get('person_id')}, match={response_data.get('match')}")
+            if response_data.get('visit_id'):
+                print(f"🎯 Visit created: {response_data.get('visit_id')}")
+        else:
+            print(f"❌ Event processing failed: {r.text}")
+            
+    except Exception as e:
+        print(f"💥 Error sending event: {e}")
+    
+    print(f"🖼️ Image upload success: {'✅' if snapshot_url else '❌'}")
+    print(f"📊 Final snapshot_url: {snapshot_url or 'None - will use API fallback'}")
+    print("─" * 60)
 
 
 import asyncio
@@ -488,66 +515,90 @@ class FaceRecognitionWorker:
                 logger.error(f"Error in failed events queue processor: {e}")
                 await asyncio.sleep(retry_interval)
     
-    async def _upload_face_image(self, face_image: np.ndarray) -> Optional[str]:
-        """Upload face image to MinIO and return the snapshot URL"""
-        try:
-            import cv2
-            import uuid
-            
-            # Generate unique filename
-            image_filename = f"faces-raw/face-{uuid.uuid4().hex[:8]}.jpg"
-            
-            # Convert face image to JPEG bytes
-            _, img_buffer = cv2.imencode('.jpg', face_image, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            img_bytes = img_buffer.tobytes()
-            
-            # Get presigned upload URL
-            upload_response = await self.http_client.post(
-                f"{self.config.api_url}/v1/files/upload-url",
-                json={"filename": image_filename, "content_type": "image/jpeg"},
-                headers={"Authorization": f"Bearer {self.access_token}"},
-                timeout=10,
-            )
-            
-            if upload_response.status_code != 200:
-                logger.warning(f"Failed to get upload URL: {upload_response.status_code}")
-                return None
-            
-            upload_data = upload_response.json()
-            presigned_url = upload_data["upload_url"]
-            
-            # Upload the image
-            upload_result = await self.http_client.put(
-                presigned_url,
-                content=img_bytes,
-                headers={"Content-Type": "image/jpeg"},
-                timeout=30,
-            )
-            
-            if upload_result.status_code not in [200, 204]:
-                logger.warning(f"Failed to upload image: {upload_result.status_code}")
-                return None
-            
-            # Get download URL for the uploaded image
-            download_response = await self.http_client.post(
-                f"{self.config.api_url}/v1/files/download-url",
-                json={"filename": image_filename},
-                headers={"Authorization": f"Bearer {self.access_token}"},
-                timeout=10,
-            )
-            
-            if download_response.status_code == 200:
-                snapshot_url = download_response.json()["download_url"]
-                logger.debug(f"Successfully uploaded face image: {image_filename}")
-                return snapshot_url
-            else:
-                logger.warning(f"Failed to get download URL: {download_response.status_code}")
-                # Return the MinIO path as fallback - the API will generate presigned URLs
-                return f"s3://faces-raw/{image_filename.split('/')[-1]}"
+    async def _upload_face_image(self, face_image: np.ndarray, max_retries: int = 3) -> Optional[str]:
+        """Upload face image to MinIO and return the snapshot URL with improved retry logic"""
+        for attempt in range(max_retries):
+            try:
+                import cv2
+                import uuid
                 
-        except Exception as e:
-            logger.error(f"Error uploading face image: {e}")
-            return None
+                # Generate unique filename
+                image_filename = f"faces-raw/face-{uuid.uuid4().hex[:8]}.jpg"
+                
+                # Convert face image to JPEG bytes with quality optimization
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85, cv2.IMWRITE_JPEG_OPTIMIZE, 1]
+                success, img_buffer = cv2.imencode('.jpg', face_image, encode_params)
+                
+                if not success:
+                    logger.warning(f"Failed to encode face image (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(0.5 * (attempt + 1))  # Progressive delay
+                        continue
+                    return None
+                
+                img_bytes = img_buffer.tobytes()
+                
+                # Validate image size (should be reasonable)
+                if len(img_bytes) < 1000 or len(img_bytes) > 10*1024*1024:  # 1KB to 10MB
+                    logger.warning(f"Face image size unusual: {len(img_bytes)} bytes")
+                
+                # Get presigned upload URL with timeout
+                upload_response = await self.http_client.post(
+                    f"{self.config.api_url}/v1/files/upload-url",
+                    json={"filename": image_filename, "content_type": "image/jpeg"},
+                    headers={"Authorization": f"Bearer {self.access_token}"},
+                    timeout=15,  # Increased timeout
+                )
+                
+                if upload_response.status_code != 200:
+                    logger.warning(f"Failed to get upload URL (attempt {attempt + 1}/{max_retries}): {upload_response.status_code}")
+                    if upload_response.status_code >= 500 and attempt < max_retries - 1:
+                        await asyncio.sleep(1.0 * (attempt + 1))  # Server error, retry
+                        continue
+                    return None
+                
+                upload_data = upload_response.json()
+                presigned_url = upload_data["upload_url"]
+                
+                # Upload the image with retry on network issues
+                upload_result = await self.http_client.put(
+                    presigned_url,
+                    content=img_bytes,
+                    headers={"Content-Type": "image/jpeg"},
+                    timeout=30,  # Long timeout for upload
+                )
+                
+                if upload_result.status_code not in [200, 204]:
+                    logger.warning(f"Failed to upload image (attempt {attempt + 1}/{max_retries}): {upload_result.status_code}")
+                    if upload_result.status_code >= 500 and attempt < max_retries - 1:
+                        await asyncio.sleep(1.0 * (attempt + 1))  # Server error, retry
+                        continue
+                    return None
+                
+                # Instead of using presigned URLs with credentials, return secure internal path
+                # This will be served through the API's secure /files/{file_path} endpoint
+                secure_path = f"worker-faces/{image_filename.split('/')[-1]}"
+                logger.debug(f"Successfully uploaded face image: {image_filename} -> {secure_path} (attempt {attempt + 1})")
+                return secure_path
+                
+            except httpx.TimeoutException as e:
+                logger.warning(f"Upload timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+            except httpx.RequestError as e:
+                logger.warning(f"Upload request error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+            except Exception as e:
+                logger.error(f"Unexpected upload error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+        
+        logger.error(f"Failed to upload face image after {max_retries} attempts")
+        return None
     
     async def _send_face_event(self, event: FaceDetectedEvent, max_retries: Optional[int] = None) -> Dict:
         """Send face event to API with exponential backoff retry logic"""
