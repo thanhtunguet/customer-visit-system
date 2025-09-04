@@ -67,6 +67,10 @@ class Settings:
     tenant_header: str = os.getenv("TENANT_HEADER", "X-Tenant-ID")
     face_similarity_threshold: float = float(os.getenv("FACE_SIMILARITY_THRESHOLD", "0.6"))
     max_face_results: int = int(os.getenv("MAX_FACE_RESULTS", "5"))
+    
+    # Customer face gallery settings
+    max_customer_face_images: int = int(os.getenv("MAX_CUSTOMER_FACE_IMAGES", "4"))
+    min_face_confidence_to_save: float = float(os.getenv("MIN_FACE_CONFIDENCE_TO_SAVE", "0.7"))
 
 
 settings = Settings()

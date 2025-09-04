@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 import logging
+import json
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
 from sqlalchemy import select, func, and_, case, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,14 +27,37 @@ def to_naive_utc(dt: datetime) -> datetime:
 
 @router.post("/events/face", response_model=FaceEventResponse)
 async def process_face_event(
-    event: FaceDetectedEvent,
+    event_data: str = Form(..., description="JSON-encoded FaceDetectedEvent"),
+    face_image: UploadFile = File(..., description="Cropped face image from worker"),
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
-    result = await face_service.process_face_event(
+    # Parse the event data
+    try:
+        event_dict = json.loads(event_data)
+        event = FaceDetectedEvent(**event_dict)
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid event data: {str(e)}"
+        )
+    
+    # Validate face image
+    if not face_image.content_type or not face_image.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Face image must be a valid image file"
+        )
+    
+    # Read the face image data
+    face_image_data = await face_image.read()
+    
+    result = await face_service.process_face_event_with_image(
         event=event,
+        face_image_data=face_image_data,
+        face_image_filename=face_image.filename or "face.jpg",
         db_session=db_session,
         tenant_id=user["tenant_id"]
     )
@@ -114,8 +138,14 @@ async def list_visits(
                     # Already a URL, use as-is
                     image_url = visit.image_path
                 else:
-                    # Assume it's a path in the faces-raw bucket
-                    image_url = minio_client.get_presigned_url('faces-raw', visit.image_path)
+                    # Handle different image path types
+                    if visit.image_path.startswith('visits-faces/'):
+                        # API-generated face crops are in faces-derived bucket
+                        object_path = visit.image_path.replace('visits-faces/', '')
+                        image_url = minio_client.get_presigned_url('faces-derived', object_path)
+                    else:
+                        # Assume it's a path in the faces-raw bucket
+                        image_url = minio_client.get_presigned_url('faces-raw', visit.image_path)
             except Exception as e:
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to generate presigned URL for {visit.image_path}: {e}")

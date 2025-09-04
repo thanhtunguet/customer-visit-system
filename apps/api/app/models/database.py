@@ -254,6 +254,38 @@ class Customer(Base):
     )
 
 
+class CustomerFaceImage(Base):
+    __tablename__ = "customer_face_images"
+    
+    image_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+    customer_id = Column(BigInteger, nullable=False)
+    image_path = Column(String(500), nullable=False)
+    confidence_score = Column(Float, nullable=False)
+    quality_score = Column(Float, nullable=True)
+    face_bbox = Column(JSON, nullable=True)  # [x, y, w, h]
+    embedding = Column(JSON, nullable=True)  # Face embedding vector
+    image_hash = Column(String(64), nullable=True)  # For duplicate detection
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    visit_id = Column(String(64), nullable=True)  # Reference to source visit
+    detection_metadata = Column(JSON, nullable=True)  # Additional metadata (detector, landmarks, etc.)
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['tenant_id', 'customer_id'],
+            ['customers.tenant_id', 'customers.customer_id'],
+            ondelete='CASCADE'
+        ),
+        Index('idx_customer_face_images_tenant_customer', 'tenant_id', 'customer_id'),
+        Index('idx_customer_face_images_confidence', 'tenant_id', 'customer_id', 'confidence_score'),
+        Index('idx_customer_face_images_hash', 'tenant_id', 'image_hash'),
+        Index('idx_customer_face_images_created', 'tenant_id', 'customer_id', 'created_at'),
+    )
+
+
 class Visit(Base):
     __tablename__ = "visits"
     

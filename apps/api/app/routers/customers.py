@@ -1,4 +1,5 @@
 import logging
+import logging
 import uuid
 from typing import List
 
@@ -139,3 +140,148 @@ async def delete_customer(
     await db_session.delete(customer)
     await db_session.commit()
     return {"message": "Customer deleted successfully"}
+
+
+# Customer Face Gallery Endpoints
+
+@router.get("/customers/{customer_id:int}/face-images")
+async def get_customer_face_images(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get face images for a customer"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify customer exists
+    customer = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    if not customer.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    try:
+        from ..services.customer_face_service import customer_face_service
+        
+        face_images = await customer_face_service.get_customer_face_images(
+            db_session, user["tenant_id"], customer_id
+        )
+        
+        # Convert to response format
+        images = []
+        for img in face_images:
+            images.append({
+                "image_id": img.image_id,
+                "image_path": img.image_path,
+                "confidence_score": img.confidence_score,
+                "quality_score": img.quality_score,
+                "created_at": img.created_at.isoformat(),
+                "visit_id": img.visit_id,
+                "face_bbox": img.face_bbox,
+                "detection_metadata": img.detection_metadata
+            })
+        
+        return {
+            "customer_id": customer_id,
+            "total_images": len(images),
+            "images": images
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting customer face images: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get customer face images")
+
+
+@router.delete("/customers/{customer_id:int}/face-images/{image_id:int}")
+async def delete_customer_face_image(
+    customer_id: int,
+    image_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete a specific face image for a customer"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..models.database import CustomerFaceImage
+        
+        # Find and delete the face image
+        result = await db_session.execute(
+            select(CustomerFaceImage).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer_id,
+                    CustomerFaceImage.image_id == image_id
+                )
+            )
+        )
+        
+        face_image = result.scalar_one_or_none()
+        if not face_image:
+            raise HTTPException(status_code=404, detail="Face image not found")
+        
+        # Delete from MinIO
+        from ..services.customer_face_service import customer_face_service
+        await customer_face_service._delete_face_image(db_session, face_image)
+        
+        await db_session.commit()
+        
+        return {"message": "Face image deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting customer face image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete face image")
+
+
+@router.get("/customers/{customer_id:int}/face-gallery-stats")
+async def get_customer_face_gallery_stats(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Get statistics about a customer's face gallery"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..models.database import CustomerFaceImage
+        from sqlalchemy import func
+        
+        # Get gallery statistics
+        stats_query = await db_session.execute(
+            select(
+                func.count(CustomerFaceImage.image_id).label('total_images'),
+                func.avg(CustomerFaceImage.confidence_score).label('avg_confidence'),
+                func.max(CustomerFaceImage.confidence_score).label('max_confidence'),
+                func.min(CustomerFaceImage.confidence_score).label('min_confidence'),
+                func.avg(CustomerFaceImage.quality_score).label('avg_quality'),
+                func.min(CustomerFaceImage.created_at).label('first_image'),
+                func.max(CustomerFaceImage.created_at).label('latest_image')
+            ).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer_id
+                )
+            )
+        )
+        
+        stats = stats_query.first()
+        
+        return {
+            "customer_id": customer_id,
+            "total_images": stats.total_images or 0,
+            "avg_confidence": round(float(stats.avg_confidence or 0), 3),
+            "max_confidence": round(float(stats.max_confidence or 0), 3),
+            "min_confidence": round(float(stats.min_confidence or 0), 3),
+            "avg_quality": round(float(stats.avg_quality or 0), 3),
+            "first_image_date": stats.first_image.isoformat() if stats.first_image else None,
+            "latest_image_date": stats.latest_image.isoformat() if stats.latest_image else None,
+            "gallery_limit": settings.max_customer_face_images
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting customer face gallery stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get gallery statistics")

@@ -13,7 +13,7 @@ class FaceDetectedEvent(BaseModel):
     timestamp: datetime
     embedding: List[float] = Field(min_length=512, max_length=512)
     bbox: List[float] = Field(min_length=4, max_length=4)
-    snapshot_url: Optional[HttpUrl] | None = None
+    snapshot_url: Optional[str] = None
     is_staff_local: bool = False
     staff_id: Optional[str] = None
 

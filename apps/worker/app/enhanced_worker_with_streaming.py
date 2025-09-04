@@ -315,7 +315,11 @@ class EnhancedFaceRecognitionWorker:
                     logger.warning("No camera assigned to worker, skipping face processing")
                     continue
                 
-                # Create event
+                # Upload face image and get image bytes for API
+                await self._ensure_authenticated()  # Ensure we have auth for upload
+                face_image_bytes = await self._upload_face_image_to_api(face_image)
+                
+                # Create event without snapshot_url (will be handled by API)
                 event = FaceDetectedEvent(
                     tenant_id=self.config.tenant_id,
                     site_id=self.config.site_id,
@@ -324,12 +328,13 @@ class EnhancedFaceRecognitionWorker:
                     embedding=embedding,
                     bbox=bbox,
                     confidence=detection["confidence"],
+                    snapshot_url=None,  # No longer needed - sending image directly
                     is_staff_local=is_staff_local,
                     staff_id=staff_id,
                 )
                 
-                # Send to API
-                await self._send_face_event(event)
+                # Send to API with face image bytes
+                await self._send_face_event(event, face_image_bytes)
                 
                 # Report face processed to worker client
                 self.worker_client.report_face_processed()
@@ -358,16 +363,24 @@ class EnhancedFaceRecognitionWorker:
                         event_data = await asyncio.wait_for(
                             self.failed_events_queue.get(), timeout=1.0
                         )
-                        event, retry_count = event_data
+                        
+                        # Handle both old and new queue item formats for backward compatibility
+                        if len(event_data) == 2:
+                            # Old format: (event, retry_count)
+                            event, retry_count = event_data
+                            face_image_bytes = None
+                        else:
+                            # New format: (event, face_image_bytes, retry_count)
+                            event, face_image_bytes, retry_count = event_data
                         
                         # Try to send the event
-                        result = await self._send_face_event(event, max_retries=1)
+                        result = await self._send_face_event(event, face_image_bytes, max_retries=1)
                         
                         if "error" not in result:
                             processed += 1
                             logger.info(f"Successfully processed queued event: {result}")
                         elif retry_count < self.config.max_queue_retries:
-                            failed_again.append((event, retry_count + 1))
+                            failed_again.append((event, face_image_bytes, retry_count + 1))
                         else:
                             logger.error(f"Permanently dropping event after {self.config.max_queue_retries} retries: {event.camera_id}")
                             
@@ -393,8 +406,8 @@ class EnhancedFaceRecognitionWorker:
                 logger.error(f"Error in failed events queue processor: {e}")
                 await asyncio.sleep(retry_interval)
     
-    async def _send_face_event(self, event: FaceDetectedEvent, max_retries: Optional[int] = None) -> Dict:
-        """Send face event to API with exponential backoff retry logic"""
+    async def _send_face_event(self, event: FaceDetectedEvent, face_image_bytes: Optional[bytes] = None, max_retries: Optional[int] = None) -> Dict:
+        """Send face event to API with face image as multipart form data"""
         if max_retries is None:
             max_retries = self.config.max_api_retries
             
@@ -402,12 +415,39 @@ class EnhancedFaceRecognitionWorker:
             try:
                 await self._ensure_authenticated()
                 
-                response = await self.http_client.post(
-                    f"{self.config.api_url}/v1/events/face",
-                    json=event.model_dump(mode="json"),
-                    headers={"Authorization": f"Bearer {self.access_token}"},
-                    timeout=30.0
-                )
+                if face_image_bytes:
+                    # Send as multipart form data with face image
+                    import json
+                    
+                    # Prepare the multipart form data
+                    files = {
+                        'face_image': ('face.jpg', face_image_bytes, 'image/jpeg')
+                    }
+                    
+                    # Prepare the event data as form data
+                    # Remove snapshot_url since we're sending the actual image
+                    event_dict = event.model_dump(mode="json")
+                    event_dict.pop('snapshot_url', None)  # Remove if present
+                    
+                    data = {
+                        'event_data': json.dumps(event_dict)
+                    }
+                    
+                    response = await self.http_client.post(
+                        f"{self.config.api_url}/v1/events/face",
+                        data=data,
+                        files=files,
+                        headers={"Authorization": f"Bearer {self.access_token}"},
+                        timeout=30.0
+                    )
+                else:
+                    # Fallback to JSON if no image (shouldn't happen but safety)
+                    response = await self.http_client.post(
+                        f"{self.config.api_url}/v1/events/face",
+                        json=event.model_dump(mode="json"),
+                        headers={"Authorization": f"Bearer {self.access_token}"},
+                        timeout=30.0
+                    )
                 
                 response.raise_for_status()
                 result = response.json()
@@ -445,12 +485,53 @@ class EnhancedFaceRecognitionWorker:
         
         # Add to failed events queue for later processing
         try:
-            await self.failed_events_queue.put((event, 1))  # (event, retry_count)
+            await self.failed_events_queue.put((event, face_image_bytes, 1))  # (event, face_image_bytes, retry_count)
             logger.info("Event queued for later retry")
         except Exception as queue_error:
             logger.error(f"Failed to queue event: {queue_error}")
         
         return {"error": "Max retries exceeded, event queued for retry"}
+    
+    async def _upload_face_image_to_api(self, face_image: np.ndarray, max_retries: int = 3) -> Optional[str]:
+        """Upload face image directly to API and return the snapshot URL with improved retry logic"""
+        for attempt in range(max_retries):
+            try:
+                import cv2
+                import uuid
+                
+                # Generate unique filename
+                image_filename = f"face-{uuid.uuid4().hex[:8]}.jpg"
+                
+                # Convert face image to JPEG bytes with quality optimization
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85, cv2.IMWRITE_JPEG_OPTIMIZE, 1]
+                success, img_buffer = cv2.imencode('.jpg', face_image, encode_params)
+                
+                if not success:
+                    logger.warning(f"Failed to encode face image (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(0.5 * (attempt + 1))  # Progressive delay
+                        continue
+                    return None
+                
+                img_bytes = img_buffer.tobytes()
+                
+                # Validate image size (should be reasonable)
+                if len(img_bytes) < 1000 or len(img_bytes) > 10*1024*1024:  # 1KB to 10MB
+                    logger.warning(f"Face image size unusual: {len(img_bytes)} bytes")
+                
+                # Store the image temporarily to send with the event
+                # We'll return the image bytes so they can be sent with the face event
+                logger.debug(f"Successfully encoded face image: {image_filename} ({len(img_bytes)} bytes) (attempt {attempt + 1})")
+                return img_bytes  # Return the image bytes instead of a URL
+                
+            except Exception as e:
+                logger.error(f"Unexpected encode error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                    continue
+        
+        logger.error(f"Failed to encode face image after {max_retries} attempts")
+        return None
     
     async def _monitor_shutdown(self):
         """Monitor for shutdown signals and initiate graceful shutdown"""

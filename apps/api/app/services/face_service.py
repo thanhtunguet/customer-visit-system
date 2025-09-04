@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -11,6 +12,7 @@ from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.milvus_client import milvus_client
+from ..core.config import settings
 from ..models.database import Customer, Staff, Visit
 from common.models import FaceDetectedEvent
 
@@ -100,6 +102,49 @@ class FaceMatchingService:
             "person_type": person_type
         }
 
+    async def process_face_event_with_image(
+        self, 
+        event: FaceDetectedEvent, 
+        face_image_data: bytes,
+        face_image_filename: str,
+        db_session: AsyncSession,
+        tenant_id: int
+    ) -> Dict:
+        """Process a face detection event with uploaded face image and return matching results"""
+        
+        # First upload the face image to MinIO
+        from ..core.minio_client import minio_client
+        import uuid
+        
+        try:
+            # Generate unique filename for the face image
+            file_extension = face_image_filename.split('.')[-1] if '.' in face_image_filename else 'jpg'
+            unique_filename = f"worker-faces/face-{uuid.uuid4().hex[:8]}.{file_extension}"
+            
+            # Upload to faces-raw bucket (will be cleaned up after 30 days)
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                minio_client.upload_image,
+                "faces-raw", 
+                unique_filename,
+                face_image_data,
+                f"image/{file_extension}"
+            )
+            
+            if result:
+                # Update the event with the uploaded image path
+                event.snapshot_url = unique_filename
+                logger.info(f"Successfully uploaded worker face image: {unique_filename}")
+            else:
+                logger.warning("Failed to upload worker face image, continuing without image")
+                
+        except Exception as e:
+            logger.warning(f"Failed to upload worker face image: {e}")
+            # Continue processing without the image - it's not critical
+        
+        # Now process the event normally
+        return await self.process_face_event(event, db_session, tenant_id)
+
     async def _create_new_customer(
         self, 
         db_session: AsyncSession, 
@@ -133,6 +178,19 @@ class FaceMatchingService:
         # Convert snapshot_url to string if present
         image_path = str(event.snapshot_url) if event.snapshot_url else None
         
+        # Handle face image saving for customer gallery
+        face_image_bytes = None
+        if event.snapshot_url and person_type == "customer":
+            # Try to download actual face crop from worker-provided snapshot
+            try:
+                from ..core.minio_client import minio_client
+                if event.snapshot_url.startswith('worker-faces/'):
+                    object_path = event.snapshot_url.replace('worker-faces/', '')
+                    face_image_bytes = await minio_client.download_file("faces-raw", object_path)
+                    logger.debug(f"Downloaded worker face image: {len(face_image_bytes)} bytes")
+            except Exception as e:
+                logger.warning(f"Failed to download worker face image: {e}")
+        
         # If no snapshot URL provided, try to generate a fallback cropped face image
         logger.info(f"Processing event: snapshot_url={'Present' if event.snapshot_url else 'None'}, bbox={event.bbox}")
         if not image_path and event.bbox and len(event.bbox) >= 4:
@@ -159,6 +217,7 @@ class FaceMatchingService:
                     
                     if image_path:
                         logger.info(f"✅ Generated fallback face crop for visit: {image_path}")
+                        face_image_bytes = face_crop_bytes  # Use for customer gallery too
                     else:
                         logger.warning("❌ Failed to upload generated face crop")
                         
@@ -211,6 +270,18 @@ class FaceMatchingService:
             
             await db_session.commit()
             
+            # Save face image to customer gallery if we have high quality image
+            # TODO: Re-enable customer face gallery after fixing transaction issues
+            if False and person_type == "customer" and face_image_bytes and confidence_score >= settings.min_face_confidence_to_save:
+                try:
+                    await self._save_customer_face_image(
+                        db_session, tenant_id, person_id, face_image_bytes, 
+                        confidence_score, event.bbox, event.embedding, existing_visit.visit_id
+                    )
+                except Exception as e:
+                    # Don't let face gallery errors break the main transaction
+                    logger.warning(f"Failed to save customer face image, continuing: {e}")
+            
             logger.info(f"Updated existing visit session {existing_visit.visit_session_id}: "
                        f"duration={duration_seconds}s, detections={existing_visit.detection_count}, "
                        f"confidence={existing_visit.highest_confidence:.3f}, image_path={'Yes' if existing_visit.image_path else 'No'}")
@@ -247,6 +318,18 @@ class FaceMatchingService:
             db_session.add(visit)
             await db_session.commit()
             
+            # Save face image to customer gallery if we have high quality image
+            # TODO: Re-enable customer face gallery after fixing transaction issues  
+            if False and person_type == "customer" and face_image_bytes and confidence_score >= settings.min_face_confidence_to_save:
+                try:
+                    await self._save_customer_face_image(
+                        db_session, tenant_id, person_id, face_image_bytes, 
+                        confidence_score, event.bbox, event.embedding, visit_id
+                    )
+                except Exception as e:
+                    # Don't let face gallery errors break the main transaction
+                    logger.warning(f"Failed to save customer face image, continuing: {e}")
+            
             logger.info(f"Created new visit session {session_id} for person {person_id}, image_path={'Yes' if image_path else 'No'}")
             
             return visit_id
@@ -268,6 +351,52 @@ class FaceMatchingService:
         )
         await db_session.execute(stmt)
         await db_session.commit()
+
+    async def _save_customer_face_image(
+        self,
+        db_session: AsyncSession,
+        tenant_id: str,
+        customer_id: int,
+        face_image_bytes: bytes,
+        confidence_score: float,
+        bbox: List[float],
+        embedding: List[float],
+        visit_id: str
+    ):
+        """Save face image to customer gallery"""
+        try:
+            from .customer_face_service import customer_face_service
+            from ..core.database import get_db_session
+            
+            # Use the existing database session - customer face service will handle its own transactions
+            # Extract metadata for quality assessment
+            metadata = {
+                'source': 'worker_detection',
+                'visit_id': visit_id,
+                'bbox': bbox
+            }
+            
+            result = await customer_face_service.add_face_image(
+                db=db_session,
+                tenant_id=tenant_id,
+                customer_id=customer_id,
+                image_data=face_image_bytes,
+                confidence_score=confidence_score,
+                face_bbox=bbox,
+                embedding=embedding,
+                visit_id=visit_id,
+                metadata=metadata
+            )
+            
+            if result:
+                logger.info(f"✅ Saved face image to customer {customer_id} gallery with confidence {confidence_score:.3f}")
+            else:
+                logger.debug(f"⚠️ Face image not saved to customer {customer_id} gallery (quality/duplicate)")
+                
+        except Exception as e:
+            logger.error(f"❌ Error saving face image to customer gallery: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 
 class StaffService:

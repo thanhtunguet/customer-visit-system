@@ -63,6 +63,16 @@ class ImageProcessingService:
                 logger.warning(f"Invalid face dimensions: {w}x{h}")
                 return None
             
+            # Validate bbox is within frame bounds
+            if x < 0 or y < 0 or x + w > frame_width or y + h > frame_height:
+                logger.warning(f"Face bbox extends beyond frame: bbox=[{x}, {y}, {w}, {h}], frame={frame_width}x{frame_height}")
+                # Clamp bbox to frame boundaries
+                x = max(0, min(x, frame_width - 1))
+                y = max(0, min(y, frame_height - 1))
+                w = min(w, frame_width - x)
+                h = min(h, frame_height - y)
+                logger.info(f"Clamped bbox to: [{x}, {y}, {w}, {h}]")
+            
             # Calculate padded region
             padding_x = int(w * padding_factor)
             padding_y = int(h * padding_factor)
@@ -71,6 +81,11 @@ class ImageProcessingService:
             crop_y = max(0, int(y - padding_y))
             crop_w = min(frame_width - crop_x, int(w + 2 * padding_x))
             crop_h = min(frame_height - crop_y, int(h + 2 * padding_y))
+            
+            # Ensure crop dimensions are valid
+            if crop_w <= 0 or crop_h <= 0:
+                logger.warning(f"Calculated crop dimensions invalid: {crop_w}x{crop_h}, using fallback")
+                crop_w = crop_h = min(64, min(frame_width, frame_height) // 2)
             
             # Ensure minimum size
             min_size = 64
