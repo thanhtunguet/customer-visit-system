@@ -24,6 +24,9 @@ import dayjs from 'dayjs';
 
 const { Text } = Typography;
 
+// SVG placeholder for missing images
+const IMAGE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBhdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+
 interface CustomerFaceImage {
   image_id: number;
   image_path: string;
@@ -52,6 +55,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
   
   // Ref to track if user is holding Shift/Ctrl/Cmd
   const isMultiSelectRef = useRef(false);
@@ -83,12 +87,27 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     };
   }, []);
 
+  const loadImageUrl = async (imageId: number, imagePath: string) => {
+    try {
+      const url = await apiClient.getImageUrl(imagePath);
+      setImageUrls(prev => ({ ...prev, [imageId]: url }));
+    } catch (error) {
+      console.error('Failed to load image:', error);
+      setImageUrls(prev => ({ ...prev, [imageId]: IMAGE_PLACEHOLDER }));
+    }
+  };
+
   const loadImages = async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await apiClient.getCustomerFaceImages(customerId);
       setImages(response.images || []);
+      
+      // Load image URLs for each image
+      response.images?.forEach(image => {
+        loadImageUrl(image.image_id, image.image_path);
+      });
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load face images');
     } finally {
@@ -164,10 +183,6 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     }
   };
 
-  const getImageUrl = (imagePath: string) => {
-    return apiClient.getImageUrl(imagePath);
-  };
-
   const renderImage = (image: CustomerFaceImage, index: number) => {
     const isSelected = selectedImages.has(image.image_id);
     
@@ -184,12 +199,12 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
           cover={
             <div className="relative overflow-hidden h-48">
               <img
-                src={getImageUrl(image.image_path)}
+                src={imageUrls[image.image_id] || IMAGE_PLACEHOLDER}
                 alt={`Customer face ${image.image_id}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = '/api/placeholder-face.png';
+                  target.src = IMAGE_PLACEHOLDER;
                 }}
               />
               {isSelected && (
@@ -207,7 +222,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
             </div>
           }
           actions={[
-            <Tooltip title="View Details">
+            <Tooltip title="View Details" key="details">
               <InfoCircleOutlined 
                 onClick={(e) => {
                   e.stopPropagation();
@@ -215,7 +230,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
                 }}
               />
             </Tooltip>,
-            <Tooltip title={`Confidence: ${(image.confidence_score * 100).toFixed(1)}%`}>
+            <Tooltip title={`Confidence: ${(image.confidence_score * 100).toFixed(1)}%`} key="confidence">
               <EyeOutlined />
             </Tooltip>
           ]}
