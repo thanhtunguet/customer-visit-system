@@ -271,8 +271,7 @@ class FaceMatchingService:
             await db_session.commit()
             
             # Save face image to customer gallery if we have high quality image
-            # TODO: Re-enable customer face gallery after fixing transaction issues
-            if False and person_type == "customer" and face_image_bytes and confidence_score >= settings.min_face_confidence_to_save:
+            if person_type == "customer" and face_image_bytes and confidence_score >= 0.7:
                 try:
                     await self._save_customer_face_image(
                         db_session, tenant_id, person_id, face_image_bytes, 
@@ -319,8 +318,7 @@ class FaceMatchingService:
             await db_session.commit()
             
             # Save face image to customer gallery if we have high quality image
-            # TODO: Re-enable customer face gallery after fixing transaction issues  
-            if False and person_type == "customer" and face_image_bytes and confidence_score >= settings.min_face_confidence_to_save:
+            if person_type == "customer" and face_image_bytes and confidence_score >= 0.7:
                 try:
                     await self._save_customer_face_image(
                         db_session, tenant_id, person_id, face_image_bytes, 
