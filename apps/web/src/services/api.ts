@@ -448,6 +448,21 @@ class ApiClient {
     return response.data;
   }
 
+  async deleteVisits(visitIds: string[]): Promise<{
+    message: string;
+    deleted_count: number;
+    deleted_visit_ids: string[];
+  }> {
+    const response = await this.client.delete<{
+      message: string;
+      deleted_count: number;
+      deleted_visit_ids: string[];
+    }>('/visits', {
+      data: { visit_ids: visitIds }
+    });
+    return response.data;
+  }
+
   // Reports
   async getVisitorReport(params?: {
     site_id?: string;

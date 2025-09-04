@@ -12,7 +12,10 @@ import {
   Avatar,
   Empty,
   Spin,
-  Modal
+  Modal,
+  Checkbox,
+  message,
+  Popconfirm
 } from 'antd';
 import { 
   UserOutlined, 
@@ -20,7 +23,8 @@ import {
   ClockCircleOutlined,
   FilterOutlined,
   ReloadOutlined,
-  CloseOutlined
+  CloseOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import type { RangePickerProps } from 'antd/es/date-picker';
 import type { Visit, Site } from '../types/api';
@@ -142,6 +146,8 @@ export const VisitsPage: React.FC = () => {
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Load initial data from API
   const loadInitialData = useCallback(async () => {
@@ -272,6 +278,50 @@ export const VisitsPage: React.FC = () => {
     setSelectedVisit(null);
   };
 
+  const handleSelectVisit = (visitId: string, checked: boolean) => {
+    setSelectedVisitIds(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(visitId);
+      } else {
+        newSet.delete(visitId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedVisitIds(new Set(visits.map(v => v.visit_id)));
+    } else {
+      setSelectedVisitIds(new Set());
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedVisitIds.size === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const visitIdsArray = Array.from(selectedVisitIds);
+      await apiClient.deleteVisits(visitIdsArray);
+      
+      message.success(`Successfully deleted ${visitIdsArray.length} visit(s)`);
+      
+      // Clear selections
+      setSelectedVisitIds(new Set());
+      
+      // Refresh the data to recalculate pagination
+      await loadInitialData();
+      
+    } catch (error) {
+      console.error('Failed to delete visits:', error);
+      message.error('Failed to delete visits. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -319,9 +369,9 @@ export const VisitsPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Stats */}
+      {/* Stats & Selection Controls */}
       <Card className="mb-6">
-        <Row gutter={16}>
+        <Row gutter={16} className="mb-4">
           <Col span={6}>
             <Text strong>Loaded Visits: </Text>
             <Text>{visits.length}</Text>
@@ -344,6 +394,41 @@ export const VisitsPage: React.FC = () => {
             </Text>
           </Col>
         </Row>
+        
+        {visits.length > 0 && (
+          <Row gutter={16} align="middle">
+            <Col>
+              <Checkbox
+                indeterminate={selectedVisitIds.size > 0 && selectedVisitIds.size < visits.length}
+                checked={visits.length > 0 && selectedVisitIds.size === visits.length}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+              >
+                Select All ({selectedVisitIds.size} selected)
+              </Checkbox>
+            </Col>
+            <Col>
+              {selectedVisitIds.size > 0 && (
+                <Popconfirm
+                  title={`Delete ${selectedVisitIds.size} visit(s)?`}
+                  description="This action cannot be undone."
+                  onConfirm={handleDeleteSelected}
+                  okText="Delete"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true, loading: isDeleting }}
+                >
+                  <Button 
+                    danger 
+                    icon={<DeleteOutlined />}
+                    loading={isDeleting}
+                    disabled={isDeleting}
+                  >
+                    Delete Selected ({selectedVisitIds.size})
+                  </Button>
+                </Popconfirm>
+              )}
+            </Col>
+          </Row>
+        )}
       </Card>
 
       {/* Visits Gallery */}
@@ -369,9 +454,24 @@ export const VisitsPage: React.FC = () => {
                 <Card 
                   size="small" 
                   hoverable
-                  className="h-full flex flex-col shadow-sm hover:shadow-md transition-shadow"
-                  onClick={() => handleVisitClick(visit)}
+                  className="h-full flex flex-col shadow-sm hover:shadow-md transition-shadow relative"
+                  onClick={(e) => {
+                    // Don't trigger modal if clicking on checkbox
+                    if (!(e.target as HTMLElement).closest('.visit-checkbox')) {
+                      handleVisitClick(visit);
+                    }
+                  }}
                 >
+                  {/* Selection Checkbox */}
+                  <div 
+                    className="visit-checkbox absolute top-2 left-2 z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={selectedVisitIds.has(visit.visit_id)}
+                      onChange={(e) => handleSelectVisit(visit.visit_id, e.target.checked)}
+                    />
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <Tag color={getPersonTypeColor(visit.person_type)}>
                       {visit.person_type.charAt(0).toUpperCase() + visit.person_type.slice(1)}

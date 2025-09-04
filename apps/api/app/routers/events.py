@@ -2,14 +2,15 @@ from datetime import datetime, timezone
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, and_, case
+from fastapi import APIRouter, Depends, Query, HTTPException, status
+from sqlalchemy import select, func, and_, case, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
 from ..core.security import get_current_user
 from ..models.database import Visit
 from ..schemas import FaceEventResponse, VisitResponse, VisitsPaginatedResponse
+from pydantic import BaseModel
 from ..services.face_service import face_service
 from common.models import FaceDetectedEvent
 
@@ -144,6 +145,65 @@ async def list_visits(
         has_more=has_more,
         next_cursor=next_cursor
     )
+
+
+# ===============================
+# Visit Management
+# ===============================
+
+class DeleteVisitsRequest(BaseModel):
+    visit_ids: List[str]
+
+@router.delete("/visits")
+async def delete_visits(
+    request: DeleteVisitsRequest,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete multiple visits by their visit_ids"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    if not request.visit_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No visit IDs provided"
+        )
+    
+    # Verify all visits exist and belong to the current tenant
+    existing_visits_query = select(Visit.visit_id).where(
+        and_(
+            Visit.tenant_id == user["tenant_id"],
+            Visit.visit_id.in_(request.visit_ids)
+        )
+    )
+    result = await db_session.execute(existing_visits_query)
+    existing_visit_ids = [row[0] for row in result]
+    
+    missing_visits = set(request.visit_ids) - set(existing_visit_ids)
+    if missing_visits:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Visit(s) not found: {', '.join(missing_visits)}"
+        )
+    
+    # Delete the visits
+    delete_query = delete(Visit).where(
+        and_(
+            Visit.tenant_id == user["tenant_id"],
+            Visit.visit_id.in_(request.visit_ids)
+        )
+    )
+    
+    result = await db_session.execute(delete_query)
+    await db_session.commit()
+    
+    deleted_count = result.rowcount
+    
+    return {
+        "message": f"Successfully deleted {deleted_count} visit(s)",
+        "deleted_count": deleted_count,
+        "deleted_visit_ids": request.visit_ids
+    }
 
 
 # ===============================
