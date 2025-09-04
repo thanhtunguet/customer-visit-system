@@ -284,11 +284,32 @@ class EnhancedFaceRecognitionWorker:
         faces_processed = 0
         
         try:
-            # Detect faces
+            # Detect faces with enhanced logging
             detections = self.detector.detect(frame)
+            logger.debug(f"Frame detection: Found {len(detections)} potential faces")
             
             for detection in detections:
-                if detection["confidence"] < self.config.confidence_threshold:
+                # Enhanced quality filtering
+                confidence = detection["confidence"]
+                bbox = detection["bbox"]
+                
+                # Skip low confidence detections
+                if confidence < self.config.confidence_threshold:
+                    logger.debug(f"Skipping low confidence detection: {confidence:.3f}")
+                    continue
+                
+                # Skip very small faces (likely false positives)
+                face_width, face_height = bbox[2], bbox[3]
+                if min(face_width, face_height) < 40:  # Minimum 40px
+                    logger.debug(f"Skipping small face: {face_width}x{face_height}")
+                    continue
+                
+                # Skip faces that are too large (likely false positives)
+                frame_area = frame.shape[0] * frame.shape[1]
+                face_area = face_width * face_height
+                face_ratio = face_area / frame_area
+                if face_ratio > 0.8:  # Face shouldn't be more than 80% of frame
+                    logger.debug(f"Skipping oversized face: {face_ratio:.2%} of frame")
                     continue
                 
                 # Extract face region
@@ -306,8 +327,13 @@ class EnhancedFaceRecognitionWorker:
                 
                 embedding = self.embedder.embed(face_image, landmarks)
                 
-                # Check if staff member
+                # Check if staff member with enhanced logging
                 is_staff_local, staff_id = self._is_staff_match(embedding)
+                
+                if is_staff_local:
+                    logger.info(f"✅ Staff member detected: {staff_id} (confidence: {detection['confidence']:.3f})")
+                else:
+                    logger.info(f"👤 Customer detected (confidence: {detection['confidence']:.3f})")
                 
                 # Get assigned camera ID from worker client
                 assigned_camera_id = self.worker_client.get_assigned_camera()

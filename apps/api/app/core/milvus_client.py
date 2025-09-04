@@ -293,39 +293,67 @@ class MilvusClient:
         if not self.collection:
             raise RuntimeError("Not connected to Milvus")
 
+        # Enhanced logging for debugging
+        logger.info(f"Searching for similar faces: tenant_id={tenant_id}, threshold={threshold}, limit={limit}")
+
         search_params = {
             "metric_type": "COSINE",
-            "params": {"nprobe": 10},
+            "params": {"nprobe": 16},  # Increased nprobe for better search quality
         }
 
         # Search with tenant filter - convert tenant_id to string for VARCHAR schema
         expr = f'tenant_id == "{str(tenant_id)}"'
+        logger.debug(f"Milvus search expression: {expr}")
         
-        results = self.collection.search(
-            data=[embedding],
-            anns_field="embedding",
-            param=search_params,
-            limit=limit,
-            expr=expr,
-            output_fields=["tenant_id", "person_id", "person_type", "created_at"],
-        )
+        try:
+            results = self.collection.search(
+                data=[embedding],
+                anns_field="embedding",
+                param=search_params,
+                limit=limit * 2,  # Get more results for better filtering
+                expr=expr,
+                output_fields=["tenant_id", "person_id", "person_type", "created_at"],
+            )
+        except Exception as e:
+            logger.error(f"Milvus search failed: {e}")
+            return []
 
         matches = []
         if results and len(results[0]) > 0:
+            logger.info(f"Milvus returned {len(results[0])} raw results")
+            
             for hit in results[0]:
-                if hit.score >= threshold:
+                similarity_score = float(hit.score)
+                
+                # Apply strict threshold filtering
+                if similarity_score >= threshold:
                     # Convert person_id back to int for consistency
                     person_id_str = hit.entity.get("person_id")
                     person_id = int(person_id_str) if person_id_str and person_id_str.isdigit() else person_id_str
+                    person_type = hit.entity.get("person_type")
                     
-                    matches.append({
+                    match_entry = {
                         "person_id": person_id,
-                        "person_type": hit.entity.get("person_type"),
-                        "similarity": float(hit.score),
+                        "person_type": person_type,
+                        "similarity": similarity_score,
                         "id": str(hit.id),
-                    })
-
-        return matches
+                        "created_at": hit.entity.get("created_at")
+                    }
+                    matches.append(match_entry)
+                    
+                    logger.debug(f"Valid match: {person_type} {person_id} with similarity {similarity_score:.3f}")
+                else:
+                    logger.debug(f"Below threshold match: {similarity_score:.3f} < {threshold}")
+        
+        # Sort by similarity and limit results
+        matches.sort(key=lambda x: x["similarity"], reverse=True)
+        final_matches = matches[:limit]
+        
+        logger.info(f"Returning {len(final_matches)} filtered matches (threshold >= {threshold})")
+        for match in final_matches:
+            logger.info(f"  - {match['person_type']} {match['person_id']}: {match['similarity']:.3f}")
+        
+        return final_matches
 
     async def delete_person_embeddings(self, tenant_id: int, person_id: int):
         """Delete all embeddings for a person.

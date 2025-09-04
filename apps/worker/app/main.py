@@ -206,8 +206,8 @@ class WorkerConfig:
         self.detector_type = os.getenv("DETECTOR_TYPE", "yunet")  # yunet, mock
         self.embedder_type = os.getenv("EMBEDDER_TYPE", "insightface")  # insightface, mock
         self.worker_fps = int(os.getenv("WORKER_FPS", "5"))
-        self.confidence_threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.7"))
-        self.staff_match_threshold = float(os.getenv("STAFF_MATCH_THRESHOLD", "0.8"))
+        self.confidence_threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))  # Increased from 0.7
+        self.staff_match_threshold = float(os.getenv("STAFF_MATCH_THRESHOLD", "0.85"))  # Increased from 0.8
         self.mock_mode = os.getenv("MOCK_MODE", "true").lower() == "true"
         
         # Camera Configuration
@@ -750,6 +750,7 @@ class FaceRecognitionWorker:
                     timestamp=datetime.now(timezone.utc),
                     embedding=embedding,
                     bbox=bbox,
+                    confidence=detection["confidence"],
                     snapshot_url=None,  # No longer needed - sending image directly
                     is_staff_local=is_staff_local,
                     staff_id=staff_id,

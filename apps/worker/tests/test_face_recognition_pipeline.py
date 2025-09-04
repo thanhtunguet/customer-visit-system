@@ -175,6 +175,7 @@ async def test_api_retry_logic(worker):
         timestamp=datetime.now(timezone.utc),
         embedding=[0.1] * 512,
         bbox=[0, 0, 100, 100],
+        confidence=0.8,
     )
     
     # Mock API failure then success
@@ -209,6 +210,7 @@ async def test_failed_event_queuing(worker):
         timestamp=datetime.now(timezone.utc),
         embedding=[0.1] * 512,
         bbox=[0, 0, 100, 100],
+        confidence=0.8,
     )
     
     # Mock API failure
