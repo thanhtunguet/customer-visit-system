@@ -287,10 +287,20 @@ export const VisitsPage: React.FC = () => {
     if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       
-      if (event.shiftKey && lastSelectedIndex >= 0) {
+      if (event.shiftKey) {
         // Range selection with Shift key
-        const startIndex = Math.min(lastSelectedIndex, visitIndex);
-        const endIndex = Math.max(lastSelectedIndex, visitIndex);
+        let startIndex, endIndex;
+        
+        if (lastSelectedIndex >= 0) {
+          // Range from last selected to current
+          startIndex = Math.min(lastSelectedIndex, visitIndex);
+          endIndex = Math.max(lastSelectedIndex, visitIndex);
+        } else {
+          // No previous selection, select from beginning to current
+          startIndex = 0;
+          endIndex = visitIndex;
+        }
+
         
         setSelectedVisitIds(prev => {
           const newSet = new Set(prev);
@@ -301,6 +311,7 @@ export const VisitsPage: React.FC = () => {
           }
           return newSet;
         });
+        setLastSelectedIndex(visitIndex); // Update to current item
       } else if (event.ctrlKey || event.metaKey) {
         // Multi-selection with Ctrl/Cmd key
         setSelectedVisitIds(prev => {
@@ -346,12 +357,22 @@ export const VisitsPage: React.FC = () => {
     }
 
     const visitIndex = visits.findIndex(v => v.visit_id === visit.visit_id);
+    const isCurrentlySelected = selectedVisitIds.has(visit.visit_id);
+    const isInSelectionMode = selectedVisitIds.size > 0;
     
-    if (event.shiftKey || event.ctrlKey || event.metaKey) {
-      // Handle desktop-style selection
+    if (event.shiftKey) {
+      // Shift+click: Always do range selection
+      event.preventDefault();
       handleSelectVisit(visit.visit_id, true, event);
+    } else if (event.ctrlKey || event.metaKey) {
+      // Ctrl/Cmd+click: Always toggle selection
+      event.preventDefault();
+      handleSelectVisit(visit.visit_id, !isCurrentlySelected, event);
+    } else if (isInSelectionMode) {
+      // In selection mode: Regular click toggles selection
+      handleSelectVisit(visit.visit_id, !isCurrentlySelected);
     } else {
-      // Regular click - open modal
+      // Not in selection mode: Regular click opens modal
       handleVisitClick(visit);
     }
   };
@@ -540,7 +561,9 @@ export const VisitsPage: React.FC = () => {
                 <Card 
                   size="small" 
                   hoverable
-                  className={`h-full flex flex-col shadow-sm hover:shadow-md transition-shadow relative cursor-pointer ${
+                  className={`h-full flex flex-col shadow-sm hover:shadow-md transition-shadow relative ${
+                    selectedVisitIds.size > 0 ? 'cursor-crosshair' : 'cursor-pointer'
+                  } ${
                     selectedVisitIds.has(visit.visit_id) 
                       ? 'ring-2 ring-blue-500 bg-blue-50' 
                       : ''
