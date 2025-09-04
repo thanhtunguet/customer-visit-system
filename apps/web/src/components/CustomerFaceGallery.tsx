@@ -183,6 +183,61 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     }
   };
 
+  const handleViewImage = (image: CustomerFaceImage, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const imageUrl = imageUrls[image.image_id];
+    if (imageUrl && imageUrl !== IMAGE_PLACEHOLDER) {
+      window.open(imageUrl, '_blank');
+    } else {
+      message.warning('Image is still loading, please try again in a moment');
+    }
+  };
+
+  const getImageTooltip = (image: CustomerFaceImage) => (
+    <div className="space-y-2 max-w-xs">
+      <div className="flex justify-between">
+        <Text strong>Image ID:</Text>
+        <Text>#{image.image_id}</Text>
+      </div>
+      <div className="flex justify-between">
+        <Text strong>Confidence:</Text>
+        <Tag color={image.confidence_score > 0.8 ? 'green' : 'orange'}>
+          {(image.confidence_score * 100).toFixed(1)}%
+        </Tag>
+      </div>
+      {image.quality_score && (
+        <div className="flex justify-between">
+          <Text strong>Quality:</Text>
+          <Tag color={image.quality_score > 0.8 ? 'green' : 'orange'}>
+            {(image.quality_score * 100).toFixed(1)}%
+          </Tag>
+        </div>
+      )}
+      <div className="flex justify-between">
+        <Text strong>Captured:</Text>
+        <Text className="text-xs">
+          {dayjs(image.created_at).format('MMM D, YYYY HH:mm')}
+        </Text>
+      </div>
+      {image.visit_id && (
+        <div className="flex justify-between">
+          <Text strong>Visit ID:</Text>
+          <Text className="text-xs font-mono">
+            {image.visit_id.slice(-8)}
+          </Text>
+        </div>
+      )}
+      {image.face_bbox && image.face_bbox.length >= 4 && (
+        <div className="flex justify-between">
+          <Text strong>Face Size:</Text>
+          <Text className="text-xs">
+            {Math.round(image.face_bbox[2])}×{Math.round(image.face_bbox[3])}px
+          </Text>
+        </div>
+      )}
+    </div>
+  );
+
   const renderImage = (image: CustomerFaceImage, index: number) => {
     const isSelected = selectedImages.has(image.image_id);
     
@@ -222,53 +277,23 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
             </div>
           }
           actions={[
-            <Tooltip title="View Details" key="details">
+            <Tooltip title={getImageTooltip(image)} key="details">
               <InfoCircleOutlined 
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Could implement view details modal
                 }}
+                className="text-blue-500 hover:text-blue-600"
               />
             </Tooltip>,
-            <Tooltip title={`Confidence: ${(image.confidence_score * 100).toFixed(1)}%`} key="confidence">
-              <EyeOutlined />
+            <Tooltip title="View image in new tab" key="view">
+              <EyeOutlined 
+                onClick={(e) => handleViewImage(image, e)}
+                className="text-green-500 hover:text-green-600"
+              />
             </Tooltip>
           ]}
         >
-          <Card.Meta
-            description={
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Text strong>Confidence:</Text>
-                  <Tag color={image.confidence_score > 0.8 ? 'green' : 'orange'}>
-                    {(image.confidence_score * 100).toFixed(1)}%
-                  </Tag>
-                </div>
-                {image.quality_score && (
-                  <div className="flex justify-between items-center">
-                    <Text strong>Quality:</Text>
-                    <Tag color={image.quality_score > 0.8 ? 'green' : 'orange'}>
-                      {(image.quality_score * 100).toFixed(1)}%
-                    </Tag>
-                  </div>
-                )}
-                <div className="flex justify-between items-center">
-                  <Text strong>Captured:</Text>
-                  <Text className="text-xs text-gray-500">
-                    {dayjs(image.created_at).format('MMM D, HH:mm')}
-                  </Text>
-                </div>
-                {image.visit_id && (
-                  <div className="flex justify-between items-center">
-                    <Text strong>Visit:</Text>
-                    <Text className="text-xs font-mono">
-                      {image.visit_id.slice(-8)}
-                    </Text>
-                  </div>
-                )}
-              </div>
-            }
-          />
+          {/* Removed Card.Meta to simplify layout - details are now in tooltip */}
         </Card>
       </Col>
     );
