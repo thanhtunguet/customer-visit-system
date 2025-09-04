@@ -148,6 +148,7 @@ export const VisitsPage: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
 
   // Load initial data from API
   const loadInitialData = useCallback(async () => {
@@ -248,6 +249,8 @@ export const VisitsPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+
+
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date();
     const visitTime = new Date(timestamp);
@@ -278,23 +281,78 @@ export const VisitsPage: React.FC = () => {
     setSelectedVisit(null);
   };
 
-  const handleSelectVisit = (visitId: string, checked: boolean) => {
-    setSelectedVisitIds(prev => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(visitId);
-      } else {
-        newSet.delete(visitId);
+  const handleSelectVisit = (visitId: string, checked: boolean, event?: React.MouseEvent) => {
+    const visitIndex = visits.findIndex(v => v.visit_id === visitId);
+    
+    if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      
+      if (event.shiftKey && lastSelectedIndex >= 0) {
+        // Range selection with Shift key
+        const startIndex = Math.min(lastSelectedIndex, visitIndex);
+        const endIndex = Math.max(lastSelectedIndex, visitIndex);
+        
+        setSelectedVisitIds(prev => {
+          const newSet = new Set(prev);
+          for (let i = startIndex; i <= endIndex; i++) {
+            if (i < visits.length) {
+              newSet.add(visits[i].visit_id);
+            }
+          }
+          return newSet;
+        });
+      } else if (event.ctrlKey || event.metaKey) {
+        // Multi-selection with Ctrl/Cmd key
+        setSelectedVisitIds(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(visitId)) {
+            newSet.delete(visitId);
+          } else {
+            newSet.add(visitId);
+          }
+          return newSet;
+        });
+        setLastSelectedIndex(visitIndex);
       }
-      return newSet;
-    });
+    } else {
+      // Regular selection (checkbox or single click)
+      setSelectedVisitIds(prev => {
+        const newSet = new Set(prev);
+        if (checked) {
+          newSet.add(visitId);
+        } else {
+          newSet.delete(visitId);
+        }
+        return newSet;
+      });
+      setLastSelectedIndex(visitIndex);
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedVisitIds(new Set(visits.map(v => v.visit_id)));
+      setLastSelectedIndex(visits.length - 1);
     } else {
       setSelectedVisitIds(new Set());
+      setLastSelectedIndex(-1);
+    }
+  };
+
+  const handleCardClick = (visit: Visit, event: React.MouseEvent) => {
+    // Don't trigger selection if clicking on checkbox
+    if ((event.target as HTMLElement).closest('.visit-checkbox')) {
+      return;
+    }
+
+    const visitIndex = visits.findIndex(v => v.visit_id === visit.visit_id);
+    
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      // Handle desktop-style selection
+      handleSelectVisit(visit.visit_id, true, event);
+    } else {
+      // Regular click - open modal
+      handleVisitClick(visit);
     }
   };
 
@@ -321,6 +379,34 @@ export const VisitsPage: React.FC = () => {
       setIsDeleting(false);
     }
   };
+
+  // Keyboard shortcuts - moved after handleDeleteSelected is defined
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (visits.length === 0) return;
+      
+      // Ctrl/Cmd + A - Select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        handleSelectAll(true);
+      }
+      
+      // Escape - Clear selection
+      if (e.key === 'Escape') {
+        setSelectedVisitIds(new Set());
+        setLastSelectedIndex(-1);
+      }
+      
+      // Delete key - Delete selected items
+      if (e.key === 'Delete' && selectedVisitIds.size > 0) {
+        e.preventDefault();
+        handleDeleteSelected();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visits, selectedVisitIds, handleDeleteSelected]);
 
   return (
     <div className="p-6">
@@ -454,13 +540,12 @@ export const VisitsPage: React.FC = () => {
                 <Card 
                   size="small" 
                   hoverable
-                  className="h-full flex flex-col shadow-sm hover:shadow-md transition-shadow relative"
-                  onClick={(e) => {
-                    // Don't trigger modal if clicking on checkbox
-                    if (!(e.target as HTMLElement).closest('.visit-checkbox')) {
-                      handleVisitClick(visit);
-                    }
-                  }}
+                  className={`h-full flex flex-col shadow-sm hover:shadow-md transition-shadow relative cursor-pointer ${
+                    selectedVisitIds.has(visit.visit_id) 
+                      ? 'ring-2 ring-blue-500 bg-blue-50' 
+                      : ''
+                  }`}
+                  onClick={(e) => handleCardClick(visit, e)}
                 >
                   {/* Selection Checkbox */}
                   <div 
