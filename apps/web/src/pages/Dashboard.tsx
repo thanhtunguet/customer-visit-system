@@ -108,7 +108,7 @@ export const Dashboard: React.FC = () => {
       setError(null);
 
       // Load basic stats
-      const [customers, staff, visits, sites, visitorReport] = await Promise.all([
+      const [customers, staff, visitsResponse, sites, visitorReport] = await Promise.all([
         apiClient.getCustomers({ limit: 1000 }),
         apiClient.getStaff(),
         apiClient.getVisits({ limit: 10 }),
@@ -119,6 +119,9 @@ export const Dashboard: React.FC = () => {
           end_date: dayjs().toISOString()
         }),
       ]);
+
+      // Extract visits array from response
+      const visits = visitsResponse.visits;
 
       // Calculate today's visits
       const today = dayjs().startOf('day');

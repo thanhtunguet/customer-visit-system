@@ -418,10 +418,18 @@ export const VisitsPage: React.FC = () => {
         setLastSelectedIndex(-1);
       }
       
-      // Delete key - Delete selected items
+      // Delete key - Delete selected items with confirmation
       if (e.key === 'Delete' && selectedVisitIds.size > 0) {
         e.preventDefault();
-        handleDeleteSelected();
+        
+        Modal.confirm({
+          title: `Delete ${selectedVisitIds.size} visit(s)?`,
+          content: 'This action cannot be undone.',
+          okText: 'Delete',
+          cancelText: 'Cancel',
+          okButtonProps: { danger: true },
+          onOk: handleDeleteSelected,
+        });
       }
     };
 
