@@ -464,7 +464,7 @@ export const VisitsPage: React.FC = () => {
                 >
                   {/* Selection Checkbox */}
                   <div 
-                    className="visit-checkbox absolute top-2 left-2 z-10"
+                    className="visit-checkbox absolute top-2 right-2 z-10"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Checkbox
@@ -472,7 +472,7 @@ export const VisitsPage: React.FC = () => {
                       onChange={(e) => handleSelectVisit(visit.visit_id, e.target.checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 pr-8">
                     <Tag color={getPersonTypeColor(visit.person_type)}>
                       {visit.person_type.charAt(0).toUpperCase() + visit.person_type.slice(1)}
                     </Tag>
