@@ -29,6 +29,7 @@ import {
 import type { RangePickerProps } from 'antd/es/date-picker';
 import type { Visit, Site } from '../types/api';
 import { apiClient } from '../services/api';
+import { CustomerFaceGallery } from '../components/CustomerFaceGallery';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -149,17 +150,7 @@ export const VisitsPage: React.FC = () => {
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
-  const [customerFaceImages, setCustomerFaceImages] = useState<Array<{
-    image_id: string;
-    image_path: string;
-    confidence_score: number;
-    quality_score: number;
-    created_at: string;
-    visit_id?: string;
-    face_bbox?: number[];
-    detection_metadata?: Record<string, any>;
-  }>>([]);
-  const [loadingFaceImages, setLoadingFaceImages] = useState<boolean>(false);
+
 
   // Load initial data from API
   const loadInitialData = useCallback(async () => {
@@ -285,29 +276,11 @@ export const VisitsPage: React.FC = () => {
   const handleVisitClick = async (visit: Visit) => {
     setSelectedVisit(visit);
     setIsModalVisible(true);
-    
-    // Fetch customer face images if this is a customer visit
-    if (visit.person_type === 'customer' && visit.person_id) {
-      setLoadingFaceImages(true);
-      try {
-        const faceImagesResponse = await apiClient.getCustomerFaceImages(visit.person_id);
-        setCustomerFaceImages(faceImagesResponse.images);
-      } catch (error) {
-        console.error('Failed to load customer face images:', error);
-        setCustomerFaceImages([]);
-      } finally {
-        setLoadingFaceImages(false);
-      }
-    } else {
-      setCustomerFaceImages([]);
-    }
   };
 
   const handleCloseModal = () => {
     setIsModalVisible(false);
     setSelectedVisit(null);
-    setCustomerFaceImages([]);
-    setLoadingFaceImages(false);
   };
 
   const handleSelectVisit = (visitId: string, checked: boolean, event?: React.MouseEvent) => {
@@ -824,77 +797,13 @@ export const VisitsPage: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
-            
-            {/* Customer Face Gallery */}
-            {selectedVisit.person_type === 'customer' && (
+            </div>            {/* Customer Face Gallery */}
+            {selectedVisit.person_type === 'customer' && selectedVisit.person_id && (
               <div className="w-full mt-6">
-                <div className="mb-3">
-                  <Text strong className="text-lg">All Captured Images</Text>
-                  <Text type="secondary" className="block">
-                    {loadingFaceImages ? 'Loading...' : `${customerFaceImages.length} image(s) found`}
-                  </Text>
-                </div>
-                
-                {loadingFaceImages ? (
-                  <div className="flex justify-center py-8">
-                    <Spin size="large" />
-                  </div>
-                ) : customerFaceImages.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-3 max-h-64 overflow-y-auto">
-                    {customerFaceImages.map((image, index) => (
-                      <div key={image.image_id} className="flex flex-col items-center">
-                        <img
-                          src={image.image_path}
-                          alt={`Captured face ${index + 1}`}
-                          className="w-16 h-16 rounded-lg object-cover border border-gray-200 hover:border-blue-400 cursor-pointer transition-colors"
-                          onError={(e) => {
-                            // Fallback to avatar if image fails to load
-                            const target = e.target as HTMLImageElement;
-                            target.onerror = null;
-                            target.style.display = 'none';
-                            target.nextElementSibling?.removeAttribute('style');
-                          }}
-                          onClick={() => {
-                            // Create a larger preview modal
-                            Modal.info({
-                              title: `Captured Image ${index + 1}`,
-                              content: (
-                                <div className="text-center">
-                                  <img
-                                    src={image.image_path}
-                                    alt={`Captured face ${index + 1}`}
-                                    className="w-full max-w-sm mx-auto rounded-lg"
-                                  />
-                                  <div className="mt-4 text-left">
-                                    <p><strong>Confidence:</strong> {(image.confidence_score * 100).toFixed(1)}%</p>
-                                    <p><strong>Quality:</strong> {(image.quality_score * 100).toFixed(1)}%</p>
-                                    <p><strong>Captured:</strong> {new Date(image.created_at).toLocaleString()}</p>
-                                    {image.visit_id && <p><strong>Visit ID:</strong> {image.visit_id}</p>}
-                                  </div>
-                                </div>
-                              ),
-                              width: 400,
-                              okText: 'Close'
-                            });
-                          }}
-                        />
-                        <Avatar
-                          size={64}
-                          icon={<UserOutlined />}
-                          style={{ display: 'none' }}
-                        />
-                        <Text type="secondary" className="text-xs mt-1">
-                          {(image.confidence_score * 100).toFixed(0)}%
-                        </Text>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Text type="secondary">No additional face images found for this customer</Text>
-                  </div>
-                )}
+                <CustomerFaceGallery
+                  customerId={selectedVisit.person_id}
+                  customerName={`Customer #${selectedVisit.person_id}`}
+                />
               </div>
             )}
           </div>
