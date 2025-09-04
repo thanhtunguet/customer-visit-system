@@ -481,13 +481,15 @@ class ApiClient {
     message: string;
     deleted_count: number;
     deleted_visit_ids: string[];
+    images_cleaned?: number;
   }> {
-    const response = await this.client.delete<{
+    const response = await this.client.post<{
       message: string;
       deleted_count: number;
       deleted_visit_ids: string[];
-    }>('/visits', {
-      data: { visit_ids: visitIds }
+      images_cleaned?: number;
+    }>('/visits/delete', {
+      visit_ids: visitIds
     });
     return response.data;
   }

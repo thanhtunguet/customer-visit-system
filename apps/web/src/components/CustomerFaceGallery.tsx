@@ -194,45 +194,49 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   };
 
   const getImageTooltip = (image: CustomerFaceImage) => (
-    <div className="space-y-2 max-w-xs">
-      <div className="flex justify-between">
-        <Text strong>Image ID:</Text>
-        <Text>#{image.image_id}</Text>
+    <div className="space-y-2 max-w-xs text-white">
+      <div className="flex justify-between items-center">
+        <span className="font-medium text-gray-200">Image ID:</span>
+        <span className="text-white">#{image.image_id}</span>
       </div>
-      <div className="flex justify-between">
-        <Text strong>Confidence:</Text>
-        <Tag color={image.confidence_score > 0.8 ? 'green' : 'orange'}>
+      <div className="flex justify-between items-center">
+        <span className="font-medium text-gray-200">Confidence:</span>
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+          image.confidence_score > 0.8 ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'
+        }`}>
           {(image.confidence_score * 100).toFixed(1)}%
-        </Tag>
+        </span>
       </div>
       {image.quality_score && (
-        <div className="flex justify-between">
-          <Text strong>Quality:</Text>
-          <Tag color={image.quality_score > 0.8 ? 'green' : 'orange'}>
+        <div className="flex justify-between items-center">
+          <span className="font-medium text-gray-200">Quality:</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+            image.quality_score > 0.8 ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'
+          }`}>
             {(image.quality_score * 100).toFixed(1)}%
-          </Tag>
+          </span>
         </div>
       )}
-      <div className="flex justify-between">
-        <Text strong>Captured:</Text>
-        <Text className="text-xs">
+      <div className="flex justify-between items-center">
+        <span className="font-medium text-gray-200">Captured:</span>
+        <span className="text-xs text-gray-300">
           {dayjs(image.created_at).format('MMM D, YYYY HH:mm')}
-        </Text>
+        </span>
       </div>
       {image.visit_id && (
-        <div className="flex justify-between">
-          <Text strong>Visit ID:</Text>
-          <Text className="text-xs font-mono">
+        <div className="flex justify-between items-center">
+          <span className="font-medium text-gray-200">Visit ID:</span>
+          <span className="text-xs font-mono text-gray-300">
             {image.visit_id.slice(-8)}
-          </Text>
+          </span>
         </div>
       )}
       {image.face_bbox && image.face_bbox.length >= 4 && (
-        <div className="flex justify-between">
-          <Text strong>Face Size:</Text>
-          <Text className="text-xs">
+        <div className="flex justify-between items-center">
+          <span className="font-medium text-gray-200">Face Size:</span>
+          <span className="text-xs text-gray-300">
             {Math.round(image.face_bbox[2])}×{Math.round(image.face_bbox[3])}px
-          </Text>
+          </span>
         </div>
       )}
     </div>
