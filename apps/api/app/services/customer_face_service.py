@@ -213,7 +213,8 @@ class CustomerFaceService:
     async def _manage_gallery_size(self, db: AsyncSession, tenant_id: str, customer_id: int) -> None:
         """Manage the size of customer face gallery, keeping only the best images"""
         try:
-            # Count current images
+            # Count current committed images (excluding any pending in current transaction)
+            # Use a separate query to get the actual committed count
             result = await db.execute(
                 select(func.count(CustomerFaceImage.image_id)).where(
                     CustomerFaceImage.tenant_id == tenant_id,
@@ -222,20 +223,28 @@ class CustomerFaceService:
             )
             current_count = result.scalar()
             
-            if current_count <= self.max_images_per_customer:
+            # The current count includes the newly added image in the session
+            # We want to keep max_images_per_customer, so if current_count >= max_images_per_customer,
+            # we need to remove (current_count - max_images_per_customer + 1) images
+            if current_count < self.max_images_per_customer:
                 return
             
-            # Calculate excess images to remove
-            excess_count = current_count - self.max_images_per_customer
+            # Calculate excess images to remove  
+            # Since current_count includes the new image, we need to remove enough to get back to the limit
+            excess_count = current_count - self.max_images_per_customer + 1
             
-            # Get worst images (lowest combined score)
-            # Score combines confidence and quality, with recency bonus
+            logger.info(f"Managing gallery size for customer {customer_id}: current={current_count}, max={self.max_images_per_customer}, removing={excess_count}")
+            
+            # Get worst images (lowest combined score) excluding the newly added one that's not committed yet
+            # We need to get committed images only, so we'll flush first to see the new image, then select the worst
+            await db.flush()  # Make sure the new image is visible in queries
+            
             result = await db.execute(
                 select(CustomerFaceImage).where(
                     CustomerFaceImage.tenant_id == tenant_id,
                     CustomerFaceImage.customer_id == customer_id
                 ).order_by(
-                    # Combined score: confidence + quality + recency bonus
+                    # Combined score: confidence + quality + recency bonus (lower is worse)
                     asc(
                         CustomerFaceImage.confidence_score + 
                         func.coalesce(CustomerFaceImage.quality_score, 0.5) +
@@ -248,12 +257,107 @@ class CustomerFaceService:
             # Remove worst images
             for image in worst_images:
                 await self._delete_face_image_content_only(image)
-                db.delete(image)
+                await db.delete(image)
             
             logger.info(f"Removed {len(worst_images)} excess face images for customer {customer_id}")
             
         except Exception as e:
             logger.error(f"Error managing gallery size for customer {customer_id}: {e}")
+
+    async def cleanup_excess_images_for_customer(self, db: AsyncSession, tenant_id: str, customer_id: int) -> int:
+        """Clean up excess images for a specific customer, returning count of images removed"""
+        try:
+            # Get current count
+            result = await db.execute(
+                select(func.count(CustomerFaceImage.image_id)).where(
+                    CustomerFaceImage.tenant_id == tenant_id,
+                    CustomerFaceImage.customer_id == customer_id
+                )
+            )
+            current_count = result.scalar()
+            
+            if current_count <= self.max_images_per_customer:
+                return 0
+                
+            # Calculate how many to remove
+            excess_count = current_count - self.max_images_per_customer
+            
+            # Get worst images to remove
+            result = await db.execute(
+                select(CustomerFaceImage).where(
+                    CustomerFaceImage.tenant_id == tenant_id,
+                    CustomerFaceImage.customer_id == customer_id
+                ).order_by(
+                    asc(
+                        CustomerFaceImage.confidence_score + 
+                        func.coalesce(CustomerFaceImage.quality_score, 0.5) +
+                        func.extract('epoch', func.now() - CustomerFaceImage.created_at) / 86400 * 0.01
+                    )
+                ).limit(excess_count)
+            )
+            worst_images = result.scalars().all()
+            
+            # Remove excess images
+            for image in worst_images:
+                await self._delete_face_image_content_only(image)
+                await db.delete(image)
+            
+            # Commit the deletions
+            await db.commit()
+            
+            logger.info(f"Cleaned up {len(worst_images)} excess images for customer {customer_id} (had {current_count}, limit {self.max_images_per_customer})")
+            return len(worst_images)
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up excess images for customer {customer_id}: {e}")
+            await db.rollback()
+            return 0
+
+    async def cleanup_all_excess_images(self, db: AsyncSession, tenant_id: str, limit: int = 100) -> dict:
+        """Clean up excess images for all customers in a tenant"""
+        try:
+            # Get customers with too many face images
+            result = await db.execute(
+                select(
+                    CustomerFaceImage.customer_id,
+                    func.count(CustomerFaceImage.image_id).label('image_count')
+                ).where(
+                    CustomerFaceImage.tenant_id == tenant_id
+                ).group_by(
+                    CustomerFaceImage.customer_id
+                ).having(
+                    func.count(CustomerFaceImage.image_id) > self.max_images_per_customer
+                ).limit(limit)
+            )
+            
+            customers_with_excess = result.all()
+            
+            total_cleaned = 0
+            customers_processed = 0
+            
+            for customer_row in customers_with_excess:
+                customer_id = customer_row.customer_id
+                current_count = customer_row.image_count
+                
+                cleaned = await self.cleanup_excess_images_for_customer(db, tenant_id, customer_id)
+                total_cleaned += cleaned
+                customers_processed += 1
+                
+                logger.info(f"Customer {customer_id}: removed {cleaned} excess images (had {current_count})")
+            
+            return {
+                "customers_processed": customers_processed,
+                "total_images_cleaned": total_cleaned,
+                "max_images_per_customer": self.max_images_per_customer
+            }
+            
+        except Exception as e:
+            logger.error(f"Error during bulk cleanup for tenant {tenant_id}: {e}")
+            return {
+                "customers_processed": 0,
+                "total_images_cleaned": 0,
+                "error": str(e)
+            }
     
     async def _delete_face_image_content_only(self, face_image: CustomerFaceImage) -> None:
         """Delete face image content from MinIO only (not database record)"""

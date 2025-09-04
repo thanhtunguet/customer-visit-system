@@ -184,7 +184,7 @@ async def list_visits(
 class DeleteVisitsRequest(BaseModel):
     visit_ids: List[str]
 
-@router.delete("/visits")
+@router.post("/visits/delete")
 async def delete_visits(
     request: DeleteVisitsRequest,
     user: dict = Depends(get_current_user),

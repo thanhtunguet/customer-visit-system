@@ -213,6 +213,66 @@ async def get_customer_face_images(
         logger.error(f"Error getting customer face images: {e}")
         raise HTTPException(status_code=500, detail="Failed to get customer face images")
 
+@router.post("/customers/{customer_id:int}/face-images/cleanup")
+async def cleanup_customer_face_images(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Clean up excess face images for a specific customer"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    # Verify customer exists
+    customer = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    if not customer.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    try:
+        from ..services.customer_face_service import customer_face_service
+        
+        cleaned_count = await customer_face_service.cleanup_excess_images_for_customer(
+            db_session, user["tenant_id"], customer_id
+        )
+        
+        return {
+            "customer_id": customer_id,
+            "images_cleaned": cleaned_count,
+            "message": f"Cleaned up {cleaned_count} excess face image(s) for customer {customer_id}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup customer face images: {str(e)}")
+
+
+@router.post("/customers/face-images/cleanup-all")
+async def cleanup_all_customer_face_images(
+    limit: int = Query(100, description="Maximum number of customers to process"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Clean up excess face images for all customers in the tenant"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..services.customer_face_service import customer_face_service
+        
+        result = await customer_face_service.cleanup_all_excess_images(
+            db_session, user["tenant_id"], limit
+        )
+        
+        return {
+            "tenant_id": user["tenant_id"],
+            **result,
+            "message": f"Processed {result['customers_processed']} customers, cleaned {result['total_images_cleaned']} excess images"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup customer face images: {str(e)}")
+
 
 @router.delete("/customers/{customer_id:int}/face-images/{image_id:int}")
 async def delete_customer_face_image(
