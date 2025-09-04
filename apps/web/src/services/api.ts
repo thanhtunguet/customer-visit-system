@@ -741,6 +741,12 @@ class ApiClient {
   // Authenticated image loading
   async getImageUrl(imagePath: string): Promise<string> {
     try {
+      // Check if imagePath is already a complete presigned URL
+      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        // It's a presigned URL, use it directly
+        return imagePath;
+      }
+      
       // If imagePath already starts with /v1/files/, use it directly
       const url = imagePath.startsWith('/v1/files/') ? imagePath : `/v1/files/${imagePath}`;
       
