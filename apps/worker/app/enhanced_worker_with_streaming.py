@@ -327,6 +327,9 @@ class EnhancedFaceRecognitionWorker:
                 
                 embedding = self.embedder.embed(face_image, landmarks)
                 
+                # DEBUG: Log face processing details
+                await self._debug_face_processing(detection, embedding, bbox)
+                
                 # Check if staff member with enhanced logging
                 is_staff_local, staff_id = self._is_staff_match(embedding)
                 
@@ -372,6 +375,16 @@ class EnhancedFaceRecognitionWorker:
             await self.worker_client.report_error(f"Frame processing error: {str(e)}")
         
         return faces_processed
+
+    async def _debug_face_processing(self, detection, embedding, bbox):
+        """Debug helper for face processing"""
+        logger.info(f"🔍 WORKER DEBUG:")
+        logger.info(f"  - Detection confidence: {detection['confidence']:.3f}")
+        logger.info(f"  - Face bbox: {bbox}")
+        logger.info(f"  - Embedding dimensions: {len(embedding)}")
+        logger.info(f"  - Embedding norm: {np.linalg.norm(embedding):.3f}")
+        logger.info(f"  - First 5 embedding values: {embedding[:5]}")
+        return True
 
     async def _process_failed_events_queue(self):
         """Process failed events from the queue with periodic retry"""

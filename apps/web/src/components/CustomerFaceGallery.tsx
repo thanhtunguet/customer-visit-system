@@ -101,6 +101,10 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     try {
       setLoading(true);
       setError(null);
+      
+      // Clear cached image URLs to force refresh
+      setImageUrls({});
+      
       const response = await apiClient.getCustomerFaceImages(customerId);
       setImages(response.images || []);
       
@@ -155,12 +159,25 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
       setDeleting(true);
       const imageIds = Array.from(selectedImages);
       
-      await apiClient.deleteCustomerFaceImagesBatch(customerId, imageIds);
+      const response = await apiClient.deleteCustomerFaceImagesBatch(customerId, imageIds);
       
-      message.success(`Successfully deleted ${imageIds.length} face image${imageIds.length > 1 ? 's' : ''}`);
+      // Log response for debugging
+      console.log('Delete response:', response);
       
+      message.success(`Successfully deleted ${response.deleted_count} face image${response.deleted_count > 1 ? 's' : ''}`);
+      
+      // Clear selection and cached URLs
       setSelectedImages(new Set());
       setLastSelectedIndex(null);
+      
+      // Clear cached image URLs for deleted images
+      setImageUrls(prev => {
+        const updated = { ...prev };
+        imageIds.forEach(id => delete updated[id]);
+        return updated;
+      });
+      
+      // Force reload images
       await loadImages();
       
       if (onImagesChange) {

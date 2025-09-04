@@ -316,18 +316,29 @@ async def delete_customer_face_image(
         logger.error(f"Error deleting customer face image: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete face image")
 
-@router.delete("/customers/{customer_id:int}/face-images")
+@router.post("/customers/{customer_id:int}/face-images/batch-delete")
 async def delete_customer_face_images_batch(
     customer_id: int,
-    image_ids: List[int] = Query(..., description="List of image IDs to delete"),
+    request: dict,  # Accept JSON body instead of query params
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
     """Delete multiple face images for a customer"""
     await db.set_tenant_context(db_session, user["tenant_id"])
     
+    # Extract image_ids from JSON body
+    image_ids = request.get("image_ids", [])
+    
     if not image_ids:
         raise HTTPException(status_code=400, detail="No image IDs provided")
+    
+    # Validate that all IDs are integers
+    try:
+        image_ids = [int(id) for id in image_ids]
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="All image IDs must be valid integers")
+    
+    logger.info(f"Batch deleting face images: customer_id={customer_id}, image_ids={image_ids}")
     
     try:
         from ..models.database import CustomerFaceImage
@@ -344,32 +355,59 @@ async def delete_customer_face_images_batch(
         )
         
         face_images = result.scalars().all()
+        found_ids = [img.image_id for img in face_images]
+        logger.info(f"Found {len(face_images)} images to delete: {found_ids}")
+        
         if not face_images:
+            logger.warning(f"No face images found for deletion: requested={image_ids}")
             raise HTTPException(status_code=404, detail="No face images found")
         
-        # Delete each image
+        # Delete each image with individual transaction handling
         from ..services.customer_face_service import customer_face_service
         deleted_count = 0
+        failed_deletions = []
         
         for face_image in face_images:
             try:
-                await customer_face_service._delete_face_image(db_session, face_image)
+                logger.info(f"Deleting face image {face_image.image_id}")
+                
+                # Delete content from MinIO first
+                await customer_face_service._delete_face_image_content_only(face_image)
+                
+                # Delete from database
+                await db_session.delete(face_image)
                 deleted_count += 1
+                logger.info(f"✅ Successfully marked image {face_image.image_id} for deletion")
+                
             except Exception as e:
-                logger.warning(f"Failed to delete face image {face_image.image_id}: {e}")
+                logger.error(f"❌ Failed to delete face image {face_image.image_id}: {e}")
+                failed_deletions.append((face_image.image_id, str(e)))
         
-        await db_session.commit()
+        # Commit all deletions at once
+        if deleted_count > 0:
+            await db_session.commit()
+            logger.info(f"✅ Committed deletion of {deleted_count} face images")
+        else:
+            logger.warning("No images were successfully deleted")
+        
+        # Report results
+        if failed_deletions:
+            logger.warning(f"Failed to delete {len(failed_deletions)} images: {failed_deletions}")
         
         return {
-            "message": f"Successfully deleted {deleted_count} face images",
+            "message": f"Successfully deleted {deleted_count} face images" + 
+                      (f" ({len(failed_deletions)} failed)" if failed_deletions else ""),
             "deleted_count": deleted_count,
-            "requested_count": len(image_ids)
+            "requested_count": len(image_ids),
+            "failed_deletions": [{"image_id": img_id, "error": error} for img_id, error in failed_deletions] if failed_deletions else []
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting customer face images: {e}")
+        logger.error(f"❌ Critical error during batch deletion: {e}")
+        # Ensure rollback on error
+        await db_session.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete face images")
 
 

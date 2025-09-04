@@ -21,12 +21,15 @@ logger = logging.getLogger(__name__)
 
 class FaceMatchingService:
     def __init__(self):
-        # Increased thresholds for better accuracy
-        self.similarity_threshold = 0.75  # Increased from 0.6 to 0.75 for better accuracy
-        self.staff_similarity_threshold = 0.8  # Higher threshold for staff matching
-        self.max_search_results = 10  # Increased to get more candidates for filtering
-        self.min_confidence_score = 0.7  # Minimum confidence for face storage
-        self.customer_merge_threshold = 0.85  # Very high threshold for customer merging
+        # DEBUG: Temporarily lower thresholds for troubleshooting
+        self.similarity_threshold = 0.6  # Back to original for debugging
+        self.staff_similarity_threshold = 0.75  # Slightly lower for staff
+        self.max_search_results = 10  # Keep increased for better filtering
+        self.min_confidence_score = 0.6  # Lower to accept more faces
+        self.customer_merge_threshold = 0.75  # Lower for customer matching (was 0.85)
+        
+        # Debug mode - extra logging
+        self.debug_mode = True  # Very high threshold for customer merging
 
     async def process_face_event(
         self, 
@@ -37,7 +40,8 @@ class FaceMatchingService:
         """Process a face detection event and return matching results"""
         
         # Enhanced logging for debugging
-        logger.info(f"Processing face event: confidence={event.confidence:.3f}, bbox={event.bbox}")
+        logger.info(f"🔍 Processing face event: confidence={event.confidence:.3f}, bbox={event.bbox}")
+        logger.info(f"🔍 Thresholds: similarity={self.similarity_threshold}, customer_merge={self.customer_merge_threshold}, min_confidence={self.min_confidence_score}")
         
         # Skip if it's already identified as staff locally
         if event.is_staff_local:
@@ -62,12 +66,16 @@ class FaceMatchingService:
             }
 
         # Search for similar faces in Milvus with enhanced filtering
+        logger.info(f"🔍 Searching Milvus for similar faces with threshold {self.similarity_threshold}")
         similar_faces = await milvus_client.search_similar_faces(
             tenant_id=tenant_id,
             embedding=event.embedding,
             limit=self.max_search_results,
             threshold=self.similarity_threshold,
         )
+        logger.info(f"🔍 Milvus returned {len(similar_faces)} similar faces")
+        for i, face in enumerate(similar_faces):
+            logger.info(f"🔍   - Match {i+1}: Person {face['person_id']} (similarity: {face['similarity']:.3f})")
 
         person_id = None
         person_type = "customer"
@@ -90,8 +98,11 @@ class FaceMatchingService:
                 quality_filtered_matches.sort(key=lambda x: x["similarity"], reverse=True)
                 best_match = quality_filtered_matches[0]
                 
+                logger.info(f"🔍 Best match found: {best_match['person_type']} {best_match['person_id']} with similarity {best_match['similarity']:.3f}")
+                
                 # For customer matching, use higher threshold to prevent false positives
                 required_threshold = self.customer_merge_threshold if best_match["person_type"] == "customer" else self.staff_similarity_threshold
+                logger.info(f"🔍 Required threshold for {best_match['person_type']}: {required_threshold}")
                 
                 if best_match["similarity"] >= required_threshold:
                     person_id = best_match["person_id"]
@@ -105,9 +116,10 @@ class FaceMatchingService:
 
         if not person_id:
             # Create new customer only if no high-confidence match
+            logger.info(f"🆕 No high-confidence match found, creating new customer")
             person_id = await self._create_new_customer(db_session, tenant_id)
             person_type = "customer"
-            logger.info(f"Created new customer: {person_id}")
+            logger.info(f"🆕 Created new customer: {person_id}")
 
         # Store the embedding in Milvus (with quality check)
         if event.confidence >= self.min_confidence_score:

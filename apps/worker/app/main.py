@@ -206,9 +206,9 @@ class WorkerConfig:
         self.detector_type = os.getenv("DETECTOR_TYPE", "yunet")  # yunet, mock
         self.embedder_type = os.getenv("EMBEDDER_TYPE", "insightface")  # insightface, mock
         self.worker_fps = int(os.getenv("WORKER_FPS", "5"))
-        self.confidence_threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))  # Increased from 0.7
-        self.staff_match_threshold = float(os.getenv("STAFF_MATCH_THRESHOLD", "0.85"))  # Increased from 0.8
-        self.mock_mode = os.getenv("MOCK_MODE", "true").lower() == "true"
+        self.confidence_threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))  # DEBUG: Lowered for testing
+        self.staff_match_threshold = float(os.getenv("STAFF_MATCH_THRESHOLD", "0.75"))  # DEBUG: Lowered for testing
+        self.mock_mode = os.getenv("MOCK_MODE", "false").lower() == "true"  # DEBUG: Disable mock mode
         
         # Camera Configuration
         self.rtsp_url = os.getenv("RTSP_URL", "")

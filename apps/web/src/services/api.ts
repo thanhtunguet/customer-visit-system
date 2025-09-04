@@ -450,8 +450,8 @@ class ApiClient {
     deleted_count: number;
     requested_count: number;
   }> {
-    const response = await this.client.delete(`/customers/${customerId}/face-images`, {
-      params: { image_ids: imageIds }
+    const response = await this.client.post(`/customers/${customerId}/face-images/batch-delete`, {
+      image_ids: imageIds
     });
     return response.data;
   }
