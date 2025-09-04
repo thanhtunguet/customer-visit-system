@@ -1,0 +1,368 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Card,
+  Row,
+  Col,
+  Button,
+  Popconfirm,
+  message,
+  Spin,
+  Alert,
+  Typography,
+  Space,
+  Tag,
+  Tooltip
+} from 'antd';
+import {
+  DeleteOutlined,
+  PictureOutlined,
+  EyeOutlined,
+  InfoCircleOutlined
+} from '@ant-design/icons';
+import { apiClient } from '../services/api';
+import dayjs from 'dayjs';
+
+const { Text } = Typography;
+
+interface CustomerFaceImage {
+  image_id: number;
+  image_path: string;
+  confidence_score: number;
+  quality_score: number;
+  created_at: string;
+  visit_id?: string;
+  face_bbox: number[];
+  detection_metadata?: Record<string, any>;
+}
+
+interface CustomerFaceGalleryProps {
+  customerId: number;
+  customerName?: string;
+  onImagesChange?: () => void;
+}
+
+export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
+  customerId,
+  customerName,
+  onImagesChange
+}) => {
+  const [images, setImages] = useState<CustomerFaceImage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  
+  // Ref to track if user is holding Shift/Ctrl/Cmd
+  const isMultiSelectRef = useRef(false);
+
+  useEffect(() => {
+    loadImages();
+  }, [customerId]);
+
+  useEffect(() => {
+    // Listen for keyboard events for multi-select
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta') {
+        isMultiSelectRef.current = true;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta') {
+        isMultiSelectRef.current = false;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  const loadImages = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiClient.getCustomerFaceImages(customerId);
+      setImages(response.images || []);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load face images');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImageClick = useCallback((imageId: number, index: number, event: React.MouseEvent) => {
+    const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+    const isShift = event.shiftKey;
+
+    if (isShift && lastSelectedIndex !== null) {
+      // Shift+click: select range
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const newSelected = new Set(selectedImages);
+      
+      for (let i = start; i <= end; i++) {
+        if (images[i]) {
+          newSelected.add(images[i].image_id);
+        }
+      }
+      setSelectedImages(newSelected);
+    } else if (isCtrlOrCmd) {
+      // Ctrl/Cmd+click: toggle individual selection
+      const newSelected = new Set(selectedImages);
+      if (newSelected.has(imageId)) {
+        newSelected.delete(imageId);
+      } else {
+        newSelected.add(imageId);
+      }
+      setSelectedImages(newSelected);
+      setLastSelectedIndex(index);
+    } else {
+      // Normal click: select only this image
+      setSelectedImages(new Set([imageId]));
+      setLastSelectedIndex(index);
+    }
+  }, [selectedImages, lastSelectedIndex, images]);
+
+  const handleDeleteSelected = async () => {
+    if (selectedImages.size === 0) return;
+
+    try {
+      setDeleting(true);
+      const imageIds = Array.from(selectedImages);
+      
+      await apiClient.deleteCustomerFaceImagesBatch(customerId, imageIds);
+      
+      message.success(`Successfully deleted ${imageIds.length} face image${imageIds.length > 1 ? 's' : ''}`);
+      
+      setSelectedImages(new Set());
+      setLastSelectedIndex(null);
+      await loadImages();
+      
+      if (onImagesChange) {
+        onImagesChange();
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || 'Failed to delete images');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedImages.size === images.length) {
+      // Deselect all
+      setSelectedImages(new Set());
+    } else {
+      // Select all
+      setSelectedImages(new Set(images.map(img => img.image_id)));
+    }
+  };
+
+  const getImageUrl = (imagePath: string) => {
+    return apiClient.getImageUrl(imagePath);
+  };
+
+  const renderImage = (image: CustomerFaceImage, index: number) => {
+    const isSelected = selectedImages.has(image.image_id);
+    
+    return (
+      <Col xs={24} sm={12} md={8} lg={6} key={image.image_id}>
+        <Card
+          hoverable
+          className={`transition-all cursor-pointer ${
+            isSelected 
+              ? 'ring-2 ring-blue-500 ring-offset-2 bg-blue-50' 
+              : 'hover:shadow-lg'
+          }`}
+          onClick={(e) => handleImageClick(image.image_id, index, e)}
+          cover={
+            <div className="relative overflow-hidden h-48">
+              <img
+                src={getImageUrl(image.image_path)}
+                alt={`Customer face ${image.image_id}`}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = '/api/placeholder-face.png';
+                }}
+              />
+              {isSelected && (
+                <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center">
+                  <div className="bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center">
+                    ✓
+                  </div>
+                </div>
+              )}
+              <div className="absolute top-2 right-2">
+                <Tag color="blue" size="small">
+                  #{image.image_id}
+                </Tag>
+              </div>
+            </div>
+          }
+          actions={[
+            <Tooltip title="View Details">
+              <InfoCircleOutlined 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Could implement view details modal
+                }}
+              />
+            </Tooltip>,
+            <Tooltip title={`Confidence: ${(image.confidence_score * 100).toFixed(1)}%`}>
+              <EyeOutlined />
+            </Tooltip>
+          ]}
+        >
+          <Card.Meta
+            description={
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <Text strong>Confidence:</Text>
+                  <Tag color={image.confidence_score > 0.8 ? 'green' : 'orange'}>
+                    {(image.confidence_score * 100).toFixed(1)}%
+                  </Tag>
+                </div>
+                {image.quality_score && (
+                  <div className="flex justify-between items-center">
+                    <Text strong>Quality:</Text>
+                    <Tag color={image.quality_score > 0.8 ? 'green' : 'orange'}>
+                      {(image.quality_score * 100).toFixed(1)}%
+                    </Tag>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <Text strong>Captured:</Text>
+                  <Text className="text-xs text-gray-500">
+                    {dayjs(image.created_at).format('MMM D, HH:mm')}
+                  </Text>
+                </div>
+                {image.visit_id && (
+                  <div className="flex justify-between items-center">
+                    <Text strong>Visit:</Text>
+                    <Text className="text-xs font-mono">
+                      {image.visit_id.slice(-8)}
+                    </Text>
+                  </div>
+                )}
+              </div>
+            }
+          />
+        </Card>
+      </Col>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert
+        message="Error Loading Face Images"
+        description={error}
+        type="error"
+        showIcon
+        action={
+          <Button size="small" onClick={loadImages}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header with selection controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Space>
+            <PictureOutlined />
+            <span className="font-medium">
+              Face Gallery ({images.length} images)
+            </span>
+          </Space>
+          
+          {images.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Button 
+                size="small" 
+                onClick={handleSelectAll}
+                type={selectedImages.size === images.length ? "default" : "link"}
+              >
+                {selectedImages.size === images.length ? 'Deselect All' : 'Select All'}
+              </Button>
+              
+              {selectedImages.size > 0 && (
+                <Tag color="blue">
+                  {selectedImages.size} selected
+                </Tag>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Delete selected button */}
+        {selectedImages.size > 0 && (
+          <Popconfirm
+            title={`Delete ${selectedImages.size} face image${selectedImages.size > 1 ? 's' : ''}?`}
+            description="This action cannot be undone."
+            onConfirm={handleDeleteSelected}
+            okText="Delete"
+            cancelText="Cancel"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              loading={deleting}
+              size="small"
+            >
+              Delete Selected ({selectedImages.size})
+            </Button>
+          </Popconfirm>
+        )}
+      </div>
+
+      {/* Help text for multi-selection */}
+      {images.length > 1 && (
+        <Alert
+          message="Multi-Selection Help"
+          description="Click to select • Ctrl/⌘+Click to add to selection • Shift+Click to select range"
+          type="info"
+          showIcon
+          className="text-sm"
+        />
+      )}
+
+      {/* Images grid */}
+      {images.length === 0 ? (
+        <div className="text-center py-12">
+          <PictureOutlined className="text-4xl text-gray-400 mb-4" />
+          <div className="text-gray-500">
+            <div className="font-medium">No face images yet</div>
+            <div className="text-sm mt-1">
+              Face images will be automatically captured and saved when this customer visits.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Row gutter={[16, 16]}>
+          {images.map(renderImage)}
+        </Row>
+      )}
+    </div>
+  );
+};

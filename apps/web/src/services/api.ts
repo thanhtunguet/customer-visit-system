@@ -431,7 +431,7 @@ class ApiClient {
     customer_id: number;
     total_images: number;
     images: Array<{
-      image_id: string;
+      image_id: number;  // Fixed: should be number, not string
       image_path: string;
       confidence_score: number;
       quality_score: number;
@@ -442,6 +442,17 @@ class ApiClient {
     }>;
   }> {
     const response = await this.client.get(`/customers/${customerId}/face-images`);
+    return response.data;
+  }
+
+  async deleteCustomerFaceImagesBatch(customerId: number, imageIds: number[]): Promise<{
+    message: string;
+    deleted_count: number;
+    requested_count: number;
+  }> {
+    const response = await this.client.delete(`/customers/${customerId}/face-images`, {
+      params: { image_ids: imageIds }
+    });
     return response.data;
   }
 

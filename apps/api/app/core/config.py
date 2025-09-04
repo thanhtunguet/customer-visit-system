@@ -69,7 +69,7 @@ class Settings:
     max_face_results: int = int(os.getenv("MAX_FACE_RESULTS", "5"))
     
     # Customer face gallery settings
-    max_customer_face_images: int = int(os.getenv("MAX_CUSTOMER_FACE_IMAGES", "4"))
+    max_face_images: int = int(os.getenv("MAX_FACE_IMAGES", "5"))
     min_face_confidence_to_save: float = float(os.getenv("MIN_FACE_CONFIDENCE_TO_SAVE", "0.7"))
 
 

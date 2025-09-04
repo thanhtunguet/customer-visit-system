@@ -11,9 +11,10 @@ import {
   Select,
   Popconfirm
 } from 'antd';
-import { PlusOutlined, UserOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
+import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
 import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
 
@@ -26,6 +27,10 @@ export const Customers: React.FC = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
+  
+  // Details modal state
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -77,6 +82,20 @@ export const Customers: React.FC = () => {
       await loadCustomers();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to delete customer');
+    }
+  };
+
+  const handleViewDetails = (customer: Customer) => {
+    setSelectedCustomerId(customer.customer_id);
+    setDetailsModalVisible(true);
+  };
+
+  const handleDetailsModalEdit = (customerId: number) => {
+    // Find customer and open edit modal
+    const customer = customers.find(c => c.customer_id === customerId);
+    if (customer) {
+      setDetailsModalVisible(false);
+      handleEditCustomer(customer);
     }
   };
 
@@ -154,10 +173,18 @@ export const Customers: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 100,
+      width: 130,
       fixed: 'right' as const,
       render: (_, customer: Customer) => (
         <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetails(customer)}
+            title="View details"
+            className="p-0"
+          />
           <EditAction
             onClick={() => handleEditCustomer(customer)}
             tooltip="Edit customer"
@@ -285,6 +312,16 @@ export const Customers: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <CustomerDetailsModal
+        visible={detailsModalVisible}
+        customerId={selectedCustomerId}
+        onClose={() => {
+          setDetailsModalVisible(false);
+          setSelectedCustomerId(null);
+        }}
+        onEdit={handleDetailsModalEdit}
+      />
     </div>
   );
 };

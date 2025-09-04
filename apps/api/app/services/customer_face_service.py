@@ -22,7 +22,7 @@ class CustomerFaceService:
     """Service for managing customer face image galleries"""
     
     def __init__(self):
-        self.max_images_per_customer = settings.max_customer_face_images
+        self.max_images_per_customer = settings.max_face_images
         self.min_confidence_to_save = settings.min_face_confidence_to_save
     
     async def add_face_image(

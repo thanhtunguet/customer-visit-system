@@ -236,6 +236,62 @@ async def delete_customer_face_image(
         logger.error(f"Error deleting customer face image: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete face image")
 
+@router.delete("/customers/{customer_id:int}/face-images")
+async def delete_customer_face_images_batch(
+    customer_id: int,
+    image_ids: List[int] = Query(..., description="List of image IDs to delete"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete multiple face images for a customer"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    if not image_ids:
+        raise HTTPException(status_code=400, detail="No image IDs provided")
+    
+    try:
+        from ..models.database import CustomerFaceImage
+        
+        # Find all face images to delete
+        result = await db_session.execute(
+            select(CustomerFaceImage).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer_id,
+                    CustomerFaceImage.image_id.in_(image_ids)
+                )
+            )
+        )
+        
+        face_images = result.scalars().all()
+        if not face_images:
+            raise HTTPException(status_code=404, detail="No face images found")
+        
+        # Delete each image
+        from ..services.customer_face_service import customer_face_service
+        deleted_count = 0
+        
+        for face_image in face_images:
+            try:
+                await customer_face_service._delete_face_image(db_session, face_image)
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete face image {face_image.image_id}: {e}")
+        
+        await db_session.commit()
+        
+        return {
+            "message": f"Successfully deleted {deleted_count} face images",
+            "deleted_count": deleted_count,
+            "requested_count": len(image_ids)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting customer face images: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete face images")
+
 
 @router.get("/customers/{customer_id:int}/face-gallery-stats")
 async def get_customer_face_gallery_stats(
