@@ -186,7 +186,7 @@ class CustomerFaceService:
             import uuid
             import asyncio
             
-            # Generate unique filename
+            # Generate unique filename with proper path structure
             filename = f"customers/{tenant_id}/{customer_id}/face-{uuid.uuid4().hex[:8]}.jpg"
             
             # Upload to faces-derived bucket (run in executor to avoid blocking)
@@ -202,7 +202,8 @@ class CustomerFaceService:
             result = await loop.run_in_executor(None, upload_sync)
             
             if result:
-                return f"customer-faces/{filename}"
+                # Return the filename without adding extra prefix to avoid duplication
+                return filename
             return None
             
         except Exception as e:
@@ -258,8 +259,15 @@ class CustomerFaceService:
         """Delete face image content from MinIO only (not database record)"""
         try:
             # Delete from MinIO (run in executor to avoid blocking)
-            if face_image.image_path and face_image.image_path.startswith('customer-faces/'):
-                object_path = face_image.image_path.replace('customer-faces/', '')
+            if face_image.image_path:
+                # Handle both old (customer-faces/ prefix) and new (direct path) formats
+                if face_image.image_path.startswith('customer-faces/'):
+                    # Legacy format - remove the prefix
+                    object_path = face_image.image_path.replace('customer-faces/', '')
+                else:
+                    # New format - use path directly
+                    object_path = face_image.image_path
+                
                 try:
                     import asyncio
                     loop = asyncio.get_event_loop()

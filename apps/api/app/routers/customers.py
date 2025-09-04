@@ -169,12 +169,32 @@ async def get_customer_face_images(
             db_session, user["tenant_id"], customer_id
         )
         
-        # Convert to response format
+        # Convert to response format with presigned URLs
+        from ..core.minio_client import minio_client
+        import logging
+        
+        logger = logging.getLogger(__name__)
         images = []
         for img in face_images:
+            # Generate presigned URL for the image
+            image_url = None
+            if img.image_path:
+                try:
+                    # Handle both old (customer-faces/ prefix) and new (direct path) formats
+                    if img.image_path.startswith('customer-faces/'):
+                        # Legacy format - remove the prefix
+                        object_path = img.image_path.replace('customer-faces/', '')
+                    else:
+                        # New format - use path directly
+                        object_path = img.image_path
+                    image_url = minio_client.get_presigned_url('faces-derived', object_path)
+                except Exception as e:
+                    logger.warning(f"Failed to generate presigned URL for {img.image_path}: {e}")
+                    image_url = None
+            
             images.append({
                 "image_id": img.image_id,
-                "image_path": img.image_path,
+                "image_path": image_url,  # Return presigned URL instead of raw path
                 "confidence_score": img.confidence_score,
                 "quality_score": img.quality_score,
                 "created_at": img.created_at.isoformat(),

@@ -191,6 +191,11 @@ async def delete_visits(
     db_session: AsyncSession = Depends(get_db_session)
 ):
     """Delete multiple visits by their visit_ids"""
+    from ..core.minio_client import minio_client
+    from ..models.database import CustomerFaceImage
+    import logging
+    
+    logger = logging.getLogger(__name__)
     await db.set_tenant_context(db_session, user["tenant_id"])
     
     if not request.visit_ids:
@@ -199,22 +204,42 @@ async def delete_visits(
             detail="No visit IDs provided"
         )
     
-    # Verify all visits exist and belong to the current tenant
-    existing_visits_query = select(Visit.visit_id).where(
+    # First get the visits with their image paths for cleanup
+    visits_with_images_query = select(Visit.visit_id, Visit.image_path).where(
         and_(
             Visit.tenant_id == user["tenant_id"],
             Visit.visit_id.in_(request.visit_ids)
         )
     )
-    result = await db_session.execute(existing_visits_query)
-    existing_visit_ids = [row[0] for row in result]
+    result = await db_session.execute(visits_with_images_query)
+    visits_with_images = result.all()
     
+    existing_visit_ids = [row[0] for row in visits_with_images]
     missing_visits = set(request.visit_ids) - set(existing_visit_ids)
     if missing_visits:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Visit(s) not found: {', '.join(missing_visits)}"
         )
+    
+    # Get associated customer face images for cleanup
+    customer_face_images_query = select(CustomerFaceImage.image_path).where(
+        and_(
+            CustomerFaceImage.tenant_id == user["tenant_id"],
+            CustomerFaceImage.visit_id.in_(request.visit_ids)
+        )
+    )
+    result = await db_session.execute(customer_face_images_query)
+    customer_face_image_paths = [row[0] for row in result.all()]
+    
+    # Delete associated customer face images first (database records)
+    delete_customer_face_images_query = delete(CustomerFaceImage).where(
+        and_(
+            CustomerFaceImage.tenant_id == user["tenant_id"],
+            CustomerFaceImage.visit_id.in_(request.visit_ids)
+        )
+    )
+    await db_session.execute(delete_customer_face_images_query)
     
     # Delete the visits
     delete_query = delete(Visit).where(
@@ -229,10 +254,56 @@ async def delete_visits(
     
     deleted_count = result.rowcount
     
+    # Clean up image files from MinIO (do this after database commit)
+    images_cleaned = 0
+    for visit_id, image_path in visits_with_images:
+        if image_path:
+            try:
+                # Determine bucket and object path from image_path
+                if image_path.startswith('s3://'):
+                    # Extract bucket and object name from s3://bucket/object format
+                    path_parts = image_path[5:].split('/', 1)
+                    if len(path_parts) == 2:
+                        bucket, object_name = path_parts
+                        minio_client.delete_file(bucket, object_name)
+                        images_cleaned += 1
+                elif image_path.startswith('visits-faces/'):
+                    # API-generated face crops are in faces-derived bucket
+                    object_path = image_path.replace('visits-faces/', '')
+                    minio_client.delete_file('faces-derived', object_path)
+                    images_cleaned += 1
+                elif not image_path.startswith('http'):
+                    # Assume it's a path in the faces-raw bucket
+                    minio_client.delete_file('faces-raw', image_path)
+                    images_cleaned += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete image {image_path} for visit {visit_id}: {e}")
+    
+    # Clean up customer face images from MinIO
+    for image_path in customer_face_image_paths:
+        if image_path:
+            try:
+                # Handle both old (customer-faces/ prefix) and new (direct path) formats
+                if image_path.startswith('customer-faces/'):
+                    # Legacy format - remove the prefix
+                    object_path = image_path.replace('customer-faces/', '')
+                else:
+                    # New format - use path directly
+                    object_path = image_path
+                minio_client.delete_file('faces-derived', object_path)
+                images_cleaned += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete customer face image {image_path}: {e}")
+    
+    message = f"Successfully deleted {deleted_count} visit(s)"
+    if images_cleaned > 0:
+        message += f" and cleaned up {images_cleaned} associated image(s)"
+    
     return {
-        "message": f"Successfully deleted {deleted_count} visit(s)",
+        "message": message,
         "deleted_count": deleted_count,
-        "deleted_visit_ids": request.visit_ids
+        "deleted_visit_ids": request.visit_ids,
+        "images_cleaned": images_cleaned
     }
 
 
