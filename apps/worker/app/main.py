@@ -168,6 +168,8 @@ from pydantic import BaseModel
 from .detectors import create_detector, FaceDetector
 from .embedder import create_embedder, FaceEmbedder
 from .worker_client import WorkerClient
+from .webrtc_streamer import WebRTCStreamer
+from .camera_manager import CameraManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -262,6 +264,15 @@ class FaceRecognitionWorker:
         # Worker client for registration and heartbeat
         self.worker_client = WorkerClient(config)
         
+        # Camera manager for WebRTC streaming
+        self.camera_manager = CameraManager()
+        
+        # WebRTC streamer for P2P camera streaming
+        self.webrtc_streamer = WebRTCStreamer(
+            worker_id=None,  # Will be set after worker registration
+            camera_manager=self.camera_manager
+        )
+        
         # Shared shutdown flag
         self._shutdown_requested = False
         
@@ -278,6 +289,16 @@ class FaceRecognitionWorker:
         # Initialize worker client for registration and heartbeat
         await self.worker_client.initialize()
         
+        # Set worker ID in WebRTC streamer after registration
+        self.webrtc_streamer.worker_id = self.worker_client.worker_id
+        
+        # Initialize WebRTC streamer with access token
+        if self.access_token:
+            await self.webrtc_streamer.initialize(self.access_token)
+        
+        # Set WebRTC reference in worker client
+        self.worker_client.set_webrtc_streamer(self.webrtc_streamer)
+        
         # Start failed event queue processor
         self.queue_processor_task = asyncio.create_task(self._process_failed_events_queue())
         
@@ -288,7 +309,11 @@ class FaceRecognitionWorker:
     
     async def shutdown(self):
         """Cleanup resources"""
-        # Shutdown worker client first
+        # Shutdown WebRTC streamer first
+        if self.webrtc_streamer:
+            await self.webrtc_streamer.shutdown()
+        
+        # Shutdown worker client
         await self.worker_client.shutdown()
         
         # Cancel queue processor

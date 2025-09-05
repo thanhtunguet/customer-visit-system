@@ -54,15 +54,23 @@ class WorkerClient:
             "camera_source": "rtsp" if config.rtsp_url else "usb",
             # HTTP server removed - worker operates via socket communication only
             "streaming_enabled": True,
+            "webrtc_streaming": True,  # Enable WebRTC P2P streaming
             "face_processing_enabled": True
         }
         
         # Streaming service reference (set from parent worker)
         self.streaming_service = None
+        
+        # WebRTC streaming reference
+        self.webrtc_streamer = None
     
     def set_streaming_service(self, streaming_service):
         """Set reference to streaming service for status checks"""
         self.streaming_service = streaming_service
+        
+    def set_webrtc_streamer(self, webrtc_streamer):
+        """Set reference to WebRTC streamer for P2P streaming"""
+        self.webrtc_streamer = webrtc_streamer
         
     def _get_current_worker_status(self) -> WorkerStatus:
         """Determine current worker status based on camera assignment"""

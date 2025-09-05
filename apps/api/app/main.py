@@ -180,6 +180,10 @@ app.include_router(files.router)
 # NEW: Consolidated Worker API - replaces fragmented worker endpoints
 app.include_router(workers_consolidated.router)
 
+# WebRTC Signaling Server for P2P Camera Streaming
+from .routers import webrtc_signaling
+app.include_router(webrtc_signaling.router)
+
 # OLD: Redundant worker endpoints - TODO: Remove after migration testing
 # app.include_router(workers.router)                    # Redundant: database-backed worker management  
 # app.include_router(worker_registry_router.router)     # Redundant: in-memory worker registry
