@@ -497,14 +497,14 @@ const Workers: React.FC = () => {
       render: (_, record: Worker) => (
         <div>
           <div className="text-sm">
-            Faces: <span className="font-medium">{record.total_faces_processed.toLocaleString()}</span>
+            Faces: <span className="font-medium">{(record.total_faces_processed || 0).toLocaleString()}</span>
           </div>
           <div className="text-sm">
             Uptime: <span className="font-medium">{formatUptime(record.uptime_minutes)}</span>
           </div>
           {record.error_count > 0 && (
             <div className="text-sm text-red-500">
-              Errors: <span className="font-medium">{record.error_count}</span>
+              Errors: <span className="font-medium">{record.error_count || 0}</span>
             </div>
           )}
         </div>

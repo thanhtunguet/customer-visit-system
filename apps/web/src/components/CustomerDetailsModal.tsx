@@ -278,7 +278,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
       onCancel={handleClose}
       width={900}
       footer={null}
-      destroyOnClose={true}
+      destroyOnHidden={true}
       centered
     >
       {loading && (
