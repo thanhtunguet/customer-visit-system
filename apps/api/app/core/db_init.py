@@ -25,7 +25,7 @@ async def init_database(drop_existing: bool = False) -> None:
     
     # Create async engine for initialization
     engine = create_async_engine(
-        get_database_url(),
+        settings.database_url,
         echo=settings.database_echo
     )
     

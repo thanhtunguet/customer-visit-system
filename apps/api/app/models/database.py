@@ -225,7 +225,7 @@ class StaffFaceImage(Base):
     
     __table_args__ = (
         ForeignKeyConstraint(['tenant_id'], ['tenants.tenant_id'], ondelete='CASCADE'),
-        ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['staff_id'], ['staff.staff_id'], ondelete='CASCADE'),
         Index('idx_staff_face_images_staff_id', 'tenant_id', 'staff_id'),
         Index('idx_staff_face_images_primary', 'tenant_id', 'is_primary'),
         Index('idx_staff_face_images_hash', 'tenant_id', 'staff_id', 'image_hash', unique=True),
@@ -274,11 +274,7 @@ class CustomerFaceImage(Base):
     tenant = relationship("Tenant")
     
     __table_args__ = (
-        ForeignKeyConstraint(
-            ['tenant_id', 'customer_id'],
-            ['customers.tenant_id', 'customers.customer_id'],
-            ondelete='CASCADE'
-        ),
+        ForeignKeyConstraint(['customer_id'], ['customers.customer_id'], ondelete='CASCADE'),
         Index('idx_customer_face_images_tenant_customer', 'tenant_id', 'customer_id'),
         Index('idx_customer_face_images_confidence', 'tenant_id', 'customer_id', 'confidence_score'),
         Index('idx_customer_face_images_hash', 'tenant_id', 'image_hash'),

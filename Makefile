@@ -47,7 +47,7 @@ db-init:
 
 db-reset:
 	@echo "⚠️  Resetting database (will drop all data)..."
-	@cd apps/api && source .venv/bin/activate && python scripts/db_manage.py reset
+	@cd apps/api && source .venv/bin/activate && python scripts/db_manage.py reset --force
 
 db-fresh:
 	@echo "🔥 Fresh database setup (dropping all existing data)..."

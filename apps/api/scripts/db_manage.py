@@ -33,9 +33,13 @@ async def main():
     elif command in ["reset", "fresh"]:
         print("⚠️  This will DROP ALL EXISTING DATA!")
         if "--force" not in sys.argv:
-            confirm = input("Are you sure? Type 'yes' to continue: ")
-            if confirm.lower() != 'yes':
-                print("Cancelled.")
+            try:
+                confirm = input("Are you sure? Type 'yes' to continue: ")
+                if confirm.lower() != 'yes':
+                    print("Cancelled.")
+                    return
+            except (EOFError, KeyboardInterrupt):
+                print("\nCancelled.")
                 return
         
         print("Resetting database (dropping and recreating all tables)...")
