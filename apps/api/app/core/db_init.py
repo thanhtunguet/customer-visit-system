@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from ..core.config import settings
 from ..core.config import settings
-from ..models.database import Base, User, UserRole, Tenant
+from ..models.database import Base, User, UserRole, Tenant, Site, Camera, CameraType
 from ..models.database import pwd_context
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,71 @@ async def create_default_data(engine) -> None:
                 session.add(admin)
                 
                 logger.info("Created default system admin user (username: admin, password: admin123)")
+            
+            # Create default development tenant if not exists
+            result = await session.execute(
+                select(Tenant).where(Tenant.tenant_id == "t-dev").limit(1)
+            )
+            existing_tenant = result.scalar_one_or_none()
+            
+            if not existing_tenant:
+                dev_tenant = Tenant(
+                    tenant_id="t-dev",
+                    name="Development Tenant",
+                    is_active=True
+                )
+                session.add(dev_tenant)
+                logger.info("Created default development tenant (t-dev)")
+            
+            # Create default development site if not exists
+            result = await session.execute(
+                select(Site).where(Site.tenant_id == "t-dev").limit(1)
+            )
+            existing_site = result.scalar_one_or_none()
+            
+            if not existing_site:
+                dev_site = Site(
+                    tenant_id="t-dev",
+                    name="Development Site",
+                    location="Local Development Environment",
+                    is_active=True
+                )
+                session.add(dev_site)
+                await session.flush()  # Get the site_id
+                logger.info(f"Created default development site (ID: {dev_site.site_id})")
+                
+                # Create default webcam cameras for development
+                cameras = [
+                    Camera(
+                        tenant_id="t-dev",
+                        site_id=dev_site.site_id,
+                        name="USB Webcam",
+                        camera_type=CameraType.WEBCAM,
+                        device_index=0,
+                        is_active=True
+                    ),
+                    Camera(
+                        tenant_id="t-dev", 
+                        site_id=dev_site.site_id,
+                        name="Built-in Webcam",
+                        camera_type=CameraType.WEBCAM,
+                        device_index=1,
+                        is_active=True
+                    ),
+                    Camera(
+                        tenant_id="t-dev",
+                        site_id=dev_site.site_id, 
+                        name="External Webcam",
+                        camera_type=CameraType.WEBCAM,
+                        device_index=2,
+                        is_active=True
+                    )
+                ]
+                
+                for camera in cameras:
+                    session.add(camera)
+                
+                logger.info("Created default development cameras (USB, Built-in, External)")
             
             await session.commit()
             logger.info("Default system data created successfully")

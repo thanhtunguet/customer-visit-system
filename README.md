@@ -95,7 +95,7 @@ VITE_API_URL=http://localhost:8080
 
 ### Database Setup
 
-Before first run, initialize the database schema:
+Before first run, initialize the database schema and create development data:
 
 ```bash
 cd apps/api
@@ -104,7 +104,15 @@ pip install -r requirements.txt
 
 # Run database migrations  
 alembic upgrade head
+
+# Initialize development data (tenant, site, cameras)
+python -m app.core.db_init --init
 ```
+
+This creates:
+- Default development tenant (`t-dev`)
+- Default development site  
+- Three webcam cameras (USB, Built-in, External) for automatic worker assignment
 
 ### Running Services
 
@@ -156,7 +164,7 @@ make e2e
 
 For development and testing with multiple cameras on the same machine:
 
-#### Quick Start - Two Workers with Two Cameras
+#### Quick Start - Automatic Camera Assignment
 
 ```bash
 # Terminal 1: Start API
@@ -165,31 +173,35 @@ make api-dev
 # Terminal 2: Start web interface  
 make web-dev
 
-# Terminal 3: Start first worker (USB webcam)
+# Terminal 3: Start first worker (gets camera automatically)
 make worker-dev W=worker-001
 
-# Terminal 4: Start second worker (built-in webcam)
+# Terminal 4: Start second worker (gets next available camera)
 make worker-dev W=worker-002
 ```
 
-#### Worker Auto-Assignment Rules
+#### How Automatic Camera Assignment Works
 
-The system automatically assigns cameras based on worker ID patterns:
+1. **API Intelligence**: The API automatically assigns available cameras to workers based on:
+   - Site membership (workers must belong to a site)
+   - Camera availability (first unassigned camera in the site)
+   - Worker status (idle workers get priority for assignments)
 
-- **worker-001**, **worker-01**, **worker-1** → Camera 0 (typically USB webcam)
-- **worker-002**, **worker-02**, **worker-2** → Camera 1 (typically built-in webcam)  
-- **worker-003**, **worker-03**, **worker-3** → Camera 2 (additional camera if available)
+2. **Database-Driven**: Camera assignments are stored in the database and synchronized with the in-memory worker registry
 
-#### Manual Camera Assignment
+3. **Real-time Updates**: Camera assignments are broadcast to the frontend via WebSocket for immediate visibility
 
-Override automatic assignment with explicit camera index:
+#### Manual Camera Override (Advanced)
+
+If you need to force a specific camera device index:
 
 ```bash
-# Force specific worker-camera combinations
-make worker-dev W=worker-alice C=0     # Alice uses USB webcam
-make worker-dev W=worker-bob C=1       # Bob uses built-in webcam
-make worker-dev W=worker-charlie C=2   # Charlie uses external camera
+# Override automatic assignment
+make worker-dev W=worker-alice C=0     # Force device index 0 
+make worker-dev W=worker-bob C=1       # Force device index 1
 ```
+
+**Note**: Manual override bypasses API delegation and uses the old environment-based approach.
 
 #### Camera Device Detection
 
