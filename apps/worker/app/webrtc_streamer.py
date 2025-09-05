@@ -30,6 +30,7 @@ import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, VideoStreamTrack
 from aiortc.contrib.media import MediaPlayer
 import websockets
+import httpx
 from websockets.exceptions import ConnectionClosed
 
 from .camera_manager import CameraManager
@@ -45,26 +46,31 @@ class CameraVideoTrack(VideoStreamTrack):
         self.camera_manager = camera_manager
         
     async def recv(self):
-        """Get next video frame from camera"""
-        
+        """Get next video frame from camera; wait briefly for real frames."""
         pts, time_base = await self.next_timestamp()
-        
-        # Get frame from camera manager
+
+        # Try to obtain a real frame with a brief wait budget
         frame = self.camera_manager.get_latest_frame(self.camera_id)
-        
+        attempts = 0
+        while frame is None and attempts < 10:
+            await asyncio.sleep(0.05)  # 50ms, total up to ~500ms
+            frame = self.camera_manager.get_latest_frame(self.camera_id)
+            attempts += 1
+
         if frame is None:
             # Return black frame if camera not available
+            logger.debug(f"CameraVideoTrack: no frame available for camera {self.camera_id}, sending black frame")
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            
+
         # Convert BGR to RGB (OpenCV uses BGR, WebRTC expects RGB)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
+
         # Create av.VideoFrame
         from av import VideoFrame
         av_frame = VideoFrame.from_ndarray(frame_rgb, format='rgb24')
         av_frame.pts = pts
         av_frame.time_base = time_base
-        
+
         return av_frame
 
 class WebRTCStreamer:
@@ -88,6 +94,13 @@ class WebRTCStreamer:
         self.is_connected = False
         self.reconnect_delay = 5  # seconds
         self.max_reconnect_attempts = 10
+
+        # Optional provider to fetch camera configuration by id
+        self._camera_config_provider: Optional[Callable[[int], Optional[Dict[str, Any]]]] = None
+
+    def set_camera_config_provider(self, provider: Callable[[int], Optional[Dict[str, Any]]]):
+        """Set a provider function to retrieve camera configuration for a camera_id."""
+        self._camera_config_provider = provider
         
     async def initialize(self, access_token: str, api_base_url: str = "http://localhost:8080"):
         """Initialize WebRTC streamer and connect to signaling server"""
@@ -95,6 +108,9 @@ class WebRTCStreamer:
         # Build signaling WebSocket URL
         api_ws_url = api_base_url.replace('http://', 'ws://').replace('https://', 'wss://')
         self.signaling_url = f"{api_ws_url}/v1/webrtc/worker/{self.worker_id}?token={access_token}"
+        # Save API context for later
+        self._api_base_url = api_base_url
+        self._access_token = access_token
         
         logger.info(f"WebRTC Streamer initialized for worker {self.worker_id}")
         
@@ -221,6 +237,40 @@ class WebRTCStreamer:
         logger.info(f"WebRTC stream request: session {session_id}, camera {camera_id}")
         
         try:
+            # Ensure camera is active before creating track
+            if not self.camera_manager.is_camera_active(camera_id):
+                cam_cfg: Optional[Dict[str, Any]] = None
+                if self._camera_config_provider:
+                    try:
+                        cam_cfg = self._camera_config_provider(camera_id)
+                    except Exception as e:
+                        logger.warning(f"Camera config provider error: {e}")
+                if cam_cfg:
+                    logger.info(f"Starting camera {camera_id} for WebRTC session {session_id}")
+                    started = await self.camera_manager.start_camera(camera_id, cam_cfg)
+                    if not started:
+                        logger.warning(f"Camera {camera_id} failed to start; streaming black frames")
+                else:
+                    # Try fetch from API when not assigned
+                    fetched_cfg = await self._fetch_camera_config(site_id, camera_id)
+                    if fetched_cfg:
+                        logger.info(f"Fetched camera config for {camera_id} from API; starting camera")
+                        started = await self.camera_manager.start_camera(camera_id, fetched_cfg)
+                        if not started:
+                            logger.warning(f"Camera {camera_id} failed to start with fetched config; streaming black frames")
+                    else:
+                        logger.warning(
+                            f"No camera config available for {camera_id}; proceeding but frames may be black"
+                        )
+
+            # Wait briefly for the first frame to arrive before creating offer
+            # to avoid negotiating while only black frames are present.
+            warmup_attempts = 0
+            while self.camera_manager.get_latest_frame(camera_id) is None and warmup_attempts < 20:
+                await asyncio.sleep(0.05)  # up to ~1s
+                warmup_attempts += 1
+            if warmup_attempts >= 20:
+                logger.info(f"WebRTC: no real frame yet for camera {camera_id}, proceeding anyway")
             # Create RTCPeerConnection
             pc = RTCPeerConnection()
             self.peer_connections[session_id] = pc
@@ -258,6 +308,43 @@ class WebRTCStreamer:
                     
             # Create offer
             offer = await pc.createOffer()
+
+            # Prefer H264 for wider browser compatibility (e.g., Safari)
+            def _prefer_video_codec(sdp: str, codec_substr: str = 'H264') -> str:
+                try:
+                    lines = sdp.split('\n')
+                    # Map payload type to codec name
+                    pt_to_codec = {}
+                    for line in lines:
+                        if line.startswith('a=rtpmap:'):
+                            try:
+                                rest = line[len('a=rtpmap:'):].strip()
+                                pt, desc = rest.split(' ', 1)
+                                codec = desc.split('/')[0].upper()
+                                pt_to_codec[pt] = codec
+                            except Exception:
+                                continue
+
+                    new_lines = []
+                    for line in lines:
+                        if line.startswith('m=video '):
+                            parts = line.strip().split(' ')
+                            # parts: m=video <port> <proto> <pt1> <pt2> ...
+                            header = parts[:3]
+                            pts = parts[3:]
+                            preferred = [pt for pt in pts if pt_to_codec.get(pt, '').find(codec_substr) != -1]
+                            others = [pt for pt in pts if pt not in preferred]
+                            reordered = header + preferred + others
+                            new_lines.append(' '.join(reordered))
+                        else:
+                            new_lines.append(line)
+                    return '\n'.join(new_lines)
+                except Exception:
+                    return sdp
+
+            munged_sdp = _prefer_video_codec(offer.sdp, 'H264')
+            # Set local description with munged SDP
+            offer = RTCSessionDescription(sdp=munged_sdp, type='offer')
             await pc.setLocalDescription(offer)
             
             # Send offer to client via signaling server
@@ -380,3 +467,29 @@ class WebRTCStreamer:
             },
             "signaling_connected": self.is_connected
         }
+
+    async def _fetch_camera_config(self, site_id: int, camera_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch camera details from API to build camera config."""
+        if not getattr(self, "_api_base_url", None) or not getattr(self, "_access_token", None):
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{self._api_base_url}/v1/sites/{site_id}/cameras/{camera_id}",
+                    headers={"Authorization": f"Bearer {self._access_token}"}
+                )
+                if resp.status_code != 200:
+                    logger.warning(f"Fetch camera config failed: {resp.status_code}")
+                    return None
+                cam = resp.json()
+                return {
+                    "camera_type": cam.get("camera_type", "webcam"),
+                    "rtsp_url": cam.get("rtsp_url"),
+                    "device_index": cam.get("device_index", 0),
+                    "fps": 15,
+                    "width": 640,
+                    "height": 480,
+                }
+        except Exception as e:
+            logger.warning(f"Error fetching camera config: {e}")
+            return None
