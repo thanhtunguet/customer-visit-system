@@ -52,6 +52,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   
   // WebRTC state
   const [session, setSession] = useState<WebRTCSession | null>(null);
+  const [workerIdRef, setWorkerIdRef] = useState<string | null>(null);
   const clientId = useRef(`client-${Math.random().toString(36).substr(2, 9)}`);
   
   // WebRTC refs
@@ -126,7 +127,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
             type: 'ice-candidate',
             session_id: session?.session_id,
             from_id: currentClientId,
-            to_id: `worker-${session?.camera_id}`, // Assuming worker ID pattern
+            to_id: workerIdRef || `worker-${session?.camera_id}`,
             ice_candidate: {
               candidate: event.candidate.candidate,
               sdpMid: event.candidate.sdpMid,
@@ -266,6 +267,10 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       
       case 'offer':
         console.log('Received direct WebRTC offer from worker');
+        // Capture worker ID from the message
+        if (message.from_id && !workerIdRef) {
+          setWorkerIdRef(message.from_id);
+        }
         try {
           await pc.setRemoteDescription(new RTCSessionDescription({
             type: 'offer',
@@ -279,10 +284,14 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           // Send answer back via signaling
           if (signalingWsRef.current?.readyState === WebSocket.OPEN) {
             const answerMessage = {
-              type: 'answer',
-              session_id: session?.session_id,
-              client_id: currentClientId,
-              sdp: answer.sdp
+              type: 'signaling',
+              data: {
+                type: 'answer',
+                session_id: session?.session_id,
+                from_id: currentClientId,
+                to_id: message.from_id || workerIdRef || `worker-${session?.camera_id}`,
+                sdp: answer.sdp
+              }
             };
             
             signalingWsRef.current.send(JSON.stringify(answerMessage));
