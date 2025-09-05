@@ -55,8 +55,10 @@ class CustomerFaceService:
             Created CustomerFaceImage or None if not saved
         """
         try:
-            # First, verify the customer exists to avoid foreign key violations
+            # First, verify the customer exists - if not, create one
             from ..models.database import Customer
+            from datetime import datetime
+            
             result = await db.execute(
                 select(Customer).where(
                     Customer.tenant_id == tenant_id,
@@ -66,8 +68,17 @@ class CustomerFaceService:
             customer = result.scalar_one_or_none()
             
             if not customer:
-                logger.error(f"Customer {customer_id} not found in tenant {tenant_id}, cannot save face image")
-                return None
+                logger.warning(f"Customer {customer_id} not found in tenant {tenant_id}, creating new customer")
+                # Create the missing customer
+                customer = Customer(
+                    customer_id=customer_id,  # Use the provided customer_id
+                    tenant_id=tenant_id,
+                    first_seen=datetime.utcnow(),
+                    visit_count=0,
+                )
+                db.add(customer)
+                await db.flush()  # Ensure the customer is created before proceeding
+                logger.info(f"Created missing customer {customer_id} for tenant {tenant_id}")
             
             # Check if confidence meets minimum threshold
             if confidence_score < self.min_confidence_to_save:
