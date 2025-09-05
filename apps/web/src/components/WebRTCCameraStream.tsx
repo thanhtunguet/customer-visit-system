@@ -60,6 +60,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const signalingWsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const sessionRef = useRef<WebRTCSession | null>(null);
   
   // Connection retry logic
   const retryCountRef = useRef(0);
@@ -125,7 +126,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           type: 'signaling',
           data: {
             type: 'ice-candidate',
-            session_id: session?.session_id,
+            session_id: sessionRef.current?.session_id,
             from_id: currentClientId,
             to_id: workerIdRef || `worker-${session?.camera_id}`,
             ice_candidate: {
@@ -136,6 +137,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           }
         };
         
+        console.log('🔄 Sending ICE candidate message:', message);
         signalingWsRef.current.send(JSON.stringify(message));
       }
     };
@@ -173,7 +175,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     };
 
     return pc;
-  }, [session?.session_id, session?.camera_id, currentClientId, updateConnectionState]);
+  }, [currentClientId, updateConnectionState, workerIdRef]);
 
   // Setup signaling WebSocket connection
   const setupSignalingConnection = useCallback(async () => {
@@ -251,6 +253,61 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     }
   }, [currentClientId, isStreaming, manuallyStopped]);
 
+  // Stop WebRTC streaming session
+  const handleStopStream = useCallback(async () => {
+    try {
+      setLoading(true);
+      setManuallyStopped(true);
+      
+      // Close peer connection
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      
+      // Close signaling WebSocket
+      if (signalingWsRef.current) {
+        signalingWsRef.current.close();
+        signalingWsRef.current = null;
+      }
+      
+      // Clear video source
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      
+      // Clear stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      
+      // Stop session on server
+      if (sessionRef.current) {
+        try {
+          await apiClient.post(`/webrtc/sessions/${sessionRef.current.session_id}/stop`);
+        } catch (err) {
+          console.warn('Failed to stop session on server:', err);
+        }
+      }
+      
+      setSession(null);
+      sessionRef.current = null;
+      setIsStreaming(false);
+      updateConnectionState('disconnected');
+      setSignalingState('closed');
+      notifyStreamStateChange(false);
+      
+      message.success('WebRTC stream stopped');
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to stop stream');
+      message.error('Failed to stop stream');
+    } finally {
+      setLoading(false);
+    }
+  }, [updateConnectionState, notifyStreamStateChange]);
+
   // Handle signaling messages
   const handleSignalingMessage = useCallback(async (message: any) => {
     if (!peerConnectionRef.current) {
@@ -283,17 +340,24 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           
           // Send answer back via signaling
           if (signalingWsRef.current?.readyState === WebSocket.OPEN) {
+            console.log('🔍 Session state when sending answer:', {
+              session: session,
+              sessionId: session?.session_id,
+              cameraId: session?.camera_id
+            });
+            
             const answerMessage = {
               type: 'signaling',
               data: {
                 type: 'answer',
-                session_id: session?.session_id,
+                session_id: sessionRef.current?.session_id,
                 from_id: currentClientId,
                 to_id: message.from_id || workerIdRef || `worker-${session?.camera_id}`,
                 sdp: answer.sdp
               }
             };
             
+            console.log('🔄 Sending answer message:', answerMessage);
             signalingWsRef.current.send(JSON.stringify(answerMessage));
             console.log('Sent WebRTC answer to worker');
           }
@@ -345,7 +409,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
                   type: 'signaling',
                   data: {
                     type: 'answer',
-                    session_id: session?.session_id,
+                    session_id: sessionRef.current?.session_id,
                     from_id: currentClientId,
                     to_id: signalingData.from_id,
                     sdp: answer.sdp
@@ -386,7 +450,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       default:
         console.log('Unknown signaling message type:', message.type);
     }
-  }, [session?.session_id, currentClientId]);
+  }, [currentClientId, workerIdRef, handleStopStream]);
 
   // Start WebRTC streaming session
   const handleStartStream = useCallback(async () => {
@@ -421,6 +485,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         };
         
         setSession(newSession);
+        sessionRef.current = newSession; // Store in ref for immediate access
         setIsStreaming(true);
         setManuallyStopped(false);
         notifyStreamStateChange(true);
@@ -453,59 +518,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     }
   }, [cameraId, siteId, currentClientId, notifyStreamStateChange, updateConnectionState, setupPeerConnection, setupSignalingConnection]);
 
-  // Stop WebRTC streaming session
-  const handleStopStream = useCallback(async () => {
-    try {
-      setLoading(true);
-      setManuallyStopped(true);
-      
-      // Close peer connection
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      
-      // Close signaling WebSocket
-      if (signalingWsRef.current) {
-        signalingWsRef.current.close();
-        signalingWsRef.current = null;
-      }
-      
-      // Clear video source
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      
-      // Clear stream
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
-      
-      // Stop session on server
-      if (session) {
-        try {
-          await apiClient.post(`/webrtc/sessions/${session.session_id}/stop`);
-        } catch (err) {
-          console.warn('Failed to stop session on server:', err);
-        }
-      }
-      
-      setSession(null);
-      setIsStreaming(false);
-      updateConnectionState('disconnected');
-      setSignalingState('closed');
-      notifyStreamStateChange(false);
-      
-      message.success('WebRTC stream stopped');
-      
-    } catch (err: any) {
-      setError(err.message || 'Failed to stop stream');
-      message.error('Failed to stop stream');
-    } finally {
-      setLoading(false);
-    }
-  }, [session, updateConnectionState, notifyStreamStateChange]);
+
 
   // Handle reconnection logic
   const handleReconnect = useCallback(async () => {
