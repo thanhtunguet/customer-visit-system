@@ -40,6 +40,19 @@ worker-dev:
 web-dev:
 	bash scripts/dev/web_dev.sh
 
+# Database management
+db-init:
+	@echo "Initializing database..."
+	@cd apps/api && source .venv/bin/activate && python scripts/db_manage.py init
+
+db-reset:
+	@echo "⚠️  Resetting database (will drop all data)..."
+	@cd apps/api && source .venv/bin/activate && python scripts/db_manage.py reset
+
+db-fresh:
+	@echo "🔥 Fresh database setup (dropping all existing data)..."
+	@cd apps/api && source .venv/bin/activate && python scripts/db_manage.py fresh --force
+
 # Admin account management
 init-admin:
 	@cd apps/api && bash scripts/init-admin.sh create-admin

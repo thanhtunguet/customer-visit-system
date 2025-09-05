@@ -36,6 +36,17 @@ async def initialize_camera_proxy():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    
+    # Initialize database in development mode
+    if settings.env == "dev":
+        try:
+            from .core.db_init import init_database
+            await init_database(drop_existing=False)
+            logging.info("Database initialization completed")
+        except Exception as e:
+            logging.error(f"Failed to initialize database: {e}")
+            # Continue startup even if DB init fails - tables might already exist
+    
     try:
         await milvus_client.connect()
         logging.info("Connected to Milvus")

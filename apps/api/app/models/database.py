@@ -156,9 +156,9 @@ class CameraSession(Base):
     """
     __tablename__ = 'camera_sessions'
     
-    camera_id = Column(Integer, ForeignKey('cameras.camera_id'), primary_key=True)
-    tenant_id = Column(String, ForeignKey('tenants.tenant_id'), nullable=False)
-    site_id = Column(Integer, ForeignKey('sites.site_id'), nullable=False)
+    camera_id = Column(BigInteger, ForeignKey('cameras.camera_id'), primary_key=True)
+    tenant_id = Column(String(64), ForeignKey('tenants.tenant_id'), nullable=False)
+    site_id = Column(BigInteger, ForeignKey('sites.site_id'), nullable=False)
     worker_id = Column(String, nullable=True)
     generation = Column(BigInteger, nullable=False, default=0)
     state = Column(String(20), nullable=False, default='PENDING')
@@ -196,7 +196,7 @@ class Staff(Base):
     staff_id = Column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
-    site_id = Column(BigInteger)
+    site_id = Column(BigInteger, ForeignKey("sites.site_id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     face_embedding = Column(Text)  # Legacy field - kept for backwards compatibility
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -225,7 +225,7 @@ class StaffFaceImage(Base):
     
     __table_args__ = (
         ForeignKeyConstraint(['tenant_id'], ['tenants.tenant_id'], ondelete='CASCADE'),
-        ForeignKeyConstraint(['staff_id'], ['staff.staff_id'], ondelete='CASCADE'),
+        ForeignKeyConstraint(['tenant_id', 'staff_id'], ['staff.tenant_id', 'staff.staff_id'], ondelete='CASCADE'),
         Index('idx_staff_face_images_staff_id', 'tenant_id', 'staff_id'),
         Index('idx_staff_face_images_primary', 'tenant_id', 'is_primary'),
         Index('idx_staff_face_images_hash', 'tenant_id', 'staff_id', 'image_hash', unique=True),

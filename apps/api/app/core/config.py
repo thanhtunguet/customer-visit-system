@@ -47,6 +47,7 @@ class Settings:
         "DATABASE_URL", 
         f"postgresql+asyncpg://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'postgres')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'facedb')}"
     )
+    database_echo: bool = os.getenv("DATABASE_ECHO", "false").lower() == "true"
     
     # Milvus Configuration
     milvus_host: str = os.getenv("MILVUS_HOST", "localhost")
