@@ -178,14 +178,23 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   const setupSignalingConnection = useCallback(async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const wsUrl = new URL(`${apiClient.baseURL}/v1/webrtc/client/${currentClientId}`);
+      // Get base URL without /v1 for WebSocket connection
+      const baseUrl = apiClient.baseURL.replace('/v1', '');
+      const wsUrl = new URL(`${baseUrl}/v1/webrtc/client/${currentClientId}`);
       wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
       
       if (token) {
         wsUrl.searchParams.set('token', token);
       }
       
-      console.log('Connecting to WebRTC signaling server:', wsUrl.toString());
+      console.log('🌐 WebSocket URL components:', {
+        apiClientBaseURL: apiClient.baseURL,
+        wsBaseURL: baseUrl,
+        protocol: wsUrl.protocol,
+        host: wsUrl.host,
+        pathname: wsUrl.pathname,
+        fullURL: wsUrl.toString()
+      });
       setSignalingState('connecting');
       
       const ws = new WebSocket(wsUrl.toString());
@@ -208,13 +217,23 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       };
       
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('❌ WebSocket error:', error);
+        console.error('❌ WebSocket error details:', {
+          readyState: ws.readyState,
+          url: ws.url,
+          error: error
+        });
         setSignalingState('error');
         setError('Failed to connect to signaling server');
       };
       
       ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason);
+        console.log('🔌 WebSocket closed:', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          url: ws.url
+        });
         setSignalingState('closed');
         signalingWsRef.current = null;
         
@@ -318,12 +337,21 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       updateConnectionState('connecting');
       
       // First, request WebRTC session from API
-      const response = await apiClient.post('/v1/webrtc/sessions/start', {
+      console.log('🚀 Starting WebRTC session:', {
+        client_id: currentClientId,
+        camera_id: cameraId,
+        site_id: siteId,
+        site_id_parsed: parseInt(siteId)
+      });
+      
+      const response = await apiClient.post('/webrtc/sessions/start', {
         session_id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         client_id: currentClientId,
         camera_id: cameraId,
         site_id: parseInt(siteId)
       });
+      
+      console.log('✅ WebRTC session response:', response);
       
       if (response.session_id) {
         const newSession: WebRTCSession = {
@@ -352,7 +380,13 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       }
       
     } catch (err: any) {
-      setError(err.message || 'Failed to start WebRTC stream');
+      console.error('❌ WebRTC session failed:', err);
+      console.error('❌ Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      setError(err.response?.data?.detail || err.message || 'Failed to start WebRTC stream');
       updateConnectionState('error');
       message.error('Failed to start WebRTC stream');
     } finally {
@@ -392,7 +426,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       // Stop session on server
       if (session) {
         try {
-          await apiClient.post(`/v1/webrtc/sessions/${session.session_id}/stop`);
+          await apiClient.post(`/webrtc/sessions/${session.session_id}/stop`);
         } catch (err) {
           console.warn('Failed to stop session on server:', err);
         }
