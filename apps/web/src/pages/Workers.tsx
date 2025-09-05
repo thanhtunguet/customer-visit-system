@@ -153,7 +153,6 @@ const Workers: React.FC = () => {
 
     try {
       const wsUrl = apiClient.getWorkerWebSocketUrl(currentTenant);
-      console.log('Attempting WebSocket connection to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
@@ -613,19 +612,19 @@ const Workers: React.FC = () => {
         </Row>
 
         {/* Controls */}
-        <div className="flex justify-between items-center mb-4">
-          <Space>
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-4">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Search
               placeholder="Search workers..."
               allowClear
-              style={{ width: 250 }}
+              className="w-full sm:w-64"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
             <Select
               placeholder="Filter by status"
               allowClear
-              style={{ width: 150 }}
+              className="w-full sm:w-36"
               value={statusFilter}
               onChange={setStatusFilter}
               options={WorkerStatusHelper.getStatusOptions()}
@@ -633,35 +632,37 @@ const Workers: React.FC = () => {
             <Select
               placeholder="Filter by site"
               allowClear
-              style={{ width: 150 }}
+              className="w-full sm:w-36"
               value={siteFilter}
               onChange={setSiteFilter}
               options={sites.map(site => ({ value: site.site_id, label: site.name }))}
             />
-          </Space>
-          <Space>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm text-gray-500">
                 {wsConnected ? 'Live' : 'Disconnected'}
               </span>
             </div>
-            <Button
-              icon={<DeleteOutlined />}
-              onClick={handleCleanupStaleWorkers}
-              title="Mark stale workers as offline"
-            >
-              Cleanup Stale
-            </Button>
-            <Button
-              type="primary"
-              icon={<ReloadOutlined />}
-              loading={loading}
-              onClick={loadWorkers}
-            >
-              Refresh
-            </Button>
-          </Space>
+            <div className="flex gap-2">
+              <Button
+                icon={<DeleteOutlined />}
+                onClick={handleCleanupStaleWorkers}
+                title="Mark stale workers as offline"
+              >
+                Cleanup Stale
+              </Button>
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                loading={loading}
+                onClick={loadWorkers}
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Alert for offline workers */}
