@@ -133,7 +133,7 @@ class FaceMatchingService:
             )
             logger.info(f"Stored embedding for {person_type} {person_id} with confidence {event.confidence:.3f}")
 
-        # Create visit record
+        # Create visit record (this will commit the customer and visit together)
         visit_id = await self._create_visit_record(
             db_session=db_session,
             tenant_id=tenant_id,
@@ -213,7 +213,8 @@ class FaceMatchingService:
             visit_count=0,
         )
         db_session.add(customer)
-        await db_session.flush()  # This will populate the customer_id
+        await db_session.flush()  # This will populate the customer_id but not commit
+        logger.info(f"Created new customer record (not yet committed): {customer.customer_id}")
         return customer.customer_id
 
     async def _create_visit_record(
