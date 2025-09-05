@@ -305,10 +305,13 @@ class WorkerClient:
         try:
             await self._ensure_authenticated()
             
+            # Get current capabilities with dynamic streaming status
+            current_capabilities = self._get_current_capabilities()
+            
             heartbeat_data = {
                 "status": status.value,
                 "faces_processed_count": self.faces_processed_since_heartbeat,
-                "capabilities": self.capabilities,
+                "capabilities": current_capabilities,
                 "current_camera_id": self.assigned_camera_id,
             }
             
@@ -344,6 +347,48 @@ class WorkerClient:
             
         except Exception as e:
             logger.error(f"Failed to send heartbeat to consolidated API: {e}")
+
+    
+    def _get_current_capabilities(self) -> dict:
+        """Get current capabilities with dynamic streaming status"""
+        current_capabilities = self.capabilities.copy()
+        
+        # Update streaming status based on current state
+        if self.streaming_service:
+            try:
+                # Get streaming status from streaming service
+                active_streams = self.streaming_service.get_active_streams()
+                current_capabilities.update({
+                    "active_camera_streams": list(active_streams.keys()),
+                    "total_active_streams": len(active_streams),
+                    "streaming_status_updated": datetime.utcnow().isoformat(),
+                })
+            except Exception as e:
+                logger.debug(f"Could not get streaming status: {e}")
+                current_capabilities.update({
+                    "active_camera_streams": [],
+                    "total_active_streams": 0,
+                    "streaming_status_updated": datetime.utcnow().isoformat(),
+                })
+        else:
+            # No streaming service - determine from worker status and camera assignment
+            worker_status = self._get_current_worker_status()
+            
+            # If worker is PROCESSING and has a camera assigned, it's streaming
+            if worker_status == WorkerStatus.PROCESSING and self.assigned_camera_id:
+                current_capabilities.update({
+                    "active_camera_streams": [str(self.assigned_camera_id)],
+                    "total_active_streams": 1,
+                    "streaming_status_updated": datetime.utcnow().isoformat(),
+                })
+            else:
+                current_capabilities.update({
+                    "active_camera_streams": [],
+                    "total_active_streams": 0,
+                    "streaming_status_updated": datetime.utcnow().isoformat(),
+                })
+        
+        return current_capabilities
             # Don't raise - heartbeat failures shouldn't crash the worker
     
     async def _heartbeat_loop(self):

@@ -829,8 +829,8 @@ class FaceRecognitionWorker:
                     
                     logger.info(f"Camera connected successfully, processing at {self.config.worker_fps} FPS")
                     
-                    # Report ready to process
-                    await self.worker_client.report_idle()
+                    # Report processing started
+                    await self.worker_client.report_processing()
                     
                     # Main processing loop
                     frame_count = 0
