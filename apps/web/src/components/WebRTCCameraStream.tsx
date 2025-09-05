@@ -121,6 +121,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           console.log('Video element source set to remote stream');
+          try { videoRef.current.play(); } catch (_) {}
         }
       }
     };

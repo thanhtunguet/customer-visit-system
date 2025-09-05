@@ -214,6 +214,7 @@ class CameraManager:
                     stats["fps"] = frame_count / (current_time - last_stats_update)
                     frame_count = 0
                     last_stats_update = current_time
+                    logger.debug(f"Camera {camera_id}: capture FPS ~{stats['fps']:.1f}, last_frame_age={(time.time()-stats['last_frame_time']):.2f}s")
                     
                 # Small delay to prevent CPU overload
                 time.sleep(0.01)
