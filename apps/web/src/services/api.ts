@@ -290,7 +290,7 @@ class ApiClient {
     const wsProtocol = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
     const wsBaseUrl = baseUrl.replace(/^https?:/, wsProtocol);
     
-    const url = new URL(`${wsBaseUrl}/v1/registry/workers/ws/${tenantId}`);
+    const url = new URL(`${wsBaseUrl}/v1/workers/ws/${tenantId}`);
     if (token) {
       url.searchParams.set('token', token);
     }
@@ -604,7 +604,7 @@ class ApiClient {
     offline_count: number;
     error_count: number;
   }> {
-    const response = await this.client.get('/registry/workers', { params });
+    const response = await this.client.get('/workers', { params });
     return response.data;
   }
 
@@ -627,12 +627,12 @@ class ApiClient {
     registration_time: string;
     is_healthy: boolean;
   }> {
-    const response = await this.client.get(`/registry/workers/${workerId}`);
+    const response = await this.client.get(`/workers/${workerId}`);
     return response.data;
   }
 
   async deleteWorker(workerId: string): Promise<{ message: string }> {
-    const response = await this.client.delete(`/registry/workers/${workerId}`);
+    const response = await this.client.delete(`/workers/${workerId}`);
     return response.data;
   }
 
@@ -641,7 +641,7 @@ class ApiClient {
     ttl_seconds: number; 
     removed_count: number 
   }> {
-    const response = await this.client.post('/registry/workers/cleanup-stale', { ttl_seconds: ttlSeconds });
+    const response = await this.client.post('/workers/cleanup-stale', { ttl_seconds: ttlSeconds });
     return response.data;
   }
 
