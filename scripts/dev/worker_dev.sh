@@ -3,26 +3,30 @@ set -euo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")"/../.. && pwd)
 cd "$ROOT_DIR/apps/worker"
 
+# Accept worker ID as parameter
+PARAM_WORKER_ID="${1:-}"
+
 python3 -m venv .venv || true
 source .venv/bin/activate
 python -m pip install --upgrade pip >/dev/null
 pip install -r requirements.txt >/dev/null || true
 
-# Load environment variables from .env file if it exists, preserving existing ones
+# Load environment variables from .env file if it exists
 if [ -f .env ]; then
     echo "Loading environment variables from .env file..."
-    # Store existing environment variables that we want to preserve
-    EXISTING_WORKER_ID=${WORKER_ID:-}
-    
     set -o allexport
     source .env
     set +o allexport
-    
-    # Restore command-line environment variables if they were set
-    if [ -n "$EXISTING_WORKER_ID" ]; then
-        export WORKER_ID="$EXISTING_WORKER_ID"
-        echo "Preserving command-line WORKER_ID: $WORKER_ID"
-    fi
+fi
+
+# Override WORKER_ID from parameter if provided
+if [ -n "$PARAM_WORKER_ID" ]; then
+    export WORKER_ID="$PARAM_WORKER_ID"
+    echo "Using parameter WORKER_ID: $WORKER_ID"
+elif [ -n "${WORKER_ID:-}" ]; then
+    echo "Using WORKER_ID from environment/config: $WORKER_ID"
+else
+    echo "No WORKER_ID specified, will use auto-generated ID"
 fi
 
 export API_URL=${API_URL:-http://localhost:8080}

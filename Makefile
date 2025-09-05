@@ -35,7 +35,7 @@ api-dev:
 	bash scripts/dev/api_dev.sh
 
 worker-dev:
-	bash scripts/dev/worker_dev.sh
+	@bash scripts/dev/worker_dev.sh $(W)
 
 web-dev:
 	bash scripts/dev/web_dev.sh

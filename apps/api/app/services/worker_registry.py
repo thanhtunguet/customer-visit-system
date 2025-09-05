@@ -130,7 +130,7 @@ class WorkerRegistry:
     
     def __init__(self):
         self.workers: Dict[str, WorkerInfo] = {}  # worker_id -> WorkerInfo
-        self.worker_by_hostname: Dict[str, Dict[str, str]] = {}  # tenant_id -> hostname -> worker_id
+        self.worker_by_hostname: Dict[str, Dict[str, List[str]]] = {}  # tenant_id -> hostname -> List[worker_id]
         self.cleanup_task: Optional[asyncio.Task] = None
         self.cleanup_interval = 60  # seconds
         self.worker_ttl = 300  # 5 minutes TTL
@@ -180,26 +180,52 @@ class WorkerRegistry:
     ) -> WorkerInfo:
         """Register a new worker or update existing one"""
         
-        # Check if worker with same hostname exists for this tenant
+        # Check for existing workers on this hostname and update if matching worker ID
         if tenant_id in self.worker_by_hostname:
             if hostname in self.worker_by_hostname[tenant_id]:
-                existing_worker_id = self.worker_by_hostname[tenant_id][hostname]
-                if existing_worker_id in self.workers:
-                    # Update existing worker
-                    worker = self.workers[existing_worker_id]
-                    worker.ip_address = ip_address
-                    worker.worker_name = worker_name
-                    worker.worker_version = worker_version
-                    worker.capabilities = capabilities or {}
-                    worker.site_id = site_id
-                    worker.camera_id = camera_id
-                    worker.status = WorkerStatus.IDLE
-                    worker.last_heartbeat = datetime.utcnow()
-                    worker.registration_time = datetime.utcnow()  # Reset registration time
-                    
-                    await self._notify_callbacks("worker_updated", worker)
-                    logger.info(f"Worker {worker.worker_id} ({hostname}) updated for tenant {tenant_id}")
-                    return worker
+                existing_worker_ids = self.worker_by_hostname[tenant_id][hostname]
+                
+                # If preferred worker ID is specified, check if it already exists
+                if preferred_worker_id and preferred_worker_id in existing_worker_ids:
+                    if preferred_worker_id in self.workers:
+                        # Update existing worker with same ID
+                        worker = self.workers[preferred_worker_id]
+                        worker.ip_address = ip_address
+                        worker.worker_name = worker_name
+                        worker.worker_version = worker_version
+                        worker.capabilities = capabilities or {}
+                        worker.site_id = site_id
+                        worker.camera_id = camera_id
+                        worker.status = WorkerStatus.IDLE
+                        worker.last_heartbeat = datetime.utcnow()
+                        worker.registration_time = datetime.utcnow()  # Reset registration time
+                        
+                        await self._notify_callbacks("worker_updated", worker)
+                        logger.info(f"Worker {worker.worker_id} ({hostname}) updated for tenant {tenant_id}")
+                        return worker
+                
+                # If no preferred worker ID, update the first worker on this hostname (backward compatibility)
+                elif not preferred_worker_id and existing_worker_ids:
+                    first_worker_id = existing_worker_ids[0]
+                    if first_worker_id in self.workers:
+                        worker = self.workers[first_worker_id]
+                        worker.ip_address = ip_address
+                        worker.worker_name = worker_name
+                        worker.worker_version = worker_version
+                        worker.capabilities = capabilities or {}
+                        worker.site_id = site_id
+                        worker.camera_id = camera_id
+                        worker.status = WorkerStatus.IDLE
+                        worker.last_heartbeat = datetime.utcnow()
+                        worker.registration_time = datetime.utcnow()  # Reset registration time
+                        
+                        await self._notify_callbacks("worker_updated", worker)
+                        logger.info(f"Worker {worker.worker_id} ({hostname}) updated for tenant {tenant_id}")
+                        return worker
+                
+                # Different worker ID requested - allow multiple workers per hostname
+                if preferred_worker_id:
+                    logger.info(f"Allowing multiple workers per hostname: existing {existing_worker_ids}, new {preferred_worker_id}")
         
         # Create new worker with preferred ID if provided
         if preferred_worker_id:
@@ -242,10 +268,13 @@ class WorkerRegistry:
         # Register worker
         self.workers[worker_id] = worker
         
-        # Index by hostname for faster lookup
+        # Index by hostname for faster lookup (support multiple workers per hostname)
         if tenant_id not in self.worker_by_hostname:
             self.worker_by_hostname[tenant_id] = {}
-        self.worker_by_hostname[tenant_id][hostname] = worker_id
+        if hostname not in self.worker_by_hostname[tenant_id]:
+            self.worker_by_hostname[tenant_id][hostname] = []
+        if worker_id not in self.worker_by_hostname[tenant_id][hostname]:
+            self.worker_by_hostname[tenant_id][hostname].append(worker_id)
         
         # Auto-assign camera if worker has site_id and db_session is available
         if site_id and db_session:
@@ -464,14 +493,27 @@ class WorkerRegistry:
         return self.workers.get(worker_id)
     
     def get_worker_by_hostname(self, tenant_id: str, hostname: str) -> Optional[WorkerInfo]:
-        """Get worker by hostname"""
+        """Get first worker by hostname (for backward compatibility)"""
         if tenant_id not in self.worker_by_hostname:
             return None
         
-        worker_id = self.worker_by_hostname[tenant_id].get(hostname)
-        if worker_id:
-            return self.workers.get(worker_id)
+        worker_ids = self.worker_by_hostname[tenant_id].get(hostname, [])
+        if worker_ids:
+            return self.workers.get(worker_ids[0])  # Return first worker
         return None
+    
+    def get_workers_by_hostname(self, tenant_id: str, hostname: str) -> List[WorkerInfo]:
+        """Get all workers by hostname"""
+        if tenant_id not in self.worker_by_hostname:
+            return []
+        
+        worker_ids = self.worker_by_hostname[tenant_id].get(hostname, [])
+        workers = []
+        for worker_id in worker_ids:
+            worker = self.workers.get(worker_id)
+            if worker:
+                workers.append(worker)
+        return workers
     
     def list_workers(
         self,
@@ -526,18 +568,18 @@ class WorkerRegistry:
         
         # Remove from hostname index
         if worker.tenant_id in self.worker_by_hostname:
-            hostname_to_remove = None
-            for hostname, wid in self.worker_by_hostname[worker.tenant_id].items():
-                if wid == worker_id:
-                    hostname_to_remove = hostname
+            for hostname, worker_ids in self.worker_by_hostname[worker.tenant_id].items():
+                if worker_id in worker_ids:
+                    worker_ids.remove(worker_id)
+                    
+                    # Clean up empty hostname entries
+                    if not worker_ids:
+                        del self.worker_by_hostname[worker.tenant_id][hostname]
                     break
             
-            if hostname_to_remove:
-                del self.worker_by_hostname[worker.tenant_id][hostname_to_remove]
-                
-                # Clean up empty tenant entries
-                if not self.worker_by_hostname[worker.tenant_id]:
-                    del self.worker_by_hostname[worker.tenant_id]
+            # Clean up empty tenant entries
+            if not self.worker_by_hostname[worker.tenant_id]:
+                del self.worker_by_hostname[worker.tenant_id]
         
         # Remove from workers
         del self.workers[worker_id]
