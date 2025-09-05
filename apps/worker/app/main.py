@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import httpx
 import numpy as np
@@ -296,8 +296,15 @@ class FaceRecognitionWorker:
         if self.access_token:
             await self.webrtc_streamer.initialize(self.access_token, self.config.api_url)
         
+        # Wire camera assignment/release callbacks so camera manager is controlled by commands
+        self.worker_client.set_camera_assignment_callback(self._on_assign_camera)
+        self.worker_client.set_camera_release_callback(self._on_release_camera)
+
         # Set WebRTC reference in worker client
         self.worker_client.set_webrtc_streamer(self.webrtc_streamer)
+
+        # Provide camera config to WebRTC streamer for on-demand start
+        self.webrtc_streamer.set_camera_config_provider(self._get_camera_config_for)
         
         # Start failed event queue processor
         self.queue_processor_task = asyncio.create_task(self._process_failed_events_queue())
@@ -306,6 +313,43 @@ class FaceRecognitionWorker:
         self.shutdown_monitor_task = asyncio.create_task(self._monitor_shutdown())
         
         logger.info("Worker initialized successfully")
+
+    async def _on_assign_camera(self, camera_id: int, camera_type: str, rtsp_url: Optional[str], device_index: Optional[int]):
+        """Start camera on assignment and cache config in worker_client."""
+        cam_cfg: Dict[str, Any] = {
+            "camera_type": camera_type or ("rtsp" if rtsp_url else "webcam"),
+            "rtsp_url": rtsp_url,
+            "device_index": device_index if device_index is not None else 0,
+            "fps": self.config.worker_fps,
+            "width": 640,
+            "height": 480,
+        }
+        # Cache on worker_client for later use
+        self.worker_client.camera_config = cam_cfg
+        self.worker_client.assigned_camera_id = int(camera_id)
+        try:
+            started = await self.camera_manager.start_camera(int(camera_id), cam_cfg)
+            if started:
+                logger.info(f"Camera {camera_id} started for assignment")
+            else:
+                logger.error(f"Failed to start camera {camera_id} on assignment")
+        except Exception as e:
+            logger.error(f"Error starting camera {camera_id}: {e}")
+
+    async def _on_release_camera(self, camera_id: int):
+        """Stop camera on release and clear cache."""
+        try:
+            await self.camera_manager.stop_camera(int(camera_id))
+        finally:
+            if self.worker_client.assigned_camera_id == int(camera_id):
+                self.worker_client.assigned_camera_id = None
+                self.worker_client.camera_config = None
+
+    def _get_camera_config_for(self, camera_id: int) -> Optional[Dict[str, Any]]:
+        """Return camera config if it matches current assignment."""
+        if self.worker_client.assigned_camera_id == int(camera_id):
+            return self.worker_client.get_camera_config()
+        return None
     
     async def shutdown(self):
         """Cleanup resources"""
@@ -1031,4 +1075,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Unhandled exception in main: {e}")
         os._exit(1)
-

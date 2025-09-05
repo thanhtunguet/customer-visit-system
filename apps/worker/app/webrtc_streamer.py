@@ -88,6 +88,13 @@ class WebRTCStreamer:
         self.is_connected = False
         self.reconnect_delay = 5  # seconds
         self.max_reconnect_attempts = 10
+
+        # Optional provider to fetch camera configuration by id
+        self._camera_config_provider: Optional[Callable[[int], Optional[Dict[str, Any]]]] = None
+
+    def set_camera_config_provider(self, provider: Callable[[int], Optional[Dict[str, Any]]]):
+        """Set a provider function to retrieve camera configuration for a camera_id."""
+        self._camera_config_provider = provider
         
     async def initialize(self, access_token: str, api_base_url: str = "http://localhost:8080"):
         """Initialize WebRTC streamer and connect to signaling server"""
@@ -221,6 +228,23 @@ class WebRTCStreamer:
         logger.info(f"WebRTC stream request: session {session_id}, camera {camera_id}")
         
         try:
+            # Ensure camera is active before creating track
+            if not self.camera_manager.is_camera_active(camera_id):
+                cam_cfg: Optional[Dict[str, Any]] = None
+                if self._camera_config_provider:
+                    try:
+                        cam_cfg = self._camera_config_provider(camera_id)
+                    except Exception as e:
+                        logger.warning(f"Camera config provider error: {e}")
+                if cam_cfg:
+                    logger.info(f"Starting camera {camera_id} for WebRTC session {session_id}")
+                    started = await self.camera_manager.start_camera(camera_id, cam_cfg)
+                    if not started:
+                        logger.warning(f"Camera {camera_id} failed to start; streaming black frames")
+                else:
+                    logger.warning(
+                        f"No camera config available for {camera_id}; proceeding but frames may be black"
+                    )
             # Create RTCPeerConnection
             pc = RTCPeerConnection()
             self.peer_connections[session_id] = pc
