@@ -102,13 +102,20 @@ class WorkerClient:
         """Initialize worker client and register with backend"""
         self.http_client = httpx.AsyncClient(timeout=30.0)
         
+        # Log environment info for debugging
+        env_worker_id = os.getenv("WORKER_ID")
+        if env_worker_id:
+            logger.info(f"WORKER_ID environment variable detected: {env_worker_id}")
+        else:
+            logger.info("No WORKER_ID environment variable set, will use .env file or auto-generate")
+        
         # Register with backend
         await self._register_worker()
         
         # Start heartbeat task
         if self.worker_id:
             self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-            logger.info(f"Worker client initialized with ID: {self.worker_id}")
+            logger.info(f"Worker client initialized with final ID: {self.worker_id}")
         else:
             logger.error("Failed to register worker, heartbeat not started")
     
@@ -207,12 +214,16 @@ class WorkerClient:
             await self._authenticate()
     
     async def _register_worker(self):
-        """Register worker with backend"""
+        """Register worker with consolidated API"""
         # Get or create persistent worker ID
         persistent_worker_id = worker_id_manager.get_or_create_worker_id(
             tenant_id=self.config.tenant_id,
             site_id=str(self.config.site_id) if self.config.site_id else None
         )
+        
+        # Keep track of our intended worker ID (especially important for env vars)
+        intended_worker_id = persistent_worker_id
+        logger.info(f"Registering worker with intended ID: {intended_worker_id}")
         
         for attempt in range(self.max_registration_retries):
             try:
@@ -221,7 +232,7 @@ class WorkerClient:
                     continue
                 
                 registration_data = {
-                    "worker_id": persistent_worker_id,  # Use persistent ID
+                    "worker_id": intended_worker_id,  # Use our intended ID
                     "worker_name": self.worker_name,
                     "hostname": self.hostname,
                     "worker_version": self.worker_version,
@@ -230,15 +241,31 @@ class WorkerClient:
                     "is_reconnection": self.worker_id is not None,  # Flag for API to know this is a reconnection
                 }
                 
+                # Use consolidated worker API
                 response = await self.http_client.post(
-                    f"{self.config.api_url}/v1/registry/workers/register",
+                    f"{self.config.api_url}/v1/workers/register",
                     json=registration_data,
                     headers={"Authorization": f"Bearer {self.access_token}"}
                 )
                 response.raise_for_status()
                 
                 result = response.json()
-                self.worker_id = result.get("worker_id", persistent_worker_id)
+                
+                # Use our intended worker ID, not what backend returns
+                # This ensures environment variables and .env file WORKER_IDs are respected
+                backend_worker_id = result.get("worker_id")
+                if backend_worker_id and backend_worker_id != intended_worker_id:
+                    logger.warning(f"Backend returned different worker_id ({backend_worker_id}), keeping intended ID ({intended_worker_id})")
+                
+                self.worker_id = intended_worker_id  # Always use our intended ID
+                
+                # Capture camera assignment from backend response
+                if "assigned_camera_id" in result and result["assigned_camera_id"]:
+                    self.assigned_camera_id = int(result["assigned_camera_id"])
+                    logger.info(f"Worker assigned camera {self.assigned_camera_id} during registration")
+                else:
+                    self.assigned_camera_id = None
+                    logger.info("Worker registered but no camera assigned")
                 
                 # Update persistent storage with successful registration
                 worker_id_manager.update_last_used(
@@ -247,15 +274,8 @@ class WorkerClient:
                     site_id=str(self.config.site_id) if self.config.site_id else None
                 )
                 
-                # Capture camera assignment
-                if "assigned_camera_id" in result and result["assigned_camera_id"]:
-                    self.assigned_camera_id = int(result["assigned_camera_id"])
-                    logger.info(f"Worker registered and assigned camera {self.assigned_camera_id}")
-                else:
-                    logger.info(f"Worker registered but no camera assigned")
-                
                 status = "reconnected" if registration_data["is_reconnection"] else "registered"
-                logger.info(f"Worker {status} successfully: {result.get('message', 'Success')}")
+                logger.info(f"Worker {status} successfully with consolidated API - ID {self.worker_id}: {result.get('message', 'Success')}")
                 return
                 
             except Exception as e:
@@ -264,13 +284,13 @@ class WorkerClient:
                 # If we're using a persistent worker ID and getting 404/403 errors, 
                 # it might be stale - try clearing it on the last attempt
                 if (attempt == self.max_registration_retries - 1 and 
-                    persistent_worker_id and 
+                    intended_worker_id and 
                     hasattr(e, 'response') and 
                     e.response and e.response.status_code in [404, 403]):
                     logger.warning("Clearing potentially stale worker ID for fresh registration")
                     worker_id_manager.clear_worker_id()
                     # Create a new ID for potential retry
-                    persistent_worker_id = worker_id_manager.get_or_create_worker_id(
+                    intended_worker_id = worker_id_manager.get_or_create_worker_id(
                         tenant_id=self.config.tenant_id,
                         site_id=str(self.config.site_id) if self.config.site_id else None
                     )
@@ -279,10 +299,11 @@ class WorkerClient:
                     wait_time = 2 ** attempt  # Exponential backoff
                     await asyncio.sleep(wait_time)
         
-        logger.error("Failed to register worker after all attempts")
+        logger.error(f"Failed to register worker after {self.max_registration_retries} attempts")
+        raise RuntimeError("Worker registration failed")
     
-    async def _send_heartbeat(self, status: Optional[WorkerStatus] = None, error_message: Optional[str] = None):
-        """Send heartbeat to backend and check for shutdown signals"""
+    async def _send_heartbeat(self, status: WorkerStatus = WorkerStatus.IDLE):
+        """Send heartbeat to consolidated API"""
         if not self.worker_id:
             logger.warning("Cannot send heartbeat - worker not registered")
             return
@@ -290,65 +311,46 @@ class WorkerClient:
         try:
             await self._ensure_authenticated()
             
-            # First check for shutdown signals and commands
-            await self._check_shutdown_signal()
-            await self._check_pending_commands()
-            
-            # Determine current status if not explicitly provided
-            if status is None:
-                status = self._get_current_worker_status()
-            
             heartbeat_data = {
                 "status": status.value,
                 "faces_processed_count": self.faces_processed_since_heartbeat,
-                "capabilities": self.capabilities
+                "capabilities": self.capabilities,
+                "current_camera_id": self.assigned_camera_id,
             }
             
-            # Include streaming status information
-            if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
-                active_cameras = self.streaming_service.get_active_cameras()
-                heartbeat_data["active_camera_streams"] = active_cameras
-                heartbeat_data["total_active_streams"] = len(active_cameras)
-                
-                # Include current camera if processing/streaming
-                if status in [WorkerStatus.PROCESSING, WorkerStatus.ONLINE] and active_cameras:
-                    # Use first active camera or assigned camera
-                    current_camera = self.assigned_camera_id if self.assigned_camera_id else (int(active_cameras[0]) if active_cameras else None)
-                    if current_camera:
-                        heartbeat_data["current_camera_id"] = current_camera
+            # Add error message if we're in error state
+            if hasattr(self, '_last_error') and self._last_error:
+                heartbeat_data["error_message"] = self._last_error
             
-            # Include assigned camera even if not streaming
-            if self.assigned_camera_id:
-                heartbeat_data["assigned_camera_id"] = self.assigned_camera_id
-            
-            if error_message:
-                heartbeat_data["error_message"] = error_message
-            
+            # Use consolidated worker API
             response = await self.http_client.post(
-                f"{self.config.api_url}/v1/registry/workers/{self.worker_id}/heartbeat",
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/heartbeat",
                 json=heartbeat_data,
-                headers={"Authorization": f"Bearer {self.access_token}"}
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                timeout=5.0
             )
             response.raise_for_status()
             
-            # Handle response from heartbeat
             result = response.json()
-            if "assigned_camera_id" in result and result["assigned_camera_id"]:
-                new_camera_id = int(result["assigned_camera_id"])
-                if new_camera_id != self.assigned_camera_id:
-                    self.assigned_camera_id = new_camera_id
-                    logger.info(f"Camera assignment updated to: {self.assigned_camera_id}")
-            elif result.get("assigned_camera_id") is None:
-                if self.assigned_camera_id is not None:
-                    logger.info(f"Camera assignment removed (was {self.assigned_camera_id})")
+            
+            # Reset faces processed count after successful heartbeat
+            self.faces_processed_since_heartbeat = 0
+            
+            # Update camera assignment if backend provides it
+            backend_camera_id = result.get("assigned_camera_id")
+            if backend_camera_id != self.assigned_camera_id:
+                if backend_camera_id:
+                    logger.info(f"Backend updated camera assignment: {self.assigned_camera_id} → {backend_camera_id}")
+                    self.assigned_camera_id = backend_camera_id
+                else:
+                    logger.info("Backend removed camera assignment")
                     self.assigned_camera_id = None
             
-            # Reset counter after successful heartbeat
-            self.faces_processed_since_heartbeat = 0
-            logger.debug(f"Heartbeat sent successfully - status: {status.value}, camera: {self.assigned_camera_id}")
+            logger.debug(f"Heartbeat sent successfully to consolidated API - status: {status.value}")
             
         except Exception as e:
-            logger.error(f"Failed to send heartbeat: {e}")
+            logger.error(f"Failed to send heartbeat to consolidated API: {e}")
+            # Don't raise - heartbeat failures shouldn't crash the worker
     
     async def _heartbeat_loop(self):
         """Main heartbeat loop"""
@@ -394,7 +396,9 @@ class WorkerClient:
         await self._send_heartbeat(status=WorkerStatus.IDLE)
     
     async def request_camera_assignment(self):
-        """Request camera assignment from backend"""
+        """
+        Request camera assignment using consolidated API.
+        """
         if not self.worker_id:
             logger.warning("Cannot request camera assignment - worker not registered")
             return None
@@ -402,24 +406,26 @@ class WorkerClient:
         try:
             await self._ensure_authenticated()
             
+            # Use consolidated worker API
             response = await self.http_client.post(
-                f"{self.config.api_url}/v1/workers/{self.worker_id}/request-camera",
+                f"{self.config.api_url}/v1/workers/{self.worker_id}/camera/request",
+                json={"site_id": self.config.site_id},
                 headers={"Authorization": f"Bearer {self.access_token}"}
             )
             response.raise_for_status()
             
             result = response.json()
-            if result.get("assigned_camera_id"):
-                self.assigned_camera_id = int(result["assigned_camera_id"])
-                self.assigned_camera_name = result.get("assigned_camera_name")
+            if result.get("assigned") and result.get("camera_id"):
+                self.assigned_camera_id = int(result["camera_id"])
+                self.assigned_camera_name = result.get("camera_name")
                 logger.info(f"Camera assignment requested successfully: {self.assigned_camera_id} ({self.assigned_camera_name})")
                 return self.assigned_camera_id
             else:
-                logger.info("Camera assignment requested but no cameras available")
+                logger.info(f"Camera assignment requested but not available: {result.get('message')}")
                 return None
                 
         except Exception as e:
-            logger.error(f"Failed to request camera assignment: {e}")
+            logger.error(f"Failed to request camera assignment from consolidated API: {e}")
             return None
     
     def get_assigned_camera(self) -> Optional[int]:

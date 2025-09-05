@@ -653,9 +653,9 @@ class FaceRecognitionWorker:
                 # Ensure we have authentication
                 await self._ensure_authenticated()
                 
-                # Send the stop signal
+                # Send the stop signal to consolidated API
                 response = await self.http_client.post(
-                    f"{self.config.api_url}/v1/workers/{self.worker_client.worker_id}/stop-signal",
+                    f"{self.config.api_url}/v1/workers/{self.worker_client.worker_id}/shutdown/signal",
                     headers={"Authorization": f"Bearer {self.access_token}"},
                     json={
                         "worker_id": self.worker_client.worker_id,
@@ -671,7 +671,7 @@ class FaceRecognitionWorker:
                 backend_cleanup_completed = response_data.get("backend_cleanup_completed", False)
                 camera_released = response_data.get("camera_released", False)
                 
-                logger.info(f"✅ Successfully sent stop signal to backend (attempt {attempt + 1})")
+                logger.info(f"✅ Successfully sent stop signal to consolidated API (attempt {attempt + 1})")
                 logger.info(f"📄 Backend response: {response_data.get('message', 'No message')}")
                 
                 if backend_cleanup_completed:

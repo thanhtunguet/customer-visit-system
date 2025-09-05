@@ -20,7 +20,7 @@ from .services.worker_registry import worker_registry
 from .services.worker_command_service import worker_command_service
 from .services.camera_delegation_service import camera_delegation_service
 from .core.task_manager import task_manager
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management, workers_consolidated
 
 
 async def initialize_camera_proxy():
@@ -176,9 +176,15 @@ app.include_router(staff.router)
 app.include_router(customers.router)
 app.include_router(events.router)
 app.include_router(files.router)
-app.include_router(workers.router)
-app.include_router(worker_registry_router.router)
-app.include_router(worker_camera_management.router)
+
+# NEW: Consolidated Worker API - replaces fragmented worker endpoints
+app.include_router(workers_consolidated.router)
+
+# OLD: Redundant worker endpoints - TODO: Remove after migration testing
+# app.include_router(workers.router)                    # Redundant: database-backed worker management  
+# app.include_router(worker_registry_router.router)     # Redundant: in-memory worker registry
+# app.include_router(worker_camera_management.router)   # Redundant: camera management now in consolidated API
+
 app.include_router(lease_management.router)
 
 
