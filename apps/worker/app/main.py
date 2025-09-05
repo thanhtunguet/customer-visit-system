@@ -294,7 +294,7 @@ class FaceRecognitionWorker:
         
         # Initialize WebRTC streamer with access token
         if self.access_token:
-            await self.webrtc_streamer.initialize(self.access_token)
+            await self.webrtc_streamer.initialize(self.access_token, self.config.api_url)
         
         # Set WebRTC reference in worker client
         self.worker_client.set_webrtc_streamer(self.webrtc_streamer)

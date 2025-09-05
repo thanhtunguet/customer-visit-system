@@ -33,7 +33,6 @@ import websockets
 from websockets.exceptions import ConnectionClosed
 
 from .camera_manager import CameraManager
-from .core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +89,11 @@ class WebRTCStreamer:
         self.reconnect_delay = 5  # seconds
         self.max_reconnect_attempts = 10
         
-    async def initialize(self, access_token: str):
+    async def initialize(self, access_token: str, api_base_url: str = "http://localhost:8080"):
         """Initialize WebRTC streamer and connect to signaling server"""
         
         # Build signaling WebSocket URL
-        api_ws_url = settings.api_base_url.replace('http://', 'ws://').replace('https://', 'wss://')
+        api_ws_url = api_base_url.replace('http://', 'ws://').replace('https://', 'wss://')
         self.signaling_url = f"{api_ws_url}/v1/webrtc/worker/{self.worker_id}?token={access_token}"
         
         logger.info(f"WebRTC Streamer initialized for worker {self.worker_id}")
