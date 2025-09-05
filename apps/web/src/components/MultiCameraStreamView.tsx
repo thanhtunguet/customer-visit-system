@@ -11,7 +11,7 @@ import {
   BorderlessTableOutlined,
   EyeOutlined
 } from '@ant-design/icons';
-import { CameraStream } from './CameraStream';
+import { WebRTCCameraStream } from './WebRTCCameraStream';
 import { Camera } from '../types/api';
 
 interface MultiCameraStreamViewProps {
@@ -242,7 +242,7 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
             </div>
             
             <div style={{ height: isFullscreen ? 'calc((100vh - 180px) / 2)' : '250px' }}>
-              <CameraStream
+              <WebRTCCameraStream
                 siteId={siteId}
                 cameraId={camera.camera_id}
                 cameraName={camera.name}

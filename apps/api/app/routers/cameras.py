@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,7 @@ from ..models.database import Camera
 from ..schemas import CameraCreate, CameraResponse, WebcamInfo, WebcamListResponse
 from ..services.camera_proxy_service import camera_proxy_service
 from ..services.camera_diagnostics import camera_diagnostics
-from ..services.camera_streaming_service import streaming_service
+
 
 router = APIRouter(prefix="/v1", tags=["Camera Management"])
 logger = logging.getLogger(__name__)
@@ -643,65 +643,10 @@ async def camera_status_stream(
     return await camera_status_broadcaster.stream_site_status(site_id_str, request)
 
 
-@router.get("/sites/{site_id:int}/cameras/{camera_id:int}/stream/feed")
-async def get_camera_stream_feed(
-    site_id: int,
-    camera_id: int,
-    user: Dict = Depends(get_current_user_for_stream),
-    db_session: AsyncSession = Depends(get_db_session)
-):
-    """Get live video feed for a camera (MJPEG stream)"""
-    tenant_id = user["tenant_id"]
-    logger.info(f"Stream feed requested for camera {camera_id} in site {site_id} by tenant {tenant_id}")
-    
-    await db.set_tenant_context(db_session, tenant_id)
-    
-    # Verify camera exists
-    result = await db_session.execute(
-        select(Camera).where(
-            and_(
-                Camera.tenant_id == tenant_id,
-                Camera.site_id == site_id,
-                Camera.camera_id == camera_id
-            )
-        )
-    )
-    camera = result.scalar_one_or_none()
-    if not camera:
-        logger.error(f"Camera {camera_id} not found for tenant {tenant_id} in site {site_id}")
-        raise HTTPException(status_code=404, detail="Camera not found")
-    
-    logger.info(f"Camera {camera_id} found: {camera.name} (active: {camera.is_active})")
-    
-    # Proxy stream from worker
-    try:
-        logger.info(f"Starting proxy stream for camera {camera_id}")
-        
-        # Create an async generator wrapper that properly handles the coroutine
-        async def stream_wrapper():
-            async for chunk in camera_proxy_service.proxy_camera_stream(camera_id):
-                yield chunk
-        
-        logger.info(f"Returning streaming response for camera {camera_id}")
-        return StreamingResponse(
-            stream_wrapper(),
-            media_type="multipart/x-mixed-replace; boundary=frame"
-        )
-    except ValueError as e:
-        logger.error(f"Camera stream proxy error for camera {camera_id}: {e}")
-        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/streaming/debug")
-async def get_streaming_debug_info(
-    user: Dict = Depends(get_current_user)
-):
-    """Get debug information about camera proxy service and worker streaming"""
-    debug_info = await camera_proxy_service.get_streaming_debug_info()
-    return {
-        "proxy_service_status": debug_info,
-        "message": "This endpoint shows camera streaming status across all workers"
-    }
+
+
 
 
 @router.post("/streaming/cleanup")

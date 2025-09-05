@@ -5,7 +5,7 @@ Replaces direct camera streaming with worker delegation and proxy functionality
 import asyncio
 import logging
 import httpx
-from typing import Dict, Optional, Any, AsyncGenerator
+from typing import Dict, Optional, Any
 from datetime import datetime, timedelta
 
 from .camera_delegation_service import camera_delegation_service
@@ -342,105 +342,9 @@ class CameraProxyService:
             "processing_status_updated": worker.capabilities.get("processing_status_updated") if worker.capabilities else None
         }
     
-    async def proxy_camera_stream(self, camera_id: int) -> AsyncGenerator[bytes, None]:
-        """Proxy MJPEG stream from worker to client"""
-        logger.info(f"Starting proxy stream for camera {camera_id}")
-        
-        worker_id = camera_delegation_service.get_camera_worker(camera_id)
-        if not worker_id:
-            logger.error(f"No worker assigned to camera {camera_id}")
-            raise ValueError("No worker assigned to camera")
-        
-        logger.info(f"Camera {camera_id} assigned to worker {worker_id}")
-        
-        worker = worker_registry.get_worker(worker_id)
-        if not worker:
-            logger.error(f"Worker {worker_id} not found in registry")
-            raise ValueError("Assigned worker is not available")
-        
-        if not worker.is_healthy:
-            logger.error(f"Worker {worker_id} is not healthy (status: {worker.status})")
-            raise ValueError("Assigned worker is not available")
-        
-        logger.info(f"Worker {worker_id} is healthy, getting endpoint")
-        
-        endpoint = self._get_worker_endpoint(worker_id)
-        if not endpoint:
-            logger.error(f"No endpoint available for worker {worker_id}")
-            raise ValueError("Worker endpoint not available")
-        
-        logger.info(f"Worker {worker_id} endpoint: {endpoint}")
-        
-        if not self.http_client:
-            logger.error("HTTP client not initialized")
-            raise ValueError("HTTP client not initialized")
-        
-        stream_url = f"{endpoint}/cameras/{camera_id}/stream/feed"
-        logger.info(f"Attempting to proxy stream from: {stream_url}")
-        
-        try:
-            async with self.http_client.stream(
-                "GET",
-                stream_url,
-                timeout=None  # No timeout for streaming
-            ) as response:
-                logger.info(f"Worker stream response status: {response.status_code}")
-                
-                if response.status_code != 200:
-                    response_text = await response.aread()
-                    logger.error(f"Worker stream returned status {response.status_code}, body: {response_text[:500]}")
-                    raise ValueError(f"Worker stream returned status {response.status_code}")
-                
-                logger.info(f"Successfully connected to worker stream, starting proxy")
-                chunk_count = 0
-                async for chunk in response.aiter_bytes():
-                    chunk_count += 1
-                    if chunk_count % 100 == 0:  # Log every 100 chunks
-                        logger.debug(f"Proxied {chunk_count} chunks for camera {camera_id}")
-                    yield chunk
-                    
-        except httpx.ConnectError as e:
-            logger.error(f"Failed to connect to worker {worker_id} at {endpoint}: {e}")
-            raise ValueError("Failed to connect to worker")
-        except httpx.TimeoutException as e:
-            logger.error(f"Worker stream timeout for worker {worker_id}: {e}")
-            raise ValueError("Worker stream timeout")
-        except Exception as e:
-            logger.error(f"Error proxying stream from worker {worker_id}: {e}")
-            raise ValueError(f"Stream proxy error: {str(e)}")
+
     
-    async def get_streaming_debug_info(self) -> Dict[str, Any]:
-        """Get debug information about all camera streaming across workers"""
-        debug_info = {
-            "proxy_service_status": "active",
-            "total_assignments": len(camera_delegation_service.assignments),
-            "worker_endpoints": {},
-            "camera_statuses": {}
-        }
-        
-        # Get all camera assignments
-        assignments = camera_delegation_service.list_assignments()
-        
-        for camera_id_str, assignment_info in assignments.items():
-            camera_id = int(camera_id_str)
-            worker_id = assignment_info["worker_id"]
-            
-            # Get worker endpoint
-            endpoint = self._get_worker_endpoint(worker_id)
-            debug_info["worker_endpoints"][worker_id] = endpoint
-            
-            # Get camera status from worker
-            try:
-                camera_status = await self.get_camera_stream_status(camera_id)
-                debug_info["camera_statuses"][camera_id] = camera_status
-            except Exception as e:
-                debug_info["camera_statuses"][camera_id] = {
-                    "camera_id": camera_id,
-                    "error": f"Failed to get status: {str(e)}",
-                    "worker_id": worker_id
-                }
-        
-        return debug_info
+
     
     def is_camera_streaming(self, camera_id: int) -> bool:
         """Quick check if camera has a worker assigned (doesn't verify actual streaming)"""
