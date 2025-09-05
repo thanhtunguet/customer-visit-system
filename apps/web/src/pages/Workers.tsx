@@ -432,6 +432,19 @@ const Workers: React.FC = () => {
       ),
     },
     {
+      title: 'Worker ID',
+      dataIndex: 'worker_id',
+      key: 'worker_id',
+      width: 140,
+      render: (workerId: string) => (
+        <div className="font-mono text-xs">
+          <code className="bg-gray-100 px-2 py-1 rounded text-gray-700">
+            {workerId}
+          </code>
+        </div>
+      ),
+    },
+    {
       title: 'Worker',
       key: 'worker',
       render: (_, record: Worker) => (
