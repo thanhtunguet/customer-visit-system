@@ -55,6 +55,20 @@ class CustomerFaceService:
             Created CustomerFaceImage or None if not saved
         """
         try:
+            # First, verify the customer exists to avoid foreign key violations
+            from ..models.database import Customer
+            result = await db.execute(
+                select(Customer).where(
+                    Customer.tenant_id == tenant_id,
+                    Customer.customer_id == customer_id
+                )
+            )
+            customer = result.scalar_one_or_none()
+            
+            if not customer:
+                logger.error(f"Customer {customer_id} not found in tenant {tenant_id}, cannot save face image")
+                return None
+            
             # Check if confidence meets minimum threshold
             if confidence_score < self.min_confidence_to_save:
                 logger.debug(f"Face confidence {confidence_score:.3f} below threshold {self.min_confidence_to_save}, skipping")
@@ -104,9 +118,10 @@ class CustomerFaceService:
             db.add(face_image)
             
             # Manage gallery size - keep only the best images
+            # This needs to happen after the image is added to the session
             await self._manage_gallery_size(db, tenant_id, customer_id)
             
-            # Don't flush here either - let the calling code handle everything
+            # Don't commit here - let the caller handle the transaction
             
             logger.info(f"Added face image for customer {customer_id} with confidence {confidence_score:.3f}")
             return face_image
@@ -118,7 +133,10 @@ class CustomerFaceService:
                 return None
             else:
                 logger.error(f"Error adding face image for customer {customer_id}: {e}")
-                # Don't rollback here - let the calling code handle the transaction
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Rollback this session to clean state
+                await db.rollback()
                 return None
     
     async def _calculate_quality_score(
@@ -213,6 +231,20 @@ class CustomerFaceService:
     async def _manage_gallery_size(self, db: AsyncSession, tenant_id: str, customer_id: int) -> None:
         """Manage the size of customer face gallery, keeping only the best images"""
         try:
+            # First verify the customer still exists (defensive programming)
+            from ..models.database import Customer
+            result = await db.execute(
+                select(Customer).where(
+                    Customer.tenant_id == tenant_id,
+                    Customer.customer_id == customer_id
+                )
+            )
+            customer = result.scalar_one_or_none()
+            
+            if not customer:
+                logger.warning(f"Customer {customer_id} not found during gallery management, skipping")
+                return
+            
             # Count current committed images (excluding any pending in current transaction)
             # Use a separate query to get the actual committed count
             result = await db.execute(
@@ -263,6 +295,7 @@ class CustomerFaceService:
             
         except Exception as e:
             logger.error(f"Error managing gallery size for customer {customer_id}: {e}")
+            # Don't re-raise - this is a cleanup operation and shouldn't break the main flow
 
     async def cleanup_excess_images_for_customer(self, db: AsyncSession, tenant_id: str, customer_id: int) -> int:
         """Clean up excess images for a specific customer, returning count of images removed"""

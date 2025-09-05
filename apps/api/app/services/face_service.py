@@ -418,40 +418,49 @@ class FaceMatchingService:
         embedding: List[float],
         visit_id: str
     ):
-        """Save face image to customer gallery"""
+        """Save face image to customer gallery using a fresh database session"""
         try:
             from .customer_face_service import customer_face_service
             from ..core.database import get_db_session
             
-            # Use the existing database session - customer face service will handle its own transactions
-            # Extract metadata for quality assessment
-            metadata = {
-                'source': 'worker_detection',
-                'visit_id': visit_id,
-                'bbox': bbox
-            }
-            
-            result = await customer_face_service.add_face_image(
-                db=db_session,
-                tenant_id=tenant_id,
-                customer_id=customer_id,
-                image_data=face_image_bytes,
-                confidence_score=confidence_score,
-                face_bbox=bbox,
-                embedding=embedding,
-                visit_id=visit_id,
-                metadata=metadata
-            )
-            
-            if result:
-                logger.info(f"✅ Saved face image to customer {customer_id} gallery with confidence {confidence_score:.3f}")
-            else:
-                logger.debug(f"⚠️ Face image not saved to customer {customer_id} gallery (quality/duplicate)")
+            # Create a fresh database session to avoid rollback issues
+            # The customer should already be committed at this point
+            async with get_db_session() as fresh_session:
+                # Set tenant context for the fresh session
+                from ..core.database import db
+                await db.set_tenant_context(fresh_session, tenant_id)
+                
+                # Extract metadata for quality assessment
+                metadata = {
+                    'source': 'worker_detection',
+                    'visit_id': visit_id,
+                    'bbox': bbox
+                }
+                
+                result = await customer_face_service.add_face_image(
+                    db=fresh_session,
+                    tenant_id=tenant_id,
+                    customer_id=customer_id,
+                    image_data=face_image_bytes,
+                    confidence_score=confidence_score,
+                    face_bbox=bbox,
+                    embedding=embedding,
+                    visit_id=visit_id,
+                    metadata=metadata
+                )
+                
+                if result:
+                    # Commit the fresh session
+                    await fresh_session.commit()
+                    logger.info(f"✅ Saved face image to customer {customer_id} gallery with confidence {confidence_score:.3f}")
+                else:
+                    logger.debug(f"⚠️ Face image not saved to customer {customer_id} gallery (quality/duplicate)")
                 
         except Exception as e:
             logger.error(f"❌ Error saving face image to customer gallery: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
+            # Don't re-raise - this is a non-critical operation
 
     async def cleanup_duplicate_embeddings(self, db_session: AsyncSession, tenant_id: int) -> Dict[str, int]:
         """
