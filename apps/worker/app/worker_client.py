@@ -65,19 +65,13 @@ class WorkerClient:
         self.streaming_service = streaming_service
         
     def _get_current_worker_status(self) -> WorkerStatus:
-        """Determine current worker status based on streaming and processing activity"""
-        # Check if we have active camera streams
-        if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
-            active_cameras = self.streaming_service.get_active_cameras()
-            if active_cameras:
-                # Worker is actively streaming cameras
-                return WorkerStatus.PROCESSING
-        
-        # Check if assigned camera but no active streams
+        """Determine current worker status based on camera assignment"""
+        # If we have a camera assigned, we should be PROCESSING 
+        # (the worker should be actively streaming and processing)
         if self.assigned_camera_id:
-            return WorkerStatus.IDLE
+            return WorkerStatus.PROCESSING
             
-        # No camera assigned
+        # No camera assigned - worker is idle
         return WorkerStatus.IDLE
     
     def _parse_site_id(self) -> Optional[int]:
@@ -715,11 +709,15 @@ class WorkerClient:
             "faces_processed": self.faces_processed_since_heartbeat
         }
         
-        # Include streaming information if available
-        if self.streaming_service and hasattr(self.streaming_service, 'get_active_cameras'):
-            active_cameras = self.streaming_service.get_active_cameras()
-            status_info["active_camera_streams"] = active_cameras
-            status_info["total_active_streams"] = len(active_cameras)
+        # Include streaming information based on camera assignment and status
+        if self.assigned_camera_id and current_status == WorkerStatus.PROCESSING:
+            # Worker is actively processing the assigned camera
+            status_info["active_camera_streams"] = [self.assigned_camera_id]
+            status_info["total_active_streams"] = 1
+        else:
+            # Worker is not streaming or no camera assigned
+            status_info["active_camera_streams"] = []
+            status_info["total_active_streams"] = 0
         
         return status_info
     
