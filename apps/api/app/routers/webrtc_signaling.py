@@ -321,13 +321,27 @@ class WebRTCSignalingManager:
     def _find_worker_for_camera(self, camera_id: int, site_id: int, tenant_id: str):
         """Find available worker that can handle the camera"""
         
-        # Get workers for the tenant and site
+        # Get all workers for debugging
+        all_workers = worker_registry.list_workers(
+            tenant_id=tenant_id,
+            include_offline=True
+        )
+        
+        logger.info(f"Looking for worker for camera {camera_id} at site {site_id} (tenant {tenant_id})")
+        logger.info(f"Total workers in tenant: {len(all_workers)}")
+        
+        for worker in all_workers:
+            logger.info(f"Worker {worker.worker_id}: site={worker.site_id}, status={worker.status}, capabilities={worker.capabilities}")
+        
+        # Get workers for the tenant and site - try all statuses first
         workers = worker_registry.list_workers(
             tenant_id=tenant_id,
             site_id=site_id,
-            status=WorkerStatus.IDLE,  # Only idle workers can start new streams
+            status=None,  # Try any status first
             include_offline=False
         )
+        
+        logger.info(f"Workers at site {site_id}: {len(workers)}")
         
         # Filter workers with WebRTC capability
         capable_workers = [
@@ -335,13 +349,26 @@ class WebRTCSignalingManager:
             if w.capabilities and w.capabilities.get("webrtc_streaming", False)
         ]
         
+        logger.info(f"WebRTC-capable workers: {len(capable_workers)}")
+        
         if not capable_workers:
+            # Try again with any worker that has webrtc capability regardless of status
+            all_capable_workers = [
+                w for w in all_workers 
+                if w.capabilities and w.capabilities.get("webrtc_streaming", False)
+            ]
             logger.warning(f"No WebRTC-capable workers found for camera {camera_id} at site {site_id}")
+            logger.warning(f"All WebRTC-capable workers in tenant: {len(all_capable_workers)}")
             return None
             
-        # For now, return first available worker
-        # TODO: Implement load balancing logic
-        return capable_workers[0]
+        # For now, return first available worker (prefer IDLE, but allow others)
+        idle_workers = [w for w in capable_workers if w.status == WorkerStatus.IDLE.value]
+        if idle_workers:
+            logger.info(f"Selected idle worker {idle_workers[0].worker_id} for WebRTC streaming")
+            return idle_workers[0]
+        else:
+            logger.info(f"No idle workers, selecting first available: {capable_workers[0].worker_id}")
+            return capable_workers[0]
         
     def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get session information"""

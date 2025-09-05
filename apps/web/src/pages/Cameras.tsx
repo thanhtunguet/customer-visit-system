@@ -47,7 +47,6 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
 
   // WebRTC streaming state
   const [useWebRTC, setUseWebRTC] = useState(false);
-  const [webrtcModalVisible, setWebrtcModalVisible] = useState(false);
 
   useEffect(() => {
     loadSites();
@@ -251,10 +250,11 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   };
 
   const handleViewStream = async (camera: Camera) => {
+    console.log('🔵 HTTP View Stream clicked - camera:', camera.camera_id, 'useWebRTC:', useWebRTC);
     setStreamingCamera(camera);
     setStreamIntent('view');
     setStreamModalVisible(true);
-    // Check and update stream status when opening modal
+    // Check and update stream status when opening modal for HTTP streaming only
     try {
       const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
       setStreamStatuses(prev => ({ ...prev, [camera.camera_id]: status.stream_active }));
@@ -264,8 +264,11 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   };
 
   const handleViewWebRTCStream = async (camera: Camera) => {
+    console.log('🟢 WebRTC View Stream clicked - camera:', camera.camera_id, 'useWebRTC:', useWebRTC);
+    console.log('🟢 WebRTC handler - typeof useWebRTC:', typeof useWebRTC, 'strict equality check:', useWebRTC === true);
     setStreamingCamera(camera);
-    setWebrtcModalVisible(true);
+    setStreamIntent('view');
+    setStreamModalVisible(true);
   };
 
   const handleStopStream = async (camera: Camera) => {
@@ -438,27 +441,31 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
               <Button
                 type="text"
                 icon={useWebRTC ? <WifiOutlined /> : <EyeOutlined />}
-                onClick={() => useWebRTC ? handleViewWebRTCStream(camera) : handleViewStream(camera)}
+                onClick={() => {
+                  console.log('👆 View button clicked - useWebRTC:', useWebRTC, 'camera:', camera.camera_id);
+                  return useWebRTC ? handleViewWebRTCStream(camera) : handleViewStream(camera);
+                }}
                 size="small"
                 disabled={!camera.is_active}
                 style={useWebRTC ? { color: '#1890ff' } : undefined}
               />
             </Tooltip>
             {!isStreaming ? (
-              <Tooltip title="Start live stream">
+              <Tooltip title={useWebRTC ? "Start WebRTC P2P stream" : "Start HTTP live stream"}>
                 <Button
                   type="text"
                   icon={<PlayCircleOutlined />}
                   onClick={() => handleStartStreaming(camera)}
                   size="small"
                   disabled={!camera.is_active}
+                  style={useWebRTC ? { color: '#1890ff' } : undefined}
                 />
               </Tooltip>
             ) : (
-              <Tooltip title="Stop camera stream">
+              <Tooltip title={useWebRTC ? "Stop WebRTC stream" : "Stop HTTP stream"}>
                 <Popconfirm
                   title="Stop Stream"
-                  description="Are you sure you want to stop this camera stream?"
+                  description={useWebRTC ? "Stop WebRTC P2P stream?" : "Stop HTTP camera stream?"}
                   onConfirm={() => handleStopStream(camera)}
                   okText="Yes"
                   cancelText="No"
@@ -568,7 +575,10 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
           <div className="flex items-center space-x-2">
             <Switch
               checked={useWebRTC}
-              onChange={setUseWebRTC}
+              onChange={(checked) => {
+                console.log('🔄 WebRTC toggle changed:', checked);
+                setUseWebRTC(checked);
+              }}
               checkedChildren="WebRTC"
               unCheckedChildren="HTTP"
               size="small"
@@ -629,9 +639,22 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
         </Form>
       </Modal>
 
-      {/* Camera Streaming Modal */}
+      {/* Camera Streaming Modal - Uses WebRTC or HTTP based on toggle */}
       <Modal
-        title={getStreamModalTitle()}
+        title={
+          useWebRTC ? (
+            <Space>
+              <WifiOutlined style={{ color: '#1890ff' }} />
+              <span>{streamingCamera?.name} - WebRTC P2P Stream</span>
+              <span style={{ color: '#8c8c8c', fontSize: '14px' }}>#{streamingCamera?.camera_id}</span>
+              <Tag color="blue" style={{ marginLeft: '8px' }}>
+                Peer-to-Peer
+              </Tag>
+            </Space>
+          ) : (
+            getStreamModalTitle()
+          )
+        }
         open={streamModalVisible}
         onCancel={() => {
           setStreamModalVisible(false);
@@ -645,66 +668,49 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
         styles={{ body: { padding: '8px' } }}
         centered
       >
-{streamingCamera && (
-          <CameraStream
-            key={`${selectedSite}-${streamingCamera.camera_id}`}
-            siteId={selectedSite}
-            cameraId={streamingCamera.camera_id}
-            cameraName={streamingCamera.name}
-            onClose={() => {
-              setStreamModalVisible(false);
-              setStreamingCamera(null);
-            }}
-            onStreamStateChange={handleStreamStateChange}
-            onConnectionStateChange={handleConnectionStateChange}
-            autoStart={streamIntent === 'start'}
-            autoReconnect={streamIntent === 'view'}
-            currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
-          />
+        {streamingCamera && (
+          (() => {
+            console.log('🔄 Rendering streaming component - useWebRTC:', useWebRTC, 'camera:', streamingCamera.camera_id);
+            console.log('🔄 Component selection debug - typeof useWebRTC:', typeof useWebRTC, 'value:', useWebRTC);
+            console.log('🔄 Will render:', useWebRTC ? 'WebRTCCameraStream' : 'CameraStream');
+            return useWebRTC ? (
+              <WebRTCCameraStream
+              key={`webrtc-${selectedSite}-${streamingCamera.camera_id}`}
+              siteId={selectedSite}
+              cameraId={streamingCamera.camera_id}
+              cameraName={streamingCamera.name}
+              onClose={() => {
+                setStreamModalVisible(false);
+                setStreamingCamera(null);
+              }}
+              onStreamStateChange={handleStreamStateChange}
+              onConnectionStateChange={handleConnectionStateChange}
+              autoStart={streamIntent === 'start'}
+              autoReconnect={streamIntent === 'view'}
+              currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
+            />
+          ) : (
+            <CameraStream
+              key={`${selectedSite}-${streamingCamera.camera_id}`}
+              siteId={selectedSite}
+              cameraId={streamingCamera.camera_id}
+              cameraName={streamingCamera.name}
+              onClose={() => {
+                setStreamModalVisible(false);
+                setStreamingCamera(null);
+              }}
+              onStreamStateChange={handleStreamStateChange}
+              onConnectionStateChange={handleConnectionStateChange}
+              autoStart={streamIntent === 'start'}
+              autoReconnect={streamIntent === 'view'}
+              currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
+            />
+          );
+          })()
         )}
       </Modal>
 
-      {/* WebRTC Camera Streaming Modal */}
-      <Modal
-        title={
-          <Space>
-            <WifiOutlined style={{ color: '#1890ff' }} />
-            <span>{streamingCamera?.name} - WebRTC P2P Stream</span>
-            <span style={{ color: '#8c8c8c', fontSize: '14px' }}>#{streamingCamera?.camera_id}</span>
-            <Tag color="blue" style={{ marginLeft: '8px' }}>
-              Peer-to-Peer
-            </Tag>
-          </Space>
-        }
-        open={webrtcModalVisible}
-        onCancel={() => {
-          setWebrtcModalVisible(false);
-          setStreamingCamera(null);
-        }}
-        footer={null}
-        width="95%"
-        style={{ maxWidth: '1200px' }}
-        styles={{ body: { padding: '8px' } }}
-        centered
-      >
-        {streamingCamera && (
-          <WebRTCCameraStream
-            key={`webrtc-${selectedSite}-${streamingCamera.camera_id}`}
-            siteId={selectedSite}
-            cameraId={streamingCamera.camera_id}
-            cameraName={streamingCamera.name}
-            onClose={() => {
-              setWebrtcModalVisible(false);
-              setStreamingCamera(null);
-            }}
-            onStreamStateChange={handleStreamStateChange}
-            onConnectionStateChange={handleConnectionStateChange}
-            autoStart={true}
-            autoReconnect={false}
-            currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
-          />
-        )}
-      </Modal>
+
 
       {/* Multi Camera Streaming Modal */}
       <Modal

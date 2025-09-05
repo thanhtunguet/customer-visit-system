@@ -645,6 +645,71 @@ class ApiClient {
     return response.data;
   }
 
+  // WebRTC Session Management
+  async startWebRTCSession(data: {
+    session_id: string;
+    client_id: string;
+    camera_id: number;
+    site_id: number;
+  }): Promise<{
+    session_id: string;
+    status: string;
+    message: string;
+    client_id: string;
+    camera_id: number;
+    site_id: number;
+  }> {
+    const response = await this.client.post('/webrtc/sessions/start', data);
+    return response.data;
+  }
+
+  async stopWebRTCSession(sessionId: string): Promise<{
+    session_id: string;
+    status: string;
+    message: string;
+  }> {
+    const response = await this.client.post(`/webrtc/sessions/${sessionId}/stop`);
+    return response.data;
+  }
+
+  async getWebRTCSession(sessionId: string): Promise<{
+    session: {
+      session_id: string;
+      client_id: string;
+      worker_id: string;
+      camera_id: number;
+      site_id: number;
+      status: string;
+      created_at: string;
+      offer_received: boolean;
+      answer_received: boolean;
+    };
+    timestamp: string;
+  }> {
+    const response = await this.client.get(`/webrtc/sessions/${sessionId}`);
+    return response.data;
+  }
+
+  async listWebRTCSessions(): Promise<{
+    sessions: Array<{
+      session_id: string;
+      client_id: string;
+      worker_id: string;
+      camera_id: number;
+      site_id: number;
+      status: string;
+      created_at: string;
+      offer_received: boolean;
+      answer_received: boolean;
+    }>;
+    total_count: number;
+    tenant_id: string;
+    timestamp: string;
+  }> {
+    const response = await this.client.get('/webrtc/sessions');
+    return response.data;
+  }
+
   // Enhanced Streaming Status APIs
   async getSiteStreamingStatus(siteId: number): Promise<{
     site_id: number;
