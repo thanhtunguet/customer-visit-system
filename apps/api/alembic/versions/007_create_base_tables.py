@@ -17,12 +17,30 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    # Create enum types
-    camera_type_enum = sa.Enum('RTSP', 'WEBCAM', name='cameratype')
-    camera_type_enum.create(op.get_bind())
+    # Create enum types conditionally to avoid duplicate errors
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cameratype') THEN
+                CREATE TYPE cameratype AS ENUM ('RTSP', 'WEBCAM');
+            END IF;
+        END
+        $$;
+    """)
     
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+                CREATE TYPE userrole AS ENUM ('SYSTEM_ADMIN', 'TENANT_ADMIN', 'SITE_MANAGER', 'WORKER');
+            END IF;
+        END
+        $$;
+    """)
+    
+    # Create the enum objects for table definitions
+    camera_type_enum = sa.Enum('RTSP', 'WEBCAM', name='cameratype')
     user_role_enum = sa.Enum('SYSTEM_ADMIN', 'TENANT_ADMIN', 'SITE_MANAGER', 'WORKER', name='userrole')
-    user_role_enum.create(op.get_bind())
 
     # Create tenants table
     op.create_table('tenants',

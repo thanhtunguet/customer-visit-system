@@ -19,11 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add new optional fields to customers
-    op.add_column('customers', sa.Column('phone', sa.String(length=20), nullable=True))
-    op.add_column('customers', sa.Column('email', sa.String(length=255), nullable=True))
+    # This migration is now a no-op as phone and email columns were created in 007_create_base_tables.py
+    pass
 
 
 def downgrade() -> None:
-    op.drop_column('customers', 'email')
-    op.drop_column('customers', 'phone')
+    # This migration is now a no-op as phone and email columns were created in 007_create_base_tables.py
+    pass

@@ -19,10 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Change staff.site_id from varchar to bigint
-    op.execute('ALTER TABLE staff ALTER COLUMN site_id TYPE BIGINT USING site_id::BIGINT')
+    # This migration is now a no-op as staff.site_id is already created as BigInteger in 007_create_base_tables.py
+    pass
 
 
 def downgrade() -> None:
-    # Revert staff.site_id back to varchar
-    op.execute('ALTER TABLE staff ALTER COLUMN site_id TYPE VARCHAR(64) USING site_id::VARCHAR(64)')
+    # This migration is now a no-op as staff.site_id is already created as BigInteger in 007_create_base_tables.py
+    pass

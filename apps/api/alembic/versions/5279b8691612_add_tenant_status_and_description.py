@@ -19,12 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add description and is_active columns to tenants table
-    op.add_column('tenants', sa.Column('description', sa.Text(), nullable=True))
-    op.add_column('tenants', sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')))
+    # This migration is now a no-op as description and is_active columns are already created in 007_create_base_tables.py
+    pass
 
 
 def downgrade() -> None:
-    # Remove description and is_active columns from tenants table
-    op.drop_column('tenants', 'is_active')
-    op.drop_column('tenants', 'description')
+    # This migration is now a no-op as description and is_active columns are already created in 007_create_base_tables.py
+    pass
