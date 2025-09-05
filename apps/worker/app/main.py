@@ -929,7 +929,7 @@ class FaceRecognitionWorker:
 
 
 async def main():
-    """Main worker function"""
+    """Main worker function - basic worker with socket communication only"""
     # Validate configuration
     config.validate()
     
@@ -939,17 +939,9 @@ async def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Check if we should use enhanced worker (default: yes)
-    use_enhanced_worker = os.getenv("USE_ENHANCED_WORKER", "true").lower() == "true"
+    logger.info("Starting basic worker - socket-based communication only")
     
-    if use_enhanced_worker:
-        # Use the enhanced worker with streaming
-        from .enhanced_worker_with_streaming import run_enhanced_worker
-        logger.info("Starting enhanced worker with streaming capabilities")
-        await run_enhanced_worker()
-        return
-    
-    # Fallback to basic worker
+    # Use basic worker only
     worker = FaceRecognitionWorker(config)
     
     # Set up signal handlers for graceful shutdown with force-exit timeout
