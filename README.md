@@ -127,8 +127,23 @@ npm run dev
 #### Or use Make commands:
 
 ```bash
-# Start development environment
-make dev-up
+# Start API service
+make api-dev
+
+# Start web interface  
+make web-dev
+
+# Start single worker (uses camera 0 by default)
+make worker-dev
+
+# Start multiple workers with different IDs and cameras
+make worker-dev W=worker-001        # Auto-assigns camera 0 (USB webcam)
+make worker-dev W=worker-002        # Auto-assigns camera 1 (built-in webcam)
+make worker-dev W=worker-003        # Auto-assigns camera 2 (if available)
+
+# Manually specify worker ID and camera
+make worker-dev W=worker-001 C=0    # Worker-001 using camera 0
+make worker-dev W=worker-002 C=1    # Worker-002 using camera 1
 
 # Run tests
 make test
@@ -136,6 +151,79 @@ make test
 # Run end-to-end tests
 make e2e
 ```
+
+### Multiple Worker Development
+
+For development and testing with multiple cameras on the same machine:
+
+#### Quick Start - Two Workers with Two Cameras
+
+```bash
+# Terminal 1: Start API
+make api-dev
+
+# Terminal 2: Start web interface  
+make web-dev
+
+# Terminal 3: Start first worker (USB webcam)
+make worker-dev W=worker-001
+
+# Terminal 4: Start second worker (built-in webcam)
+make worker-dev W=worker-002
+```
+
+#### Worker Auto-Assignment Rules
+
+The system automatically assigns cameras based on worker ID patterns:
+
+- **worker-001**, **worker-01**, **worker-1** → Camera 0 (typically USB webcam)
+- **worker-002**, **worker-02**, **worker-2** → Camera 1 (typically built-in webcam)  
+- **worker-003**, **worker-03**, **worker-3** → Camera 2 (additional camera if available)
+
+#### Manual Camera Assignment
+
+Override automatic assignment with explicit camera index:
+
+```bash
+# Force specific worker-camera combinations
+make worker-dev W=worker-alice C=0     # Alice uses USB webcam
+make worker-dev W=worker-bob C=1       # Bob uses built-in webcam
+make worker-dev W=worker-charlie C=2   # Charlie uses external camera
+```
+
+#### Camera Device Detection
+
+To see available cameras on your system:
+
+```bash
+# macOS: List video devices
+system_profiler SPCameraDataType
+
+# Linux: List video devices  
+v4l2-ctl --list-devices
+
+# Test camera access with OpenCV (Python)
+python3 -c "import cv2; print([i for i in range(10) if cv2.VideoCapture(i).isOpened()])"
+```
+
+#### Worker Monitoring
+
+Once workers are running, monitor them in:
+
+1. **Web Interface**: `http://localhost:3000/workers`
+   - View worker status, streaming indicators, camera assignments
+   - Real-time updates via WebSocket
+   
+2. **API Endpoints**:
+   ```bash
+   # List all workers
+   curl http://localhost:8080/v1/workers
+   
+   # Get specific worker status
+   curl http://localhost:8080/v1/workers/{worker-id}
+   ```
+
+3. **Worker Logs**: Check terminal output for camera connection status
 
 ### Troubleshooting
 
