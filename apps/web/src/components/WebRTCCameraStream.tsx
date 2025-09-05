@@ -263,6 +263,56 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       case 'connected':
         console.log('Signaling server confirmed connection');
         break;
+      
+      case 'offer':
+        console.log('Received direct WebRTC offer from worker');
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({
+            type: 'offer',
+            sdp: message.sdp
+          }));
+          
+          // Create answer
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          
+          // Send answer back via signaling
+          if (signalingWsRef.current?.readyState === WebSocket.OPEN) {
+            const answerMessage = {
+              type: 'answer',
+              session_id: session?.session_id,
+              client_id: currentClientId,
+              sdp: answer.sdp
+            };
+            
+            signalingWsRef.current.send(JSON.stringify(answerMessage));
+            console.log('Sent WebRTC answer to worker');
+          }
+        } catch (err) {
+          console.error('Error handling direct WebRTC offer:', err);
+          setError('Failed to process WebRTC offer');
+        }
+        break;
+      
+      case 'ice-candidate':
+        console.log('Received direct ICE candidate from worker');
+        try {
+          const candidate = new RTCIceCandidate({
+            candidate: message.candidate,
+            sdpMid: message.sdpMid,
+            sdpMLineIndex: message.sdpMLineIndex
+          });
+          
+          await pc.addIceCandidate(candidate);
+        } catch (err) {
+          console.error('Error adding direct ICE candidate:', err);
+        }
+        break;
+      
+      case 'stream-stop':
+        console.log('Worker stopped the stream');
+        await handleStopStream();
+        break;
         
       case 'signaling':
         const signalingData = message.data;
