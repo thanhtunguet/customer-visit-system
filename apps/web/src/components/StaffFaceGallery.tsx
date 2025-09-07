@@ -8,13 +8,13 @@ import {
   Tag,
   Space,
   Popconfirm,
-  message,
   Spin,
   Alert,
   Tooltip,
   Badge,
   Progress,
-  Select
+  Select,
+  App
 } from 'antd';
 import {
   UploadOutlined,
@@ -120,6 +120,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   onImagesChange
 }) => {
   const [uploading, setUploading] = useState(false);
+  const { message } = App.useApp();
   const [uploadProgress, setUploadProgress] = useState<{
     current: number;
     total: number;

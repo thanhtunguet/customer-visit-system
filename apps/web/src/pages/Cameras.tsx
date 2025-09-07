@@ -13,8 +13,7 @@ import {
   Radio,
   Popconfirm,
   Tooltip,
-
-  message
+  App
 } from 'antd';
 import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined, RobotOutlined, PauseOutlined, WifiOutlined } from '@ant-design/icons';
 
@@ -29,6 +28,7 @@ import dayjs from 'dayjs';
 const { Title } = Typography;
 
 export const Cameras: React.FC = () => {
+  const { message } = App.useApp();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);

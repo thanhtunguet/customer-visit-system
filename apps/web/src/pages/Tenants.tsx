@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Table, Button, Modal, Form, Input, Space, message, Popconfirm, 
-  Tag, Typography, Alert, Switch, Card
+  Table, Button, Modal, Form, Input, Space, Popconfirm, 
+  Tag, Typography, Alert, Switch, Card, App
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ShopOutlined
@@ -13,6 +13,7 @@ import { apiClient } from '../services/api';
 const { Title } = Typography;
 
 export const TenantsPage: React.FC = () => {
+  const { message } = App.useApp();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);

@@ -5,13 +5,13 @@ import {
   Col,
   Button,
   Popconfirm,
-  message,
   Spin,
   Alert,
   Typography,
   Space,
   Tag,
-  Tooltip
+  Tooltip,
+  App
 } from 'antd';
 import {
   DeleteOutlined,
@@ -51,6 +51,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
 }) => {
   const [images, setImages] = useState<CustomerFaceImage[]>([]);
   const [loading, setLoading] = useState(false);
+  const { message } = App.useApp();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
