@@ -9,13 +9,13 @@ import {
 import { ColumnsType } from 'antd/es/table';
 import { Tenant, TenantCreate } from '../types/api';
 import { apiClient } from '../services/api';
+import { useTenants } from '../contexts/TenantContext';
 
 const { Title } = Typography;
 
 export const TenantsPage: React.FC = () => {
   const { message } = App.useApp();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tenants, loading, loadTenants, refreshTenants } = useTenants();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [form] = Form.useForm();
@@ -30,9 +30,9 @@ export const TenantsPage: React.FC = () => {
 
   useEffect(() => {
     if (isSystemAdmin) {
-      fetchTenants();
+      loadTenants();
     }
-  }, [isSystemAdmin]);
+  }, [isSystemAdmin, loadTenants]);
 
   const checkUserRole = async () => {
     try {
@@ -45,17 +45,7 @@ export const TenantsPage: React.FC = () => {
     }
   };
 
-  const fetchTenants = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getTenants();
-      setTenants(data);
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to fetch tenants');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
 
   const showModal = (tenant?: Tenant) => {
     setEditingTenant(tenant || null);
@@ -91,7 +81,7 @@ export const TenantsPage: React.FC = () => {
       setIsModalVisible(false);
       setEditingTenant(null);
       form.resetFields();
-      fetchTenants();
+      refreshTenants();
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to save tenant');
     }
@@ -101,7 +91,7 @@ export const TenantsPage: React.FC = () => {
     try {
       await apiClient.deleteTenant(tenantId);
       message.success('Tenant deleted successfully');
-      fetchTenants();
+      refreshTenants();
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to delete tenant');
     }
@@ -124,7 +114,7 @@ export const TenantsPage: React.FC = () => {
         try {
           await apiClient.toggleTenantStatus(tenantId, newStatus);
           message.success(`Tenant ${action}d successfully`);
-          fetchTenants();
+          refreshTenants();
         } catch (error: any) {
           message.error(error.response?.data?.detail || `Failed to ${action} tenant`);
         }

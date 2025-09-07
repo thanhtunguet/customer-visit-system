@@ -18,6 +18,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { AuthUser, Tenant, UserRole } from '../types/api';
 import { ChangePasswordModal } from './ChangePasswordModal';
+import { useTenants } from '../contexts/TenantContext';
 
 const { Header, Sider, Content } = AntLayout;
 const { Text } = Typography;
@@ -26,10 +27,10 @@ export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = App.useApp();
+  const { tenants, loadTenants } = useTenants();
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('__global__');
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
 
@@ -41,7 +42,7 @@ export const AppLayout: React.FC = () => {
     if (user?.role === UserRole.SYSTEM_ADMIN) {
       loadTenants();
     }
-  }, [user]);
+  }, [user, loadTenants]);
 
   const loadCurrentUser = async () => {
     try {
@@ -66,15 +67,7 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  const loadTenants = async () => {
-    try {
-      const tenantsData = await apiClient.getTenants();
-      setTenants(tenantsData);
-    } catch (error) {
-      console.error('Failed to load tenants:', error);
-      message.error('Failed to load tenants');
-    }
-  };
+
 
   const handleTenantChange = async (tenantId: string | undefined) => {
     try {
