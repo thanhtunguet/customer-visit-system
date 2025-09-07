@@ -302,11 +302,12 @@ class FaceMatchingService:
             await db_session.commit()
             
             # Save face image to customer gallery if we have high quality image
-            if person_type == "customer" and face_image_bytes and confidence_score >= 0.7:
+            # Use original detection confidence, not similarity score
+            if person_type == "customer" and face_image_bytes and event.confidence >= 0.7:
                 try:
                     await self._save_customer_face_image(
                         db_session, tenant_id, person_id, face_image_bytes, 
-                        confidence_score, event.bbox, event.embedding, existing_visit.visit_id
+                        event.confidence, event.bbox, event.embedding, existing_visit.visit_id
                     )
                 except Exception as e:
                     # Don't let face gallery errors break the main transaction
@@ -349,11 +350,12 @@ class FaceMatchingService:
             await db_session.commit()
             
             # Save face image to customer gallery if we have high quality image
-            if person_type == "customer" and face_image_bytes and confidence_score >= 0.7:
+            # Use original detection confidence, not similarity score
+            if person_type == "customer" and face_image_bytes and event.confidence >= 0.7:
                 try:
                     await self._save_customer_face_image(
                         db_session, tenant_id, person_id, face_image_bytes, 
-                        confidence_score, event.bbox, event.embedding, visit_id
+                        event.confidence, event.bbox, event.embedding, visit_id
                     )
                 except Exception as e:
                     # Don't let face gallery errors break the main transaction
