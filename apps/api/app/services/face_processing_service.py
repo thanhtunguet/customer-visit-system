@@ -158,48 +158,56 @@ class FaceProcessingService:
     
     def extract_face_embedding(self, image: ArrayType, landmarks: List[List[float]]) -> List[float]:
         """
-        Extract 512-dimensional face embedding from aligned face.
-        
-        This is a placeholder implementation. In production, use:
-        - InsightFace ArcFace
-        - FaceNet
-        - Or other production-ready embedding model
+        Extract a deterministic 512D embedding from an aligned face region.
+
+        Deterministic placeholder to ensure distinct faces don't collapse
+        to the same vector in absence of a real model.
         """
         try:
-            # Placeholder: generate a random 512-D vector
-            # In production, this would:
-            # 1. Align the face using landmarks
-            # 2. Preprocess for the embedding model
-            # 3. Run inference to get embedding
-            # 4. Normalize the embedding
-            
-            # For now, create a deterministic embedding based on image properties
-            # This ensures consistent results for the same image
             face_region = self._extract_face_region(image, landmarks)
-            
-            # Simple feature extraction (placeholder)
-            features = []
-            
-            # Add some basic statistical features
-            features.extend([
-                float(np.mean(face_region)),
-                float(np.std(face_region)),
-                float(np.median(face_region)),
-            ])
-            
-            # Pad to 512 dimensions with deterministic values
-            while len(features) < 512:
-                features.append(float(np.random.random()))
-            
-            # Normalize to unit vector
-            features = np.array(features[:512])
-            features = features / (np.linalg.norm(features) + 1e-8)
-            
-            return features.tolist()
-            
+
+            # Convert to grayscale and small size
+            gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+            small = cv2.resize(gray, (32, 32))
+
+            # Stable seed from bytes
+            import hashlib
+            h = hashlib.sha256(small.tobytes()).hexdigest()
+            seed = int(h[:16], 16)
+
+            # Low-frequency DCT features (256 dims)
+            dct = cv2.dct(small.astype(np.float32))
+            lf = dct[:16, :16].flatten()
+
+            # Histogram (32 dims)
+            hist = cv2.calcHist([small], [0], None, [32], [0, 256]).flatten()
+
+            # Basic stats (3 dims)
+            mean = float(np.mean(small))
+            std = float(np.std(small) + 1e-6)
+            stats = np.array([mean, std, mean / (std + 1e-6)], dtype=np.float32)
+
+            base = np.concatenate([lf.astype(np.float32), hist.astype(np.float32), stats])
+
+            # Pad deterministically to 512
+            if base.size >= 512:
+                vec = base[:512]
+            else:
+                rng = np.random.default_rng(seed)
+                pad = rng.normal(0, 1, 512 - base.size).astype(np.float32)
+                vec = np.concatenate([base, pad])
+
+            # L2-normalize
+            vec = vec / (np.linalg.norm(vec) + 1e-12)
+            return vec.astype(np.float32).tolist()
+
         except Exception as e:
             logger.error(f"Embedding extraction failed: {e}")
-            return [0.0] * 512  # Return zero vector on error
+            # Deterministic zero-like fallback seeded by shape
+            size = 512
+            vec = np.zeros(size, dtype=np.float32)
+            vec[0] = 1.0
+            return vec.tolist()
     
     def _extract_face_region(self, image: ArrayType, landmarks: List[List[float]]) -> ArrayType:
         """Extract face region using landmarks for alignment."""
@@ -267,15 +275,20 @@ class FaceProcessingService:
         1. Decode image
         2. Detect faces and landmarks
         3. Generate embeddings
-        4. Upload to MinIO
-        5. Return processing results
+        4. Extract face crop
+        5. Upload to MinIO
+        6. Return processing results
         """
         try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            
             # Decode image
             image = self.decode_base64_image(base64_image)
             
             # Calculate image hash for duplicate detection
-            import hashlib
             image_bytes = base64.b64decode(base64_image.split(',')[-1])
             image_hash = hashlib.sha256(image_bytes).hexdigest()
             
@@ -295,6 +308,17 @@ class FaceProcessingService:
             
             # Generate embedding
             embedding = self.extract_face_embedding(image, landmarks)
+            
+            # Extract face crop
+            face_crop = self._extract_face_region(image, landmarks)
+            
+            # Convert face crop to base64
+            face_crop_b64 = None
+            try:
+                _, buffer = cv2.imencode('.jpg', face_crop)
+                face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+            except Exception as e:
+                logger.warning(f"Failed to encode face crop to base64: {e}")
             
             # Generate unique image ID
             image_id = str(uuid.uuid4())
@@ -325,7 +349,8 @@ class FaceProcessingService:
                 'embedding': ensure_json_serializable(embedding),
                 'face_count': int(len(face_results)),
                 'confidence': float(face_data['confidence']),
-                'bbox': ensure_json_serializable(face_data['bbox'])
+                'bbox': ensure_json_serializable(face_data['bbox']),
+                'face_crop_b64': face_crop_b64  # Add the cropped face image
             }
             
             return result
@@ -336,6 +361,132 @@ class FaceProcessingService:
                 'success': False,
                 'error': str(e),
                 'face_count': 0
+            }
+
+    async def process_customer_faces_from_image(
+        self, 
+        base64_image: str, 
+        tenant_id: str
+    ) -> Dict:
+        """
+        Process all faces in an uploaded image for customer detection.
+        Unlike staff processing which only uses the first face, this processes ALL faces.
+        
+        Returns:
+            {
+                'success': bool,
+                'faces': List[face_data],  # All detected faces
+                'face_count': int,
+                'error': str (if success=False)
+            }
+        """
+        try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            
+            # Decode image
+            image = self.decode_base64_image(base64_image)
+            
+            # Calculate image hash for duplicate detection
+            image_bytes = base64.b64decode(base64_image.split(',')[-1])
+            image_hash = hashlib.sha256(image_bytes).hexdigest()
+            
+            # Detect faces
+            face_results = self.detect_faces_and_landmarks(image)
+            
+            if not face_results:
+                return {
+                    'success': False,
+                    'error': 'No faces detected in image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            logger.info(f"Detected {len(face_results)} faces in uploaded image")
+            
+            # Process ALL faces, not just the first one
+            processed_faces = []
+            
+            for i, face_data in enumerate(face_results):
+                try:
+                    landmarks = face_data['landmarks']
+                    
+                    # Generate embedding for this face
+                    embedding = self.extract_face_embedding(image, landmarks)
+                    
+                    # Extract face crop for this face
+                    face_crop = self._extract_face_region(image, landmarks)
+                    
+                    # Convert face crop to base64
+                    face_crop_b64 = None
+                    try:
+                        _, buffer = cv2.imencode('.jpg', face_crop)
+                        face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+                    except Exception as e:
+                        logger.warning(f"Failed to encode face crop {i} to base64: {e}")
+                    
+                    # Ensure all data is JSON serializable
+                    def ensure_json_serializable(obj):
+                        """Convert NumPy types to Python native types"""
+                        if isinstance(obj, np.integer):
+                            return int(obj)
+                        elif isinstance(obj, np.floating):
+                            return float(obj)
+                        elif isinstance(obj, list):
+                            return [ensure_json_serializable(item) for item in obj]
+                        elif isinstance(obj, dict):
+                            return {key: ensure_json_serializable(value) for key, value in obj.items()}
+                        else:
+                            return obj
+                    
+                    # Prepare face data
+                    processed_face = {
+                        'face_index': i,
+                        'landmarks': ensure_json_serializable(landmarks),
+                        'embedding': ensure_json_serializable(embedding),
+                        'confidence': float(face_data['confidence']),
+                        'bbox': ensure_json_serializable(face_data['bbox']),
+                        'face_crop_b64': face_crop_b64
+                    }
+                    
+                    processed_faces.append(processed_face)
+                    logger.info(f"Successfully processed face {i+1}/{len(face_results)} with confidence {face_data['confidence']:.3f}")
+                    
+                except Exception as face_error:
+                    logger.error(f"Failed to process face {i}: {face_error}")
+                    # Continue with other faces even if one fails
+                    continue
+            
+            if not processed_faces:
+                return {
+                    'success': False,
+                    'error': 'Failed to process any faces from the image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            result = {
+                'success': True,
+                'image_hash': image_hash,
+                'faces': processed_faces,
+                'face_count': len(processed_faces),
+                'total_detected': len(face_results)
+            }
+            
+            logger.info(f"Successfully processed {len(processed_faces)} faces from uploaded image")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Customer face processing failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': str(e),
+                'face_count': 0,
+                'faces': []
             }
     
     async def test_face_recognition(

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Button, Space, Alert, Tag, Spin, Tooltip, message, Popconfirm } from 'antd';
+import { Button, Space, Alert, Tag, Spin, Tooltip, Popconfirm, App } from 'antd';
 import { 
   PlayCircleOutlined, 
   StopOutlined,
@@ -44,6 +44,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   onConnectionStateChange
 }) => {
   const [isStreaming, setIsStreaming] = useState(currentStreamStatus);
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');

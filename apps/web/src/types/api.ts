@@ -77,6 +77,7 @@ export interface Customer {
   first_seen: string;
   last_seen?: string;
   visit_count: number;
+  avatar_url?: string; // URL to customer's first/best face image for avatar
 }
 
 export interface Visit {

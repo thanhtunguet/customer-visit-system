@@ -1,23 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Table, 
-  Button, 
-  Modal, 
-  Form, 
-  Input, 
-  Typography, 
-  Space, 
-  Alert,
-  Select,
-  Popconfirm
-} from 'antd';
-import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
+import { AuthenticatedAvatar } from '../components/AuthenticatedAvatar';
+import { ImageUploadModal } from '../components/ImageUploadModal';
 import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
-
+import { useState, useEffect } from 'react';
 const { Title } = Typography;
 
 export const Customers: React.FC = () => {
@@ -31,6 +21,12 @@ export const Customers: React.FC = () => {
   // Details modal state
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  
+  // Backfill state
+  const [backfillLoading, setBackfillLoading] = useState<Set<number>>(new Set());
+  
+  // Upload images modal state
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -99,7 +95,49 @@ export const Customers: React.FC = () => {
     }
   };
 
+  const handleBackfillAvatar = async (customer: Customer) => {
+    setBackfillLoading(prev => new Set([...prev, customer.customer_id]));
+    
+    try {
+      const result = await apiClient.backfillCustomerFaceImages(customer.customer_id);
+      
+      if (result.visits_processed > 0) {
+        setError(null);
+        // Reload customers to show updated avatars
+        await loadCustomers();
+        // You could also show a success message here
+        console.log(`✅ Backfilled ${result.visits_processed} face images for customer ${customer.customer_id}`);
+      } else {
+        setError(`No face images found to backfill for customer ${customer.name || customer.customer_id}`);
+      }
+    } catch (err: any) {
+      console.error('Backfill failed:', err);
+      setError(err.response?.data?.detail || `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`);
+    } finally {
+      setBackfillLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(customer.customer_id);
+        return newSet;
+      });
+    }
+  };
+
   const columns = [
+    {
+      title: 'Avatar',
+      dataIndex: 'avatar_url',
+      key: 'avatar',
+      width: 60,
+      render: (avatar_url: string, customer: Customer) => (
+        <AuthenticatedAvatar
+          src={avatar_url}
+          size={40}
+          className="flex-shrink-0"
+          alt={`${customer.name || 'Customer'} Avatar`}
+          icon={<UserOutlined />}
+        />
+      ),
+    },
     {
       title: 'ID',
       dataIndex: 'customer_id',
@@ -173,7 +211,7 @@ export const Customers: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 130,
+      width: 160,
       fixed: 'right' as const,
       render: (_, customer: Customer) => (
         <Space size="small">
@@ -184,6 +222,16 @@ export const Customers: React.FC = () => {
             onClick={() => handleViewDetails(customer)}
             title="View details"
             className="p-0"
+          />
+          <Button
+            type="link"
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={backfillLoading.has(customer.customer_id)}
+            onClick={() => handleBackfillAvatar(customer)}
+            title="Backfill avatar from visits"
+            className="p-0 text-blue-600"
+            disabled={backfillLoading.has(customer.customer_id)}
           />
           <EditAction
             onClick={() => handleEditCustomer(customer)}
@@ -220,18 +268,27 @@ export const Customers: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Title level={2} className="mb-0">Customers</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingCustomer(null);
-            form.resetFields();
-            setModalVisible(true);
-          }}
-          className="bg-blue-600"
-        >
-          Add Customer
-        </Button>
+        <Space>
+          <Button
+            type="default"
+            icon={<UploadOutlined />}
+            onClick={() => setUploadModalVisible(true)}
+          >
+            Upload Images
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingCustomer(null);
+              form.resetFields();
+              setModalVisible(true);
+            }}
+            className="bg-blue-600"
+          >
+            Add Customer
+          </Button>
+        </Space>
       </div>
 
       {error && (
@@ -321,6 +378,12 @@ export const Customers: React.FC = () => {
           setSelectedCustomerId(null);
         }}
         onEdit={handleDetailsModalEdit}
+      />
+
+      <ImageUploadModal
+        visible={uploadModalVisible}
+        onClose={() => setUploadModalVisible(false)}
+        onCustomersChange={loadCustomers}
       />
     </div>
   );

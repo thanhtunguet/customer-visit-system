@@ -4,12 +4,13 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
 from ..core.milvus_client import milvus_client
 from ..core.security import get_current_user
+from ..core.config import settings
 from ..models.database import Customer
 from ..schemas import CustomerCreate, CustomerResponse, CustomerUpdate
 
@@ -26,6 +27,7 @@ async def list_customers(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
+    # Get customers first
     result = await db_session.execute(
         select(Customer)
         .where(Customer.tenant_id == user["tenant_id"])
@@ -34,7 +36,70 @@ async def list_customers(
         .offset(offset)
     )
     customers = result.scalars().all()
-    return customers
+    
+    # Get avatar URLs for each customer by fetching their best face image
+    customer_responses = []
+    for customer in customers:
+        avatar_url = None
+        
+        try:
+            # Get the best face image for this customer (highest confidence + quality)
+            from ..models.database import CustomerFaceImage
+            from sqlalchemy import func, desc
+            
+            face_result = await db_session.execute(
+                select(CustomerFaceImage.image_path)
+                .where(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer.customer_id
+                )
+                .order_by(
+                    desc(CustomerFaceImage.confidence_score + 
+                         func.coalesce(CustomerFaceImage.quality_score, 0.5))
+                )
+                .limit(1)
+            )
+            
+            face_image = face_result.scalar_one_or_none()
+            logger.info(f"Customer {customer.customer_id}: Found face image path: {face_image}")
+            if face_image:
+                # Generate MinIO presigned URL for the avatar
+                from ..core.minio_client import minio_client
+                import asyncio
+                
+                try:
+                    from datetime import timedelta
+                    avatar_url = await asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        minio_client.get_presigned_url,
+                        "faces-derived",  # Use derived bucket for processed face images
+                        face_image,
+                        timedelta(hours=1)  # 1 hour expiry
+                    )
+                except Exception as url_error:
+                    logger.error(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
+                    logger.error(f"Face image path was: {face_image}")
+                    
+        except Exception as e:
+            logger.error(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
+        
+        # Create customer response with avatar URL
+        customer_response = CustomerResponse(
+            customer_id=customer.customer_id,
+            tenant_id=customer.tenant_id,
+            name=customer.name,
+            gender=customer.gender,
+            estimated_age_range=customer.estimated_age_range,
+            phone=customer.phone,
+            email=customer.email,
+            first_seen=customer.first_seen,
+            last_seen=customer.last_seen,
+            visit_count=customer.visit_count,
+            avatar_url=avatar_url
+        )
+        customer_responses.append(customer_response)
+    
+    return customer_responses
 
 
 @router.post("/customers", response_model=CustomerResponse)
@@ -76,7 +141,58 @@ async def get_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    return customer
+    # Get avatar URL for this customer
+    avatar_url = None
+    try:
+        from ..models.database import CustomerFaceImage
+        from sqlalchemy import func, desc
+        
+        face_result = await db_session.execute(
+            select(CustomerFaceImage.image_path)
+            .where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+            .order_by(
+                desc(CustomerFaceImage.confidence_score + 
+                     func.coalesce(CustomerFaceImage.quality_score, 0.5))
+            )
+            .limit(1)
+        )
+        
+        face_image = face_result.scalar_one_or_none()
+        if face_image:
+            from ..core.minio_client import minio_client
+            import asyncio
+            
+            try:
+                from datetime import timedelta
+                avatar_url = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    minio_client.get_presigned_url,
+                    "faces-derived",
+                    face_image,
+                    timedelta(hours=1)  # 1 hour expiry
+                )
+            except Exception as url_error:
+                logger.debug(f"Could not generate avatar URL for customer {customer_id}: {url_error}")
+                
+    except Exception as e:
+        logger.debug(f"Could not fetch avatar for customer {customer_id}: {e}")
+    
+    return CustomerResponse(
+        customer_id=customer.customer_id,
+        tenant_id=customer.tenant_id,
+        name=customer.name,
+        gender=customer.gender,
+        estimated_age_range=customer.estimated_age_range,
+        phone=customer.phone,
+        email=customer.email,
+        first_seen=customer.first_seen,
+        last_seen=customer.last_seen,
+        visit_count=customer.visit_count,
+        avatar_url=avatar_url
+    )
 
 
 @router.put("/customers/{customer_id:int}", response_model=CustomerResponse)
@@ -131,15 +247,112 @@ async def delete_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    # Delete customer embeddings from Milvus
-    try:
-        await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id)
-    except Exception as e:
-        logger.warning(f"Failed to delete customer embeddings from Milvus: {e}")
+    logger.info(f"🗑️ Starting comprehensive deletion of customer {customer_id}")
     
-    await db_session.delete(customer)
-    await db_session.commit()
-    return {"message": "Customer deleted successfully"}
+    try:
+        # 1. Delete customer face images from storage and database
+        logger.info(f"🗑️ Deleting customer face images for customer {customer_id}")
+        from ..models.database import CustomerFaceImage
+        from ..core.minio_client import minio_client
+        import asyncio
+        
+        # Get all face images for this customer
+        face_images_result = await db_session.execute(
+            select(CustomerFaceImage).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+        )
+        face_images = face_images_result.scalars().all()
+        
+        # Delete images from MinIO storage
+        deleted_images_count = 0
+        for face_image in face_images:
+            try:
+                # Delete from faces-derived bucket
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    minio_client.remove_object,
+                    "faces-derived",
+                    face_image.image_path
+                )
+                deleted_images_count += 1
+            except Exception as storage_error:
+                logger.warning(f"Failed to delete face image {face_image.image_path} from storage: {storage_error}")
+        
+        # Delete face image records from database
+        await db_session.execute(
+            delete(CustomerFaceImage).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+        )
+        logger.info(f"🗑️ Deleted {deleted_images_count} face images from storage and {len(face_images)} records from database")
+        
+        # 2. Delete customer visits
+        logger.info(f"🗑️ Deleting visits for customer {customer_id}")
+        from ..models.database import Visit
+        
+        # Get visit count before deletion
+        visits_result = await db_session.execute(
+            select(func.count(Visit.visit_id)).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer"
+            )
+        )
+        visits_count = visits_result.scalar() or 0
+        
+        # Delete visits
+        await db_session.execute(
+            delete(Visit).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer"
+            )
+        )
+        logger.info(f"🗑️ Deleted {visits_count} visit records")
+        
+        # 3. Delete customer embeddings from Milvus
+        logger.info(f"🗑️ Deleting customer embeddings from Milvus for customer {customer_id}")
+        try:
+            await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id, "customer")
+            logger.info(f"🗑️ Successfully deleted customer embeddings from Milvus")
+        except Exception as e:
+            logger.warning(f"Failed to delete customer embeddings from Milvus: {e}")
+        
+        # 4. Finally, delete the customer record
+        logger.info(f"🗑️ Deleting customer record {customer_id}")
+        await db_session.delete(customer)
+        
+        # Commit all changes
+        await db_session.commit()
+        
+        logger.info(f"✅ Successfully deleted customer {customer_id} and all related data:")
+        logger.info(f"   - Customer record: 1")
+        logger.info(f"   - Face images: {len(face_images)} records, {deleted_images_count} files")
+        logger.info(f"   - Visit records: {visits_count}")
+        logger.info(f"   - Milvus embeddings: cleaned up")
+        
+        return {
+            "message": "Customer deleted successfully", 
+            "details": {
+                "customer_id": customer_id,
+                "deleted_face_images": len(face_images),
+                "deleted_face_files": deleted_images_count,
+                "deleted_visits": visits_count,
+                "embeddings_cleaned": True
+            }
+        }
+        
+    except Exception as e:
+        # Rollback on error
+        await db_session.rollback()
+        logger.error(f"❌ Error during customer deletion: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to delete customer: {str(e)}"
+        )
 
 
 # Customer Face Gallery Endpoints
@@ -453,9 +666,203 @@ async def get_customer_face_gallery_stats(
             "avg_quality": round(float(stats.avg_quality or 0), 3),
             "first_image_date": stats.first_image.isoformat() if stats.first_image else None,
             "latest_image_date": stats.latest_image.isoformat() if stats.latest_image else None,
-            "gallery_limit": settings.max_customer_face_images
+            "gallery_limit": settings.max_face_images
         }
         
     except Exception as e:
         logger.error(f"Error getting customer face gallery stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get gallery statistics")
+
+
+@router.get("/customers/face-images/debug")
+async def debug_customer_face_images(
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Debug endpoint to check customer face images status"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..models.database import CustomerFaceImage
+        
+        # Count total face images
+        total_result = await db_session.execute(
+            select(func.count(CustomerFaceImage.image_id)).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            )
+        )
+        total_images = total_result.scalar()
+        
+        # Count customers with face images
+        customers_with_images_result = await db_session.execute(
+            select(func.count(func.distinct(CustomerFaceImage.customer_id))).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            )
+        )
+        customers_with_images = customers_with_images_result.scalar()
+        
+        # Get sample of recent images
+        recent_images_result = await db_session.execute(
+            select(
+                CustomerFaceImage.customer_id,
+                CustomerFaceImage.image_path,
+                CustomerFaceImage.confidence_score,
+                CustomerFaceImage.created_at
+            ).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            ).order_by(desc(CustomerFaceImage.created_at)).limit(5)
+        )
+        recent_images = recent_images_result.fetchall()
+        
+        return {
+            "tenant_id": user["tenant_id"],
+            "total_face_images": total_images,
+            "customers_with_images": customers_with_images,
+            "recent_images": [
+                {
+                    "customer_id": img.customer_id,
+                    "image_path": img.image_path,
+                    "confidence_score": img.confidence_score,
+                    "created_at": img.created_at.isoformat()
+                }
+                for img in recent_images
+            ],
+            "message": f"Found {total_images} face images for {customers_with_images} customers"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
+
+@router.post("/customers/{customer_id:int}/face-images/backfill")
+async def backfill_customer_face_images(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Backfill customer face images from existing visits"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        # Verify customer exists
+        from ..models.database import Customer, Visit
+        customer_result = await db_session.execute(
+            select(Customer).where(
+                Customer.tenant_id == user["tenant_id"],
+                Customer.customer_id == customer_id
+            )
+        )
+        customer = customer_result.scalar_one_or_none()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Find recent visits with face images for this customer  
+        from sqlalchemy import desc
+        visits_result = await db_session.execute(
+            select(Visit).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer",
+                Visit.image_path != None,
+                Visit.confidence_score >= 0.7
+            ).order_by(desc(Visit.confidence_score)).limit(3)
+        )
+        visits = visits_result.scalars().all()
+        
+        if not visits:
+            return {
+                "message": "No visits with face images found for backfilling",
+                "customer_id": customer_id,
+                "visits_processed": 0
+            }
+        
+        # Process each visit and try to save face image
+        from ..services.customer_face_service import customer_face_service
+        from ..core.minio_client import minio_client
+        import asyncio
+        
+        processed = 0
+        for visit in visits:
+            try:
+                logger.info(f"Processing visit {visit.visit_id} for customer {customer_id}")
+                
+                # Download the face image from MinIO synchronously
+                def download_sync():
+                    try:
+                        response = minio_client.client.get_object("faces-raw", visit.image_path)
+                        data = response.read()
+                        response.close()
+                        response.release_conn()
+                        return data
+                    except Exception as e:
+                        logger.warning(f"Failed to download face image from MinIO: {e}")
+                        return None
+                
+                face_image_bytes = download_sync()
+                
+                if not face_image_bytes:
+                    logger.warning(f"Could not download face image from {visit.image_path}")
+                    continue
+                
+                # Construct bbox from individual components
+                bbox = []
+                if all(x is not None for x in [visit.bbox_x, visit.bbox_y, visit.bbox_w, visit.bbox_h]):
+                    bbox = [visit.bbox_x, visit.bbox_y, visit.bbox_w, visit.bbox_h]
+                else:
+                    bbox = [0, 0, 100, 100]  # Default bbox if missing
+                
+                # Parse face embedding from JSON string
+                embedding = []
+                if visit.face_embedding:
+                    try:
+                        import json
+                        embedding = json.loads(visit.face_embedding)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse face embedding for visit {visit.visit_id}: {e}")
+                        embedding = [0.0] * 512  # Default embedding
+                else:
+                    embedding = [0.0] * 512  # Default embedding
+                
+                # Try to save to customer face gallery
+                result = await customer_face_service.add_face_image(
+                    db=db_session,
+                    tenant_id=user["tenant_id"],
+                    customer_id=customer_id,
+                    image_data=face_image_bytes,
+                    confidence_score=visit.confidence_score,
+                    face_bbox=bbox,
+                    embedding=embedding,
+                    visit_id=visit.visit_id,
+                    metadata={
+                        "source": "backfill_from_visit",
+                        "visit_id": visit.visit_id
+                    }
+                )
+                
+                if result:
+                    logger.info(f"✅ Successfully saved face image from visit {visit.visit_id}")
+                    processed += 1
+                else:
+                    logger.warning(f"❌ Failed to save face image from visit {visit.visit_id}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing visit {visit.visit_id}: {e}")
+                continue
+        
+        # Commit all changes
+        if processed > 0:
+            await db_session.commit()
+        
+        return {
+            "message": f"Backfilled {processed} face images for customer {customer_id}",
+            "customer_id": customer_id,
+            "visits_processed": processed,
+            "total_visits_found": len(visits)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in backfill endpoint: {e}")
+        await db_session.rollback()
+        raise HTTPException(status_code=500, detail=f"Backfill failed: {str(e)}")

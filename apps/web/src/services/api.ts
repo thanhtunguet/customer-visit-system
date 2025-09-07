@@ -10,7 +10,8 @@ import {
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
 import axios, { AxiosInstance } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+// Force use of window.location.origin in development to use Vite proxy
+const API_BASE_URL = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
 
 class ApiClient {
   private client: AxiosInstance;
@@ -273,7 +274,7 @@ class ApiClient {
   }
 
   getCameraStreamUrl(siteId: string, cameraId: number): string {
-    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
     const token = this.token || localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);
     if (token) {
@@ -283,7 +284,7 @@ class ApiClient {
   }
 
   getWorkerWebSocketUrl(tenantId: string): string {
-    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
     const token = this.token || localStorage.getItem('access_token');
     
     // Convert HTTP(S) URL to WebSocket URL
@@ -456,6 +457,16 @@ class ApiClient {
     return response.data;
   }
 
+  async backfillCustomerFaceImages(customerId: number): Promise<{
+    message: string;
+    customer_id: number;
+    visits_processed: number;
+    total_visits_found: number;
+  }> {
+    const response = await this.client.post(`/customers/${customerId}/face-images/backfill`);
+    return response.data;
+  }
+
   // Visits
   async getVisits(params?: {
     site_id?: string;
@@ -502,6 +513,27 @@ class ApiClient {
     end_date?: string;
   }): Promise<VisitorReport[]> {
     const response = await this.client.get<VisitorReport[]>('/reports/visitors', { params });
+    return response.data;
+  }
+
+  async getDemographicsReport(params?: {
+    site_id?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<{
+    visitor_type: Array<{ name: string; value: number; color: string }>;
+    gender: Array<{ name: string; value: number; color: string }>;
+    age_groups: Array<{ group: string; count: number; percentage: number }>;
+    summary: {
+      total_visits: number;
+      unique_visitors: number;
+      repeat_visitors: number;
+      customer_visits: number;
+      staff_visits: number;
+    };
+    note: string;
+  }> {
+    const response = await this.client.get('/reports/demographics', { params });
     return response.data;
   }
 
@@ -781,6 +813,41 @@ class ApiClient {
     };
   }> {
     const response = await this.client.get('/streaming/status-overview');
+    return response.data;
+  }
+
+  // Process uploaded images for face recognition
+  async processUploadedImages(images: File[], siteId: number): Promise<{
+    results: Array<{
+      success: boolean;
+      customer_id?: number;
+      customer_name?: string;
+      confidence?: number;
+      is_new_customer?: boolean;
+      error?: string;
+    }>;
+    total_processed: number;
+    successful_count: number;
+    failed_count: number;
+    new_customers_count: number;
+    recognized_count: number;
+  }> {
+    const formData = new FormData();
+    
+    // Add all images
+    images.forEach((image) => {
+      formData.append('images', image);
+    });
+    
+    // Add site ID
+    formData.append('site_id', siteId.toString());
+    
+    const response = await this.client.post('/events/process-images', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: Math.max(60000, images.length * 10000), // Dynamic timeout based on number of images
+    });
     return response.data;
   }
 

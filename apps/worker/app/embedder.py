@@ -85,7 +85,7 @@ class InsightFaceEmbedder(FaceEmbedder):
     def embed(self, face_image: np.ndarray, landmarks: Optional[np.ndarray] = None) -> List[float]:
         """Generate 512-dimensional face embedding using ArcFace"""
         if self.model is None:
-            return self._generate_mock_embedding()
+            return self._generate_mock_embedding(face_image, landmarks)
         
         try:
             # Prepare face image
@@ -131,20 +131,71 @@ class InsightFaceEmbedder(FaceEmbedder):
             except Exception as inner_e:
                 logger.debug(f"Direct embedding failed: {inner_e}")
             
-            logger.warning("Could not generate embedding, using mock")
-            return self._generate_mock_embedding()
+            logger.warning("Could not generate embedding, using deterministic mock")
+            return self._generate_mock_embedding(face_image, landmarks)
                 
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
-            return self._generate_mock_embedding()
+            return self._generate_mock_embedding(face_image, landmarks)
     
-    def _generate_mock_embedding(self) -> List[float]:
-        """Generate a mock 512-dimensional embedding for testing"""
-        # Create a deterministic mock embedding
-        np.random.seed(42)
-        embedding = np.random.normal(0, 1, 512)
-        embedding = embedding / np.linalg.norm(embedding)
-        return embedding.tolist()
+    def _generate_mock_embedding(self, face_image: np.ndarray, landmarks: Optional[np.ndarray] = None) -> List[float]:
+        """Generate a deterministic 512D embedding based on image content.
+
+        Avoids identical embeddings across different faces when the real
+        model is unavailable by deriving features from the aligned face
+        and seeding a PRNG with a stable pixel hash.
+        """
+        try:
+            # Align if landmarks available; otherwise resize
+            if landmarks is not None and len(landmarks) == 5:
+                aligned = self.align_face(face_image, landmarks)
+            else:
+                aligned = cv2.resize(face_image, (112, 112))
+
+            # Convert to grayscale and downscale to reduce noise
+            gray = cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY)
+            small = cv2.resize(gray, (32, 32))
+
+            # Stable seed from image bytes
+            import hashlib
+            h = hashlib.sha256(small.tobytes()).hexdigest()
+            seed = int(h[:16], 16)
+
+            # Low-frequency DCT features (256 dims)
+            dct = cv2.dct(small.astype(np.float32))
+            lf = dct[:16, :16].flatten()
+
+            # Histogram features (32 dims)
+            hist = cv2.calcHist([small], [0], None, [32], [0, 256]).flatten()
+
+            # Basic stats (3 dims)
+            mean = float(np.mean(small))
+            std = float(np.std(small) + 1e-6)
+            stats = np.array([mean, std, mean / (std + 1e-6)], dtype=np.float32)
+
+            base = np.concatenate([lf.astype(np.float32), hist.astype(np.float32), stats])
+
+            # Pad deterministically to 512D
+            if base.size >= 512:
+                vec = base[:512]
+            else:
+                rng = np.random.default_rng(seed)
+                pad = rng.normal(0, 1, 512 - base.size).astype(np.float32)
+                vec = np.concatenate([base, pad])
+
+            # L2-normalize
+            norm = float(np.linalg.norm(vec) + 1e-12)
+            vec = (vec / norm).astype(np.float32)
+            return vec.tolist()
+        except Exception:
+            # Last-resort deterministic fallback
+            import hashlib
+            b = cv2.resize(face_image, (16, 16)).tobytes()
+            seed = int(hashlib.md5(b).hexdigest()[:16], 16)
+            rng = np.random.default_rng(seed)
+            vec = rng.normal(0, 1, 512).astype(np.float32)
+            vec /= (np.linalg.norm(vec) + 1e-12)
+            return vec.tolist()
 
 
 class MockEmbedder(FaceEmbedder):

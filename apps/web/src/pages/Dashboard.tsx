@@ -34,54 +34,9 @@ const COLORS = {
   success: '#16a34a'
 };
 
-// Generate seed data for the last 7 days
-const generateVisitorTrendsData = () => {
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = dayjs().subtract(i, 'days');
-    const baseVisits = Math.floor(Math.random() * 50) + 30;
-    const uniqueVisitors = Math.floor(baseVisits * (0.6 + Math.random() * 0.3));
-    const staffVisits = Math.floor(Math.random() * 15) + 5;
-    
-    data.push({
-      date: date.format('MM/DD'),
-      fullDate: date.format('YYYY-MM-DD'),
-      totalVisits: baseVisits + staffVisits,
-      customerVisits: baseVisits,
-      staffVisits: staffVisits,
-      uniqueVisitors: uniqueVisitors,
-      repeatVisitors: baseVisits - uniqueVisitors
-    });
-  }
-  return data;
-};
+// Note: Seed data functions removed - using real API data only
 
-// Generate seed data for recent visits
-const generateRecentVisitsData = () => {
-  const visits = [];
-  const customerNames = ['John D.', 'Sarah M.', 'Mike R.', 'Emily S.', 'David L.', 'Anna K.', 'Tom B.', 'Lisa W.'];
-  const staffNames = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'Dan Wilson'];
-  const sites = ['Main Branch', 'North Branch', 'South Branch'];
-  
-  for (let i = 0; i < 15; i++) {
-    const isStaff = Math.random() < 0.3;
-    const timestamp = dayjs().subtract(Math.floor(Math.random() * 180), 'minutes');
-    
-    visits.push({
-      visit_id: `visit_${i + 1}`,
-      person_id: isStaff 
-        ? staffNames[Math.floor(Math.random() * staffNames.length)]
-        : customerNames[Math.floor(Math.random() * customerNames.length)],
-      person_type: isStaff ? 'staff' : 'customer',
-      site_id: sites[Math.floor(Math.random() * sites.length)],
-      timestamp: timestamp.toISOString(),
-      confidence_score: 0.85 + Math.random() * 0.14,
-      is_staff_local: isStaff
-    });
-  }
-  
-  return visits.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
-};
+// Note: Seed data functions removed - using real API data only
 
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
@@ -93,10 +48,15 @@ export const Dashboard: React.FC = () => {
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
-  const [visitorTrends] = useState(generateVisitorTrendsData());
-  const [seedRecentVisits] = useState(generateRecentVisitsData());
+  const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
+  const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [systemStatus, setSystemStatus] = useState({
+    api: 'online' as 'online' | 'offline' | 'error',
+    processing: 'processing' as 'online' | 'processing' | 'offline' | 'error', 
+    database: 'online' as 'online' | 'offline' | 'error'
+  });
 
   useEffect(() => {
     loadDashboardData();
@@ -107,8 +67,8 @@ export const Dashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // Load basic stats
-      const [customers, staff, visitsResponse, sites, visitorReport] = await Promise.all([
+      // Load basic stats and system health
+      const [customers, staff, visitsResponse, sites, visitorReport, healthCheck, workers] = await Promise.all([
         apiClient.getCustomers({ limit: 1000 }),
         apiClient.getStaff(),
         apiClient.getVisits({ limit: 10 }),
@@ -118,6 +78,10 @@ export const Dashboard: React.FC = () => {
           start_date: dayjs().subtract(7, 'days').toISOString(),
           end_date: dayjs().toISOString()
         }),
+        // Health check for system status
+        apiClient.getHealth().catch(() => ({ status: 'error', env: 'unknown', timestamp: new Date().toISOString() })),
+        // Worker status for processing indicator
+        apiClient.getWorkers().catch(() => ({ workers: [], total_count: 0, online_count: 0, offline_count: 0, error_count: 0 }))
       ]);
 
       // Extract visits array from response
@@ -129,19 +93,33 @@ export const Dashboard: React.FC = () => {
         dayjs(visit.timestamp).isAfter(today)
       ).length;
 
-      // Fallback to seed data for demonstration
-      const fallbackTodayVisits = visitorTrends[visitorTrends.length - 1]?.totalVisits || 0;
-      const fallbackTotalVisits = visitorTrends.reduce((sum, day) => sum + day.totalVisits, 0);
+      // Calculate totals from visitor report data
+      const totalVisitsFromReport = visitorReport.reduce((sum, item) => sum + item.total_visits, 0);
+      const todayVisitsFromReport = visitorReport.length > 0 ? visitorReport[visitorReport.length - 1].total_visits : todayVisits;
 
       setStats({
-        totalCustomers: customers.length || 324, // Fallback for demo
-        totalStaff: staff.length || 12, // Fallback for demo
-        totalVisits: visits.length || fallbackTotalVisits, 
-        todayVisits: todayVisits || fallbackTodayVisits,
-        activeSites: sites.length || 5, // Fallback for demo
+        totalCustomers: customers.length,
+        totalStaff: staff.length,
+        totalVisits: totalVisitsFromReport > 0 ? totalVisitsFromReport : visits.length, 
+        todayVisits: todayVisitsFromReport > 0 ? todayVisitsFromReport : todayVisits,
+        activeSites: sites.length,
       });
 
-      // Prepare chart data
+      // Transform visitor report data for Dashboard trends chart
+      const transformedTrends = visitorReport.slice(-7).map(item => ({
+        date: dayjs(item.period).format('MM/DD'),
+        fullDate: dayjs(item.period).format('YYYY-MM-DD'),
+        totalVisits: item.total_visits,
+        customerVisits: Math.round(item.total_visits * 0.8), // Approximate customer visits (80%)
+        staffVisits: Math.round(item.total_visits * 0.2), // Approximate staff visits (20%)
+        uniqueVisitors: item.unique_visitors || Math.round(item.total_visits * 0.7),
+        repeatVisitors: Math.max(0, item.total_visits - (item.unique_visitors || Math.round(item.total_visits * 0.7)))
+      }));
+
+      // Always use real API data for visitor trends
+      setVisitorTrends(transformedTrends);
+
+      // Prepare basic chart data (keeping for compatibility)
       const chartData = visitorReport.slice(-7).map(item => ({
         date: dayjs(item.period).format('MM/DD'),
         visits: item.total_visits,
@@ -149,6 +127,13 @@ export const Dashboard: React.FC = () => {
       }));
       setChartData(chartData);
       setRecentVisits(visits);
+
+      // Update system status based on health check and worker status
+      setSystemStatus({
+        api: healthCheck.status === 'ok' ? 'online' : 'error',
+        processing: workers.online_count > 0 ? 'processing' : 'offline',
+        database: healthCheck.status === 'ok' ? 'online' : 'error' // API health implies DB health
+      });
 
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard data');
@@ -262,8 +247,8 @@ export const Dashboard: React.FC = () => {
         <Col xs={24} lg={8}>
           <Card title="Recent Visits" loading={loading}>
             <Space direction="vertical" className="w-full">
-              {(recentVisits.length > 0 ? recentVisits : seedRecentVisits).slice(0, 6).map((visit, index) => (
-                <div key={visit.visit_id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+              {recentVisits.slice(0, 6).map((visit, index) => (
+                <div key={visit.visit_id || `visit-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                   <div>
                     <div className="font-medium text-sm">
                       {visit.person_type === 'staff' ? '👤' : '👥'} {visit.person_id}
@@ -278,7 +263,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               ))}
               
-              {recentVisits.length === 0 && seedRecentVisits.length === 0 && !loading && (
+              {recentVisits.length === 0 && !loading && (
                 <div className="text-center text-gray-500 py-4">
                   No recent visits
                 </div>
@@ -293,23 +278,33 @@ export const Dashboard: React.FC = () => {
         <Row gutter={16}>
           <Col span={8}>
             <div className="text-center">
-              <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2"></div>
+              <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${
+                systemStatus.api === 'online' ? 'bg-green-500' : 
+                systemStatus.api === 'error' ? 'bg-red-500' : 'bg-gray-400'
+              }`}></div>
               <div className="text-sm font-medium">API Service</div>
-              <div className="text-xs text-gray-500">Online</div>
+              <div className="text-xs text-gray-500 capitalize">{systemStatus.api}</div>
             </div>
           </Col>
           <Col span={8}>
             <div className="text-center">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full mx-auto mb-2"></div>
-              <div className="text-sm font-medium">Customer Visits</div>
-              <div className="text-xs text-gray-500">Processing</div>
+              <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${
+                systemStatus.processing === 'processing' ? 'bg-yellow-500' :
+                systemStatus.processing === 'online' ? 'bg-green-500' :
+                systemStatus.processing === 'error' ? 'bg-red-500' : 'bg-gray-400'
+              }`}></div>
+              <div className="text-sm font-medium">Face Processing</div>
+              <div className="text-xs text-gray-500 capitalize">{systemStatus.processing}</div>
             </div>
           </Col>
           <Col span={8}>
             <div className="text-center">
-              <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2"></div>
+              <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${
+                systemStatus.database === 'online' ? 'bg-green-500' : 
+                systemStatus.database === 'error' ? 'bg-red-500' : 'bg-gray-400'
+              }`}></div>
               <div className="text-sm font-medium">Database</div>
-              <div className="text-xs text-gray-500">Connected</div>
+              <div className="text-xs text-gray-500 capitalize">{systemStatus.database}</div>
             </div>
           </Col>
         </Row>

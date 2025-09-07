@@ -14,8 +14,8 @@ import {
   Spin,
   Modal,
   Checkbox,
-  message,
-  Popconfirm
+  Popconfirm,
+  App
 } from 'antd';
 import { 
   UserOutlined, 
@@ -137,6 +137,7 @@ const SEED_SITES: Site[] = [
 ];
 
 export const VisitsPage: React.FC = () => {
+  const { message } = App.useApp();
   const [visits, setVisits] = useState<Visit[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);

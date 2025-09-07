@@ -355,8 +355,13 @@ class MilvusClient:
         
         return final_matches
 
-    async def delete_person_embeddings(self, tenant_id: int, person_id: int):
+    async def delete_person_embeddings(self, tenant_id: int, person_id: int, person_type: str = None):
         """Delete all embeddings for a person.
+
+        Args:
+            tenant_id: The tenant ID
+            person_id: The person ID 
+            person_type: Optional person type filter ("customer", "staff")
 
         Some Milvus deployments restrict delete operations to primary key filters only.
         To support that, we first query for primary keys matching the tenant/person,
@@ -368,6 +373,9 @@ class MilvusClient:
         try:
             # Query for primary keys of matching records - convert IDs to strings for VARCHAR schema
             query_expr = f'tenant_id == "{str(tenant_id)}" && person_id == "{str(person_id)}"'
+            if person_type:
+                query_expr += f' && person_type == "{person_type}"'
+                
             rows = []
             try:
                 # Prefer query API to fetch primary keys
@@ -390,13 +398,14 @@ class MilvusClient:
                 delete_expr = f"id in [{pk_list}]"
                 self.collection.delete(delete_expr)
                 self.collection.flush()
+                logger.info(f"Deleted {len(primary_keys)} embeddings for {person_type or 'person'} {person_id}")
             else:
                 # Nothing to delete, or query unsupported
-                logger.info("No existing embeddings found for deletion (tenant_id=%s, person_id=%s)", tenant_id, person_id)
+                logger.info("No existing embeddings found for deletion (tenant_id=%s, person_id=%s, person_type=%s)", tenant_id, person_id, person_type)
 
         except Exception as e:
             # Do not hard-fail embedding recalculation due to delete limitations
-            logger.error(f"Failed to delete existing embeddings for tenant_id={tenant_id}, person_id={person_id}: {e}")
+            logger.error(f"Failed to delete existing embeddings for tenant_id={tenant_id}, person_id={person_id}, person_type={person_type}: {e}")
 
     async def delete_embedding_by_metadata(self, tenant_id: int, metadata_filter: Dict):
         """Delete embeddings by metadata filter - simplified to delete by person_id"""

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
+import { TenantProvider } from '../contexts/TenantContext';
 import { SystemAdminRoute } from '../components/RoleBasedRoute';
 import { Dashboard } from '../pages/Dashboard';
 import { Sites } from '../pages/Sites';
@@ -39,7 +40,8 @@ export function App() {
       }}
     >
       <AntApp>
-        <Router>
+        <TenantProvider>
+          <Router>
         <div className="min-h-screen bg-gray-50">
           <Routes>
             {/* Public Routes */}
@@ -97,7 +99,8 @@ export function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
-      </Router>
+          </Router>
+        </TenantProvider>
       </AntApp>
     </ConfigProvider>
   );

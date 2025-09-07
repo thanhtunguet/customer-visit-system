@@ -5,7 +5,6 @@ import {
   Space, 
   Tag, 
   Popconfirm, 
-  message, 
   Modal, 
   Form, 
   Input, 
@@ -13,7 +12,8 @@ import {
   Switch,
   Tooltip,
   Card,
-  Typography
+  Typography,
+  App
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -33,6 +33,7 @@ const { Option } = Select;
 const { Title } = Typography;
 
 export const Users: React.FC = () => {
+  const { message } = App.useApp();
   const [users, setUsers] = useState<User[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);

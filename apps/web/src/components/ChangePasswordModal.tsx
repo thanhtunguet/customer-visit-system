@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Button, message } from 'antd';
+import { Modal, Form, Input, Button, App } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 
@@ -14,6 +14,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const { message } = App.useApp();
 
   const handleSubmit = async (values: {
     current_password: string;
