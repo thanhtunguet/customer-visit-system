@@ -321,8 +321,8 @@ async def process_uploaded_images(
 
 @router.get("/visits", response_model=VisitsPaginatedResponse)
 async def list_visits(
-    site_id: Optional[str] = Query(None),
-    person_id: Optional[str] = Query(None),
+    site_id: Optional[int] = Query(None),
+    person_id: Optional[int] = Query(None),
     start_time: Optional[datetime] = Query(None),
     end_time: Optional[datetime] = Query(None),
     limit: int = Query(50, le=100),  # Reduced max limit for better performance
@@ -562,7 +562,7 @@ async def delete_visits(
 
 @router.get("/reports/visitors")
 async def get_visitor_report(
-    site_id: Optional[str] = Query(None),
+    site_id: Optional[int] = Query(None),
     granularity: str = Query("day", regex="^(hour|day|week|month)$"),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -615,7 +615,7 @@ async def get_visitor_report(
 
 @router.get("/reports/demographics")
 async def get_demographics_report(
-    site_id: Optional[str] = Query(None),
+    site_id: Optional[int] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
     user: dict = Depends(get_current_user),

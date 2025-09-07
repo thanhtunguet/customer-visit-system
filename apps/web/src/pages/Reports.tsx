@@ -449,11 +449,11 @@ export const Reports: React.FC = () => {
               value={selectedSites}
               onChange={setSelectedSites}
             >
-              <Option value="main">Main Branch</Option>
-              <Option value="north">North Branch</Option>
-              <Option value="south">South Branch</Option>
-              <Option value="east">East Branch</Option>
-              <Option value="west">West Branch</Option>
+              <Option key="main" value="main">Main Branch</Option>
+              <Option key="north" value="north">North Branch</Option>
+              <Option key="south" value="south">South Branch</Option>
+              <Option key="east" value="east">East Branch</Option>
+              <Option key="west" value="west">West Branch</Option>
             </Select>
             
             <RangePicker
@@ -465,10 +465,10 @@ export const Reports: React.FC = () => {
             />
             
             <Select value={granularity} onChange={setGranularity} style={{ width: 120 }}>
-              <Option value="hour">Hourly</Option>
-              <Option value="day">Daily</Option>
-              <Option value="week">Weekly</Option>
-              <Option value="month">Monthly</Option>
+              <Option key="hour" value="hour">Hourly</Option>
+              <Option key="day" value="day">Daily</Option>
+              <Option key="week" value="week">Weekly</Option>
+              <Option key="month" value="month">Monthly</Option>
             </Select>
           </Space>
           
@@ -598,7 +598,7 @@ export const Reports: React.FC = () => {
                         dataKey="value"
                       >
                         {demographics.visitorType?.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                          <Cell key={`visitor-type-${index}-${entry.name}`} fill={entry.color} />
                         )) || []}
                       </Pie>
                       <RechartsTooltip />
@@ -620,7 +620,7 @@ export const Reports: React.FC = () => {
                         dataKey="value"
                       >
                         {demographics.gender?.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                          <Cell key={`gender-${index}-${entry.name}`} fill={entry.color} />
                         )) || []}
                       </Pie>
                       <RechartsTooltip />
