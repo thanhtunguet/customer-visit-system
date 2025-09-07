@@ -54,6 +54,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     currentFileName?: string;
   } | null>(null);
   const [results, setResults] = useState<ProcessingResult[]>([]);
+  const [processingComplete, setProcessingComplete] = useState(false);
   const [fileList, setFileList] = useState<File[]>([]);
   const [sites, setSites] = useState<any[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null);
@@ -86,6 +87,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     setUploadProgress(null);
     setResults([]);
     setFileList([]);
+    setProcessingComplete(false);
     // Don't reset selectedSiteId to keep user's choice
   };
 
@@ -136,6 +138,10 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
         onCustomersChange();
       }
       
+      // Clear file list to disable the Process Images button
+      setFileList([]);
+      setProcessingComplete(true);
+      
     } catch (error: any) {
       console.error('Failed to process images:', error);
       
@@ -147,6 +153,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
       }));
       
       setResults(errorResults);
+      setProcessingComplete(true);
     } finally {
       setUploading(false);
     }
@@ -218,13 +225,13 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
         </Button>,
         <Button
           key="process"
-          type="primary"
+          type={processingComplete ? "default" : "primary"}
           onClick={startProcessing}
           loading={uploading}
-          disabled={fileList.length === 0 || !selectedSiteId}
-          icon={<UploadOutlined />}
+          disabled={fileList.length === 0 || !selectedSiteId || processingComplete}
+          icon={processingComplete ? <CheckCircleOutlined /> : <UploadOutlined />}
         >
-          Process Images
+          {processingComplete ? "Processing Complete" : "Process Images"}
         </Button>
       ]}
     >
@@ -236,7 +243,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
           showIcon
         />
 
-        <div>
+        <div className="my-4">
           <label className="block text-sm font-medium mb-2">Select Site:</label>
           <Select
             value={selectedSiteId}
@@ -255,6 +262,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
         </div>
 
         <Dragger
+          className="mt-4"
           multiple
           accept="image/*"
           showUploadList={false}

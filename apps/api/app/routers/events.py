@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
 import asyncio
 import logging
 import json
 import uuid
 from typing import List, Optional
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
 from typing import List
@@ -19,6 +19,7 @@ from ..services.face_service import face_service
 from common.models import FaceDetectedEvent
 
 router = APIRouter(prefix="/v1", tags=["Events & Detection", "Visits & Analytics"])
+logger = logging.getLogger(__name__)
 
 
 def to_naive_utc(dt: datetime) -> datetime:
@@ -184,10 +185,22 @@ async def process_uploaded_images(
                     staff_id=None
                 )
                 
-                # Process through the existing face recognition pipeline WITH the actual image data
+                # Extract face crop if available from face processing result
+                face_image_to_save = image_data  # Default to full image
+                if face_result.get('face_crop_b64'):
+                    try:
+                        # Decode the base64 face crop
+                        import base64
+                        face_image_to_save = base64.b64decode(face_result['face_crop_b64'])
+                        logger.info(f"Using cropped face image ({len(face_image_to_save)} bytes) instead of full image ({len(image_data)} bytes)")
+                    except Exception as crop_error:
+                        logger.warning(f"Failed to decode face crop, using full image: {crop_error}")
+                        face_image_to_save = image_data
+                
+                # Process through the existing face recognition pipeline WITH the face crop data
                 face_match_result = await face_service.process_face_event_with_image(
                     event=event,
-                    face_image_data=image_data,  # Pass the actual uploaded image data
+                    face_image_data=face_image_to_save,  # Pass the cropped face image
                     face_image_filename=image.filename or "uploaded_image.jpg",
                     db_session=db_session,
                     tenant_id=user["tenant_id"]
@@ -344,7 +357,6 @@ async def list_visits(
                         # Assume it's a path in the faces-raw bucket
                         image_url = minio_client.get_presigned_url('faces-raw', visit.image_path)
             except Exception as e:
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to generate presigned URL for {visit.image_path}: {e}")
                 image_url = None
         

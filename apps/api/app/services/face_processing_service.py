@@ -267,15 +267,20 @@ class FaceProcessingService:
         1. Decode image
         2. Detect faces and landmarks
         3. Generate embeddings
-        4. Upload to MinIO
-        5. Return processing results
+        4. Extract face crop
+        5. Upload to MinIO
+        6. Return processing results
         """
         try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            
             # Decode image
             image = self.decode_base64_image(base64_image)
             
             # Calculate image hash for duplicate detection
-            import hashlib
             image_bytes = base64.b64decode(base64_image.split(',')[-1])
             image_hash = hashlib.sha256(image_bytes).hexdigest()
             
@@ -295,6 +300,17 @@ class FaceProcessingService:
             
             # Generate embedding
             embedding = self.extract_face_embedding(image, landmarks)
+            
+            # Extract face crop
+            face_crop = self._extract_face_region(image, landmarks)
+            
+            # Convert face crop to base64
+            face_crop_b64 = None
+            try:
+                _, buffer = cv2.imencode('.jpg', face_crop)
+                face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+            except Exception as e:
+                logger.warning(f"Failed to encode face crop to base64: {e}")
             
             # Generate unique image ID
             image_id = str(uuid.uuid4())
@@ -325,7 +341,8 @@ class FaceProcessingService:
                 'embedding': ensure_json_serializable(embedding),
                 'face_count': int(len(face_results)),
                 'confidence': float(face_data['confidence']),
-                'bbox': ensure_json_serializable(face_data['bbox'])
+                'bbox': ensure_json_serializable(face_data['bbox']),
+                'face_crop_b64': face_crop_b64  # Add the cropped face image
             }
             
             return result

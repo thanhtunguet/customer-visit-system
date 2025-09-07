@@ -2,5 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-body { margin: 0; }
+body {
+    margin: 0;
+}
 
+.my-4 {
+    margin: 1rem 0;
+}
+
+.mb-4 {
+    margin-bottom: 1rem;
+}
+
+.mt-4 {
+    margin-top: 1rem;
+}

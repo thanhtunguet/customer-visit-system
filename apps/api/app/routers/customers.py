@@ -4,12 +4,13 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
 from ..core.milvus_client import milvus_client
 from ..core.security import get_current_user
+from ..core.config import settings
 from ..models.database import Customer
 from ..schemas import CustomerCreate, CustomerResponse, CustomerUpdate
 
@@ -665,7 +666,7 @@ async def get_customer_face_gallery_stats(
             "avg_quality": round(float(stats.avg_quality or 0), 3),
             "first_image_date": stats.first_image.isoformat() if stats.first_image else None,
             "latest_image_date": stats.latest_image.isoformat() if stats.latest_image else None,
-            "gallery_limit": settings.max_customer_face_images
+            "gallery_limit": settings.max_face_images
         }
         
     except Exception as e:

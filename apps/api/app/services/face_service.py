@@ -158,38 +158,17 @@ class FaceMatchingService:
     ) -> Dict:
         """Process a face detection event with uploaded face image and return matching results"""
         
-        # First upload the face image to MinIO
-        from ..core.minio_client import minio_client
-        import uuid
+        # Store the face image data directly on the event for later use
+        # This avoids unnecessary upload/download cycles
+        event._manual_face_data = face_image_data
         
-        try:
-            # Generate unique filename for the face image
-            file_extension = face_image_filename.split('.')[-1] if '.' in face_image_filename else 'jpg'
-            object_name = f"worker-faces/face-{uuid.uuid4().hex[:8]}.{file_extension}"
-            
-            # Upload to faces-raw bucket (will be cleaned up after 30 days)
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                minio_client.upload_image,
-                "faces-raw", 
-                object_name,
-                face_image_data,
-                f"image/{file_extension}"
-            )
-            
-            if result:
-                # Update the event with the uploaded image path
-                event.snapshot_url = object_name
-                logger.info(f"Successfully uploaded worker face image: {object_name}")
-            else:
-                logger.warning("Failed to upload worker face image, continuing without image")
-                
-        except Exception as e:
-            logger.warning(f"Failed to upload worker face image: {e}")
-            # Continue processing without the image - it's not critical
+        # Process the event normally (this will handle face matching and visit creation)
+        result = await self.process_face_event(event, db_session, tenant_id)
         
-        # Now process the event normally
-        return await self.process_face_event(event, db_session, tenant_id)
+        # Clean up the temporary data
+        delattr(event, '_manual_face_data')
+        
+        return result
 
     async def _create_new_customer(
         self, 
@@ -227,16 +206,21 @@ class FaceMatchingService:
         
         # Handle face image saving for customer gallery
         face_image_bytes = None
-        if event.snapshot_url and person_type == "customer":
+        
+        # Check if this is a manual upload with face data already in memory
+        if hasattr(event, '_manual_face_data') and person_type == "customer":
+            face_image_bytes = event._manual_face_data
+            logger.debug(f"Using manual upload face data: {len(face_image_bytes)} bytes")
+        elif event.snapshot_url and person_type == "customer":
             # Try to download actual face crop from worker-provided snapshot
             try:
                 from ..core.minio_client import minio_client
                 if event.snapshot_url.startswith('worker-faces/'):
-                    # Use the full path as stored in MinIO
+                    # Use the full path as stored in MinIO (includes both worker and manual uploads)
                     face_image_bytes = await minio_client.download_file("faces-raw", event.snapshot_url)
-                    logger.debug(f"Downloaded worker face image: {len(face_image_bytes)} bytes")
+                    logger.debug(f"Downloaded face image: {len(face_image_bytes)} bytes")
             except Exception as e:
-                logger.warning(f"Failed to download worker face image: {e}")
+                logger.warning(f"Failed to download face image: {e}")
         
         # If no snapshot URL provided, try to generate a fallback cropped face image
         logger.info(f"Processing event: snapshot_url={'Present' if event.snapshot_url else 'None'}, bbox={event.bbox}")
