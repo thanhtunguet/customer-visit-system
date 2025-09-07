@@ -65,96 +65,17 @@ const COLORS = {
 
 const PIE_COLORS = ['#2563eb', '#059669', '#dc2626', '#d97706', '#7c3aed', '#16a34a'];
 
-// Generate seed data for the last 30 days
-const generateVisitorTrendsData = () => {
-  const data = [];
-  for (let i = 29; i >= 0; i--) {
-    const date = dayjs().subtract(i, 'days');
-    const baseVisits = Math.floor(Math.random() * 50) + 30;
-    const uniqueVisitors = Math.floor(baseVisits * (0.6 + Math.random() * 0.3));
-    const staffVisits = Math.floor(Math.random() * 15) + 5;
-    
-    data.push({
-      date: date.format('MM/DD'),
-      fullDate: date.format('YYYY-MM-DD'),
-      totalVisits: baseVisits + staffVisits,
-      customerVisits: baseVisits,
-      staffVisits: staffVisits,
-      uniqueVisitors: uniqueVisitors,
-      repeatVisitors: baseVisits - uniqueVisitors
-    });
-  }
-  return data;
-};
+// Note: Seed data functions removed - using real API data only
 
-// Generate hourly heatmap data
-const generateHourlyData = () => {
-  const hours = [];
-  for (let h = 0; h < 24; h++) {
-    const baseActivity = h >= 8 && h <= 18 ? Math.random() * 80 + 20 : Math.random() * 30;
-    hours.push({
-      hour: h,
-      label: `${h.toString().padStart(2, '0')}:00`,
-      visits: Math.floor(baseActivity),
-      density: baseActivity
-    });
-  }
-  return hours;
-};
+// Note: Hourly data now calculated from real API data
 
-// Generate day of week data
-const generateDayOfWeekData = () => {
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  return days.map((day, index) => {
-    const isWeekend = index >= 5;
-    const baseVisits = isWeekend ? Math.random() * 30 + 10 : Math.random() * 60 + 40;
-    return {
-      day: day.slice(0, 3),
-      fullDay: day,
-      visits: Math.floor(baseVisits),
-      customers: Math.floor(baseVisits * 0.8),
-      staff: Math.floor(baseVisits * 0.2)
-    };
-  });
-};
+// Note: Day of week data now calculated from real API data
 
-// Generate demographics data
-const generateDemographicsData = () => ({
-  visitorType: [
-    { name: 'New Customers', value: 156, color: COLORS.primary },
-    { name: 'Returning Customers', value: 324, color: COLORS.secondary },
-    { name: 'Staff', value: 89, color: COLORS.warning }
-  ],
-  gender: [
-    { name: 'Male', value: 298, color: COLORS.primary },
-    { name: 'Female', value: 271, color: COLORS.secondary }
-  ],
-  ageGroups: [
-    { group: '18-25', count: 89, percentage: 15.6 },
-    { group: '26-35', count: 167, percentage: 29.3 },
-    { group: '36-45', count: 145, percentage: 25.5 },
-    { group: '46-55', count: 98, percentage: 17.2 },
-    { group: '55+', count: 70, percentage: 12.3 }
-  ]
-});
+// Note: Demographics data now fetched from real API
 
-// Generate site comparison data
-const generateSiteData = () => [
-  { id: 'main-branch', site: 'Main Branch', visits: 1240, customers: 892, staff: 348, growth: 12.5 },
-  { id: 'north-branch', site: 'North Branch', visits: 986, customers: 723, staff: 263, growth: -3.2 },
-  { id: 'south-branch', site: 'South Branch', visits: 847, customers: 634, staff: 213, growth: 8.7 },
-  { id: 'east-branch', site: 'East Branch', visits: 712, customers: 521, staff: 191, growth: 15.3 },
-  { id: 'west-branch', site: 'West Branch', visits: 623, customers: 445, staff: 178, growth: -1.8 }
-];
+// Note: Site data now calculated from real API data
 
-// Generate peak hours data
-const generatePeakHoursData = () => [
-  { timeRange: '09:00-10:00', visits: 45, percentage: 8.2 },
-  { timeRange: '12:00-13:00', visits: 78, percentage: 14.1 },
-  { timeRange: '15:00-16:00', visits: 62, percentage: 11.2 },
-  { timeRange: '17:00-18:00', visits: 89, percentage: 16.1 },
-  { timeRange: '19:00-20:00', visits: 56, percentage: 10.1 }
-];
+// Note: Peak hours data now calculated from real API data
 
 export const Reports: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -175,22 +96,25 @@ export const Reports: React.FC = () => {
   });
   const [realDemographics, setRealDemographics] = useState<any>(null);
   
-  // Seed data (fallback)
-  const [visitorTrends, setVisitorTrends] = useState(generateVisitorTrendsData());
-  const [hourlyData, setHourlyData] = useState(generateHourlyData());
-  const [dayOfWeekData, setDayOfWeekData] = useState(generateDayOfWeekData());
-  const [demographicsSeed] = useState(generateDemographicsData());
-  const [siteData, setSiteData] = useState(generateSiteData());
-  const [peakHours, setPeakHours] = useState(generatePeakHoursData());
+  // Real data states - no seed data fallbacks
+  const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
+  const [hourlyData, setHourlyData] = useState<any[]>([]);
+  const [dayOfWeekData, setDayOfWeekData] = useState<any[]>([]);
+  const [siteData, setSiteData] = useState<any[]>([]);
+  const [peakHours, setPeakHours] = useState<any[]>([]);
 
-  // Use real demographics if available, otherwise fallback to seed data
-  const demographics = realDemographics || demographicsSeed;
+  // Use only real demographics data
+  const demographics = realDemographics || { 
+    visitorType: [], 
+    gender: [], 
+    ageGroups: [] 
+  };
 
-  // Summary statistics (use real data if available, otherwise seed data)
-  const totalVisits = realStats.totalVisits || visitorTrends.reduce((sum, day) => sum + day.totalVisits, 0);
-  const totalCustomers = realStats.totalCustomers || visitorTrends.reduce((sum, day) => sum + day.customerVisits, 0);
-  const totalStaff = realStats.totalStaff || visitorTrends.reduce((sum, day) => sum + day.staffVisits, 0);
-  const avgDailyVisits = realStats.avgDailyVisits || Math.round(totalVisits / visitorTrends.length);
+  // Summary statistics from real API data only
+  const totalVisits = realStats.totalVisits;
+  const totalCustomers = realStats.totalCustomers;
+  const totalStaff = realStats.totalStaff;
+  const avgDailyVisits = realStats.avgDailyVisits;
 
   useEffect(() => {
     loadReportsData();
@@ -249,10 +173,8 @@ export const Reports: React.FC = () => {
         repeatVisitors: Math.max(0, item.total_visits - (item.unique_visitors || Math.round(item.total_visits * 0.7)))
       }));
 
-      // Update charts with real data
-      if (transformedTrends.length > 0) {
-        setVisitorTrends(transformedTrends);
-      }
+      // Always update charts with real data
+      setVisitorTrends(transformedTrends);
 
       // Calculate real statistics
       const totalVisitsReal = visitorReport.reduce((sum, item) => sum + item.total_visits, 0);
@@ -267,41 +189,39 @@ export const Reports: React.FC = () => {
         avgDailyVisits: avgDailyVisitsReal
       });
 
-      // Generate day of week data from visitor report if enough data
-      if (visitorReport.length >= 7) {
-        const dayOfWeekMap = new Map();
-        visitorReport.forEach(item => {
-          const dayOfWeek = dayjs(item.period).format('ddd');
-          const existing = dayOfWeekMap.get(dayOfWeek) || { visits: 0, count: 0 };
-          dayOfWeekMap.set(dayOfWeek, {
-            visits: existing.visits + item.total_visits,
-            count: existing.count + 1
-          });
+      // Always generate day of week data from visitor report
+      const dayOfWeekMap = new Map();
+      visitorReport.forEach(item => {
+        const dayOfWeek = dayjs(item.period).format('ddd');
+        const existing = dayOfWeekMap.get(dayOfWeek) || { visits: 0, count: 0 };
+        dayOfWeekMap.set(dayOfWeek, {
+          visits: existing.visits + item.total_visits,
+          count: existing.count + 1
         });
+      });
 
-        const daysOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const realDayOfWeekData = daysOrder.map(day => {
-          const data = dayOfWeekMap.get(day) || { visits: 0, count: 1 };
-          const avgVisits = Math.round(data.visits / data.count);
-          return {
-            day,
-            fullDay: day === 'Mon' ? 'Monday' : 
-                     day === 'Tue' ? 'Tuesday' :
-                     day === 'Wed' ? 'Wednesday' :
-                     day === 'Thu' ? 'Thursday' :
-                     day === 'Fri' ? 'Friday' :
-                     day === 'Sat' ? 'Saturday' : 'Sunday',
-            visits: avgVisits,
-            customers: Math.round(avgVisits * 0.8),
-            staff: Math.round(avgVisits * 0.2)
-          };
-        });
+      const daysOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const realDayOfWeekData = daysOrder.map(day => {
+        const data = dayOfWeekMap.get(day) || { visits: 0, count: 1 };
+        const avgVisits = Math.round(data.visits / data.count);
+        return {
+          day,
+          fullDay: day === 'Mon' ? 'Monday' : 
+                   day === 'Tue' ? 'Tuesday' :
+                   day === 'Wed' ? 'Wednesday' :
+                   day === 'Thu' ? 'Thursday' :
+                   day === 'Fri' ? 'Friday' :
+                   day === 'Sat' ? 'Saturday' : 'Sunday',
+          visits: avgVisits,
+          customers: Math.round(avgVisits * 0.8),
+          staff: Math.round(avgVisits * 0.2)
+        };
+      });
 
-        setDayOfWeekData(realDayOfWeekData);
-      }
+      setDayOfWeekData(realDayOfWeekData);
 
-      // Generate hourly data if granularity is hour
-      if (granularity === 'hour' && visitorReport.length > 0) {
+      // Generate hourly data when granularity is hour or has sufficient data
+      if (granularity === 'hour' || visitorReport.length > 0) {
         const hourlyMap = new Map();
         visitorReport.forEach(item => {
           const hour = dayjs(item.period).hour();
@@ -339,9 +259,7 @@ export const Reports: React.FC = () => {
           percentage: totalHourlyVisits > 0 ? Math.round((hour.visits / totalHourlyVisits) * 100 * 10) / 10 : 0
         }));
         
-        if (realPeakHours.length > 0) {
-          setPeakHours(realPeakHours);
-        }
+        setPeakHours(realPeakHours);
       }
 
       // Generate site performance data with real API calls
@@ -392,9 +310,7 @@ export const Reports: React.FC = () => {
           const siteResults = await Promise.all(sitePromises);
           const validSiteData = siteResults.filter(site => site !== null);
           
-          if (validSiteData.length > 0) {
-            setSiteData(validSiteData.sort((a, b) => b.visits - a.visits));
-          }
+          setSiteData(validSiteData.sort((a, b) => b.visits - a.visits));
         } catch (siteError) {
           console.error('Failed to load site performance data:', siteError);
         }

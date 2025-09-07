@@ -34,54 +34,9 @@ const COLORS = {
   success: '#16a34a'
 };
 
-// Generate seed data for the last 7 days
-const generateVisitorTrendsData = () => {
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = dayjs().subtract(i, 'days');
-    const baseVisits = Math.floor(Math.random() * 50) + 30;
-    const uniqueVisitors = Math.floor(baseVisits * (0.6 + Math.random() * 0.3));
-    const staffVisits = Math.floor(Math.random() * 15) + 5;
-    
-    data.push({
-      date: date.format('MM/DD'),
-      fullDate: date.format('YYYY-MM-DD'),
-      totalVisits: baseVisits + staffVisits,
-      customerVisits: baseVisits,
-      staffVisits: staffVisits,
-      uniqueVisitors: uniqueVisitors,
-      repeatVisitors: baseVisits - uniqueVisitors
-    });
-  }
-  return data;
-};
+// Note: Seed data functions removed - using real API data only
 
-// Generate seed data for recent visits
-const generateRecentVisitsData = () => {
-  const visits = [];
-  const customerNames = ['John D.', 'Sarah M.', 'Mike R.', 'Emily S.', 'David L.', 'Anna K.', 'Tom B.', 'Lisa W.'];
-  const staffNames = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'Dan Wilson'];
-  const sites = ['Main Branch', 'North Branch', 'South Branch'];
-  
-  for (let i = 0; i < 15; i++) {
-    const isStaff = Math.random() < 0.3;
-    const timestamp = dayjs().subtract(Math.floor(Math.random() * 180), 'minutes');
-    
-    visits.push({
-      visit_id: `visit_${i + 1}`,
-      person_id: isStaff 
-        ? staffNames[Math.floor(Math.random() * staffNames.length)]
-        : customerNames[Math.floor(Math.random() * customerNames.length)],
-      person_type: isStaff ? 'staff' : 'customer',
-      site_id: sites[Math.floor(Math.random() * sites.length)],
-      timestamp: timestamp.toISOString(),
-      confidence_score: 0.85 + Math.random() * 0.14,
-      is_staff_local: isStaff
-    });
-  }
-  
-  return visits.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
-};
+// Note: Seed data functions removed - using real API data only
 
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
@@ -93,8 +48,8 @@ export const Dashboard: React.FC = () => {
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
-  const [visitorTrends, setVisitorTrends] = useState(generateVisitorTrendsData());
-  const [seedRecentVisits] = useState(generateRecentVisitsData());
+  const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
+  const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState({
@@ -138,15 +93,15 @@ export const Dashboard: React.FC = () => {
         dayjs(visit.timestamp).isAfter(today)
       ).length;
 
-      // Fallback to seed data for demonstration
-      const fallbackTodayVisits = visitorTrends[visitorTrends.length - 1]?.totalVisits || 0;
-      const fallbackTotalVisits = visitorTrends.reduce((sum, day) => sum + day.totalVisits, 0);
+      // Calculate totals from visitor report data
+      const totalVisitsFromReport = visitorReport.reduce((sum, item) => sum + item.total_visits, 0);
+      const todayVisitsFromReport = visitorReport.length > 0 ? visitorReport[visitorReport.length - 1].total_visits : todayVisits;
 
       setStats({
         totalCustomers: customers.length || 324, // Fallback for demo
         totalStaff: staff.length || 12, // Fallback for demo
-        totalVisits: visits.length || fallbackTotalVisits, 
-        todayVisits: todayVisits || fallbackTodayVisits,
+        totalVisits: totalVisitsFromReport > 0 ? totalVisitsFromReport : visits.length, 
+        todayVisits: todayVisitsFromReport > 0 ? todayVisitsFromReport : todayVisits,
         activeSites: sites.length || 5, // Fallback for demo
       });
 
@@ -161,10 +116,8 @@ export const Dashboard: React.FC = () => {
         repeatVisitors: Math.max(0, item.total_visits - (item.unique_visitors || Math.round(item.total_visits * 0.7)))
       }));
 
-      // Update visitor trends with real data if available, otherwise keep seed data
-      if (transformedTrends.length > 0) {
-        setVisitorTrends(transformedTrends);
-      }
+      // Always use real API data for visitor trends
+      setVisitorTrends(transformedTrends);
 
       // Prepare basic chart data (keeping for compatibility)
       const chartData = visitorReport.slice(-7).map(item => ({
@@ -294,7 +247,7 @@ export const Dashboard: React.FC = () => {
         <Col xs={24} lg={8}>
           <Card title="Recent Visits" loading={loading}>
             <Space direction="vertical" className="w-full">
-              {(recentVisits.length > 0 ? recentVisits : seedRecentVisits).slice(0, 6).map((visit, index) => (
+              {recentVisits.slice(0, 6).map((visit, index) => (
                 <div key={visit.visit_id || `visit-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                   <div>
                     <div className="font-medium text-sm">
@@ -310,7 +263,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               ))}
               
-              {recentVisits.length === 0 && seedRecentVisits.length === 0 && !loading && (
+              {recentVisits.length === 0 && !loading && (
                 <div className="text-center text-gray-500 py-4">
                   No recent visits
                 </div>
