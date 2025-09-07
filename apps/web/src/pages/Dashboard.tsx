@@ -98,11 +98,11 @@ export const Dashboard: React.FC = () => {
       const todayVisitsFromReport = visitorReport.length > 0 ? visitorReport[visitorReport.length - 1].total_visits : todayVisits;
 
       setStats({
-        totalCustomers: customers.length || 324, // Fallback for demo
-        totalStaff: staff.length || 12, // Fallback for demo
+        totalCustomers: customers.length,
+        totalStaff: staff.length,
         totalVisits: totalVisitsFromReport > 0 ? totalVisitsFromReport : visits.length, 
         todayVisits: todayVisitsFromReport > 0 ? todayVisitsFromReport : todayVisits,
-        activeSites: sites.length || 5, // Fallback for demo
+        activeSites: sites.length,
       });
 
       // Transform visitor report data for Dashboard trends chart
