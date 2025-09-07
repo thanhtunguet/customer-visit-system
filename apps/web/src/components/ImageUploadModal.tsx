@@ -243,7 +243,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
           showIcon
         />
 
-        <div className="my-4">
+        <div className="pb-2">
           <label className="block text-sm font-medium mb-2">Select Site:</label>
           <Select
             value={selectedSiteId}
