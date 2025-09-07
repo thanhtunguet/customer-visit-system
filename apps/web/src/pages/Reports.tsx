@@ -140,11 +140,11 @@ const generateDemographicsData = () => ({
 
 // Generate site comparison data
 const generateSiteData = () => [
-  { site: 'Main Branch', visits: 1240, customers: 892, staff: 348, growth: 12.5 },
-  { site: 'North Branch', visits: 986, customers: 723, staff: 263, growth: -3.2 },
-  { site: 'South Branch', visits: 847, customers: 634, staff: 213, growth: 8.7 },
-  { site: 'East Branch', visits: 712, customers: 521, staff: 191, growth: 15.3 },
-  { site: 'West Branch', visits: 623, customers: 445, staff: 178, growth: -1.8 }
+  { id: 'main-branch', site: 'Main Branch', visits: 1240, customers: 892, staff: 348, growth: 12.5 },
+  { id: 'north-branch', site: 'North Branch', visits: 986, customers: 723, staff: 263, growth: -3.2 },
+  { id: 'south-branch', site: 'South Branch', visits: 847, customers: 634, staff: 213, growth: 8.7 },
+  { id: 'east-branch', site: 'East Branch', visits: 712, customers: 521, staff: 191, growth: 15.3 },
+  { id: 'west-branch', site: 'West Branch', visits: 623, customers: 445, staff: 178, growth: -1.8 }
 ];
 
 // Generate peak hours data
@@ -376,6 +376,7 @@ export const Reports: React.FC = () => {
                 Math.round(((currentTotal - previousTotal) / previousTotal) * 100 * 10) / 10 : 0;
 
               return {
+                id: site.site_id?.toString() || site.site_name,
                 site: site.site_name,
                 visits: currentTotal,
                 customers: Math.round(currentTotal * 0.8), // Approximate
@@ -599,7 +600,7 @@ export const Reports: React.FC = () => {
                       >
                         {demographics.visitorType?.map((entry, index) => (
                           <Cell key={`visitor-type-${index}-${entry.name}`} fill={entry.color} />
-                        )) || []}
+                        ))}
                       </Pie>
                       <RechartsTooltip />
                       <Legend />
@@ -621,7 +622,7 @@ export const Reports: React.FC = () => {
                       >
                         {demographics.gender?.map((entry, index) => (
                           <Cell key={`gender-${index}-${entry.name}`} fill={entry.color} />
-                        )) || []}
+                        ))}
                       </Pie>
                       <RechartsTooltip />
                       <Legend />
@@ -728,7 +729,7 @@ export const Reports: React.FC = () => {
           dataSource={siteData}
           pagination={false}
           size="middle"
-          rowKey="site"
+          rowKey="id"
           columns={[
             {
               title: 'Site',
@@ -765,11 +766,11 @@ export const Reports: React.FC = () => {
               render: (value) => (
                 <Space>
                   {value > 0 ? (
-                    <RiseOutlined className="text-green-500" />
+                    <RiseOutlined key="rise-icon" className="text-green-500" />
                   ) : (
-                    <FallOutlined className="text-red-500" />
+                    <FallOutlined key="fall-icon" className="text-red-500" />
                   )}
-                  <Text className={value > 0 ? 'text-green-600' : 'text-red-600'}>
+                  <Text key="growth-text" className={value > 0 ? 'text-green-600' : 'text-red-600'}>
                     {value > 0 ? '+' : ''}{value}%
                   </Text>
                 </Space>
