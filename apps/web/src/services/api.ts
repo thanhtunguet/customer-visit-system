@@ -508,6 +508,35 @@ class ApiClient {
     return response.data;
   }
 
+  async reassignVisit(visitId: string, newCustomerId: number, update_embeddings: boolean = true): Promise<{
+    message: string;
+    visit_id: string;
+    old_customer_id: number;
+    new_customer_id: number;
+    old_customer_remaining_visits: number;
+    new_customer_total_visits: number;
+    embedding_action: string;
+  }> {
+    const response = await this.client.post('/customers/reassign-visit', {
+      visit_id: visitId,
+      new_customer_id: newCustomerId,
+      update_embeddings,
+    });
+    return response.data;
+  }
+
+  async reassignFaceImage(imageId: number, newCustomerId: number): Promise<{
+    message: string;
+    image_id: number;
+    new_customer_id: number;
+  }> {
+    const response = await this.client.post('/customers/reassign-face-image', {
+      image_id: imageId,
+      new_customer_id: newCustomerId,
+    });
+    return response.data;
+  }
+
   async cleanupLowConfidenceFaces(customerId: number, params?: {
     min_confidence?: number;
     max_to_remove?: number;

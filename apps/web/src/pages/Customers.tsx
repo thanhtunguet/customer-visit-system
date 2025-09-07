@@ -1,5 +1,5 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
-import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined } from '@ant-design/icons';
+import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert, List, Tag } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
@@ -27,6 +27,11 @@ export const Customers: React.FC = () => {
   
   // Upload images modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  // Merge/similar modal
+  const [similarVisible, setSimilarVisible] = useState(false);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const [similarList, setSimilarList] = useState<Array<{ customer_id: number; name?: string; visit_count: number; max_similarity: number; }>>([]);
+  const [similarSourceId, setSimilarSourceId] = useState<number | null>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -84,6 +89,40 @@ export const Customers: React.FC = () => {
   const handleViewDetails = (customer: Customer) => {
     setSelectedCustomerId(customer.customer_id);
     setDetailsModalVisible(true);
+  };
+
+  const openSimilar = async (customer: Customer) => {
+    setSimilarSourceId(customer.customer_id);
+    setSimilarVisible(true);
+    setSimilarLoading(true);
+    try {
+      const res = await apiClient.findSimilarCustomers(customer.customer_id, { threshold: 0.85, limit: 10 });
+      setSimilarList(res.similar_customers || []);
+    } catch (e) {
+      setSimilarList([]);
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
+
+  const doMerge = async (targetId: number) => {
+    if (!similarSourceId) return;
+    Modal.confirm({
+      title: `Merge Customer #${targetId} into #${similarSourceId}?`,
+      icon: null,
+      content: 'All visits and face images from the secondary will be moved to the primary.',
+      okText: 'Merge',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await apiClient.mergeCustomers(similarSourceId, targetId);
+          setSimilarVisible(false);
+          await loadCustomers();
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Failed to merge customers');
+        }
+      }
+    });
   };
 
   const handleDetailsModalEdit = (customerId: number) => {
@@ -215,6 +254,14 @@ export const Customers: React.FC = () => {
       fixed: 'right' as const,
       render: (_, customer: Customer) => (
         <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<TeamOutlined />}
+            onClick={() => openSimilar(customer)}
+            title="Find similar customers"
+            className="p-0"
+          />
           <Button
             type="link"
             size="small"
@@ -385,6 +432,50 @@ export const Customers: React.FC = () => {
         onClose={() => setUploadModalVisible(false)}
         onCustomersChange={loadCustomers}
       />
+
+      <Modal
+        title={
+          similarSourceId ? `Similar to Customer #${similarSourceId}` : 'Similar Customers'
+        }
+        open={similarVisible}
+        onCancel={() => setSimilarVisible(false)}
+        footer={null}
+      >
+        {similarLoading ? (
+          <div className="py-8 text-center">Loading…</div>
+        ) : similarList.length === 0 ? (
+          <div className="py-8 text-center text-gray-500">No similar customers found above threshold.</div>
+        ) : (
+          <List
+            dataSource={similarList}
+            renderItem={(item) => (
+              <List.Item
+                actions={[
+                  <Button
+                    key="merge"
+                    type="primary"
+                    icon={<MergeCellsOutlined />}
+                    className="bg-blue-600"
+                    onClick={() => doMerge(item.customer_id)}
+                  >
+                    Merge into Source
+                  </Button>
+                ]}
+              >
+                <List.Item.Meta
+                  title={<span>#{item.customer_id} {item.name ? `— ${item.name}` : ''}</span>}
+                  description={
+                    <Space>
+                      <Tag color="blue">visits: {item.visit_count}</Tag>
+                      <Tag color="green">similarity: {(item.max_similarity * 100).toFixed(1)}%</Tag>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        )}
+      </Modal>
     </div>
   );
 };

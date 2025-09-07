@@ -148,6 +148,9 @@ export const VisitsPage: React.FC = () => {
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [reassignOpen, setReassignOpen] = useState<boolean>(false);
+  const [reassignTarget, setReassignTarget] = useState<string>('');
+  const [reassigning, setReassigning] = useState<boolean>(false);
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
@@ -801,6 +804,29 @@ export const VisitsPage: React.FC = () => {
             </div>            {/* Customer Face Gallery */}
             {selectedVisit.person_type === 'customer' && selectedVisit.person_id && (
               <div className="w-full mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <Space>
+                    <Button size="small" onClick={() => setReassignOpen(true)}>Reassign Visit…</Button>
+                    <Popconfirm
+                      title="Remove this visit?"
+                      description="Deletes the visit and associated images."
+                      okText="Remove"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={async () => {
+                        try {
+                          await apiClient.removeVisitFaceDetection(selectedVisit.visit_id);
+                          message.success('Visit removed');
+                          setIsModalVisible(false);
+                          await loadInitialData();
+                        } catch (e: any) {
+                          message.error(e.response?.data?.detail || 'Failed to remove');
+                        }
+                      }}
+                    >
+                      <Button size="small" danger>Remove Visit</Button>
+                    </Popconfirm>
+                  </Space>
+                </div>
                 <CustomerFaceGallery
                   customerId={selectedVisit.person_id}
                   customerName={`Customer #${selectedVisit.person_id}`}
@@ -809,6 +835,40 @@ export const VisitsPage: React.FC = () => {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={reassignOpen}
+        onCancel={() => setReassignOpen(false)}
+        title="Reassign Visit"
+        okText={reassigning ? 'Reassigning…' : 'Reassign'}
+        onOk={async () => {
+          const cid = parseInt(reassignTarget, 10);
+          if (!selectedVisit || !cid) return;
+          try {
+            setReassigning(true);
+            await apiClient.reassignVisit(selectedVisit.visit_id, cid, true);
+            message.success('Visit reassigned');
+            setReassignOpen(false);
+            setIsModalVisible(false);
+            setReassignTarget('');
+            await loadInitialData();
+          } catch (e: any) {
+            message.error(e.response?.data?.detail || 'Failed to reassign visit');
+          } finally {
+            setReassigning(false);
+          }
+        }}
+      >
+        <div className="space-y-2">
+          <div>New customer ID</div>
+          <input
+            value={reassignTarget}
+            onChange={(e) => setReassignTarget(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+            placeholder="Enter customer id"
+          />
+        </div>
       </Modal>
     </div>
   );

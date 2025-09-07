@@ -917,23 +917,28 @@ async def find_similar_customers(
         
         # For each face image, search for similar faces in Milvus
         for face_img in face_images:
-            if not face_img.face_embedding:
+            # Embedding is stored as JSON in CustomerFaceImage.embedding
+            if not getattr(face_img, 'embedding', None):
                 continue
                 
             try:
-                embedding = json.loads(face_img.face_embedding)
+                # Already a JSON array; ensure it's a list of floats
+                embedding = face_img.embedding
                 
                 # Search similar faces in Milvus
                 search_results = await milvus_client.search_similar_faces(
                     tenant_id=user["tenant_id"],
                     embedding=embedding,
-                    top_k=limit * 2,  # Get more results to filter out self
-                    threshold=threshold
+                    limit=limit * 2,  # Get more results to filter out self
+                    threshold=threshold,
                 )
                 
                 for result in search_results:
-                    result_customer_id = result.get('customer_id')
-                    similarity_score = result.get('similarity', 0)
+                    # Filter to customer matches only
+                    if result.get('person_type') != 'customer':
+                        continue
+                    result_customer_id = result.get('person_id')
+                    similarity_score = float(result.get('similarity', 0))
                     
                     # Skip self-matches
                     if result_customer_id == customer_id:

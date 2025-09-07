@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
+import { 
   Card,
   Row,
   Col,
@@ -57,6 +57,9 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
+  const [reassignVisible, setReassignVisible] = useState(false);
+  const [reassignTarget, setReassignTarget] = useState<string>('');
+  const [reassigning, setReassigning] = useState(false);
   
   // Ref to track if user is holding Shift/Ctrl/Cmd
   const isMultiSelectRef = useRef(false);
@@ -346,6 +349,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   }
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header with selection controls */}
       <div className="flex items-center justify-between">
@@ -396,6 +400,14 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
             </Button>
           </Popconfirm>
         )}
+        {selectedImages.size > 0 && (
+          <Button
+            size="small"
+            onClick={() => setReassignVisible(true)}
+          >
+            Reassign Selected…
+          </Button>
+        )}
       </div>
 
       {/* Help text for multi-selection */}
@@ -426,5 +438,42 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
         </Row>
       )}
     </div>
+    <Modal
+      open={reassignVisible}
+      onCancel={() => setReassignVisible(false)}
+      title={`Reassign ${selectedImages.size} image(s)`}
+      okText={reassigning ? 'Reassigning…' : 'Reassign'}
+      onOk={async () => {
+        const targetId = parseInt(reassignTarget, 10);
+        if (!targetId || selectedImages.size === 0) return;
+        try {
+          setReassigning(true);
+          for (const imgId of Array.from(selectedImages)) {
+            await apiClient.reassignFaceImage(imgId, targetId);
+          }
+          message.success('Images reassigned');
+          setSelectedImages(new Set());
+          setReassignVisible(false);
+          setReassignTarget('');
+          await loadImages();
+          onImagesChange?.();
+        } catch (e: any) {
+          message.error(e.response?.data?.detail || 'Failed to reassign images');
+        } finally {
+          setReassigning(false);
+        }
+      }}
+    >
+      <div className="space-y-2">
+        <div>New customer ID</div>
+        <input
+          value={reassignTarget}
+          onChange={(e) => setReassignTarget(e.target.value)}
+          className="w-full border rounded px-2 py-1"
+          placeholder="Enter customer id"
+        />
+      </div>
+    </Modal>
+    </>
   );
 };
