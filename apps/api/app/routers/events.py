@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import asyncio
 import logging
 import json
+import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
@@ -122,53 +123,108 @@ async def process_uploaded_images(
             # Read image data
             image_data = await image.read()
             
-            # TODO: Here we need to integrate with the worker/detector to:
-            # 1. Detect faces in the image
-            # 2. Extract embeddings
-            # 3. Create FaceDetectedEvent
-            # 4. Process through existing pipeline
+            # Extract image metadata for timestamp (try to get from EXIF if available)
+            from PIL import Image
+            from PIL.ExifTags import TAGS
+            import io
+            from datetime import datetime, timezone
             
-            # For now, simulate the process with mock data
-            # In a real implementation, you'd call the face detection service
-            import random
+            image_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+            try:
+                pil_image = Image.open(io.BytesIO(image_data))
+                exifdata = pil_image.getexif()
+                
+                # Try to extract datetime from EXIF
+                for tag_id in exifdata:
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag in ['DateTime', 'DateTimeOriginal', 'DateTimeDigitized']:
+                        try:
+                            dt_str = str(exifdata[tag_id])
+                            image_timestamp = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+                            logger.info(f"Extracted timestamp from image: {image_timestamp}")
+                            break
+                        except:
+                            continue
+            except Exception as e:
+                logger.debug(f"Could not extract EXIF timestamp: {e}")
             
-            # Simulate processing delay
-            await asyncio.sleep(0.5 + random.random())
+            # Use the existing face processing service to detect faces and extract embeddings
+            from ..services.face_processing_service import face_processing_service
             
-            # Simulate different outcomes
-            outcomes = [
-                # Existing customer recognized
-                {"success": True, "is_new": False, "customer_id": random.randint(1, 100), 
-                 "name": f"Customer_{random.randint(1, 50)}", "confidence": 0.85 + random.random() * 0.1},
-                # New customer created
-                {"success": True, "is_new": True, "customer_id": random.randint(101, 200), 
-                 "name": "Unknown Customer", "confidence": 0.80 + random.random() * 0.15},
-                # Processing failed
-                {"success": False, "error": "No face detected in image"},
-                {"success": False, "error": "Face detection confidence too low"},
-            ]
+            # Convert to base64 for the face processing service
+            import base64
+            base64_image = base64.b64encode(image_data).decode('utf-8')
+            base64_image = f"data:image/jpeg;base64,{base64_image}"
             
-            outcome = random.choice(outcomes)
+            # Process the uploaded image to detect faces and generate embeddings
+            face_result = await face_processing_service.process_staff_face_image(
+                base64_image,
+                user["tenant_id"],
+                f"manual_upload_{uuid.uuid4().hex[:8]}"  # Temporary ID for processing
+            )
             
-            if outcome["success"]:
-                result = ImageProcessingResult(
-                    success=True,
-                    customer_id=outcome["customer_id"],
-                    customer_name=outcome["name"],
-                    confidence=outcome["confidence"],
-                    is_new_customer=outcome["is_new"]
-                )
-                successful_count += 1
-                if outcome["is_new"]:
-                    new_customers_count += 1
-                else:
-                    recognized_count += 1
-            else:
+            if not face_result['success']:
                 result = ImageProcessingResult(
                     success=False,
-                    error=outcome["error"]
+                    error=face_result.get('error', 'Face processing failed')
                 )
                 failed_count += 1
+            else:
+                # Create FaceDetectedEvent from the processed result
+                event = FaceDetectedEvent(
+                    tenant_id=user["tenant_id"],
+                    site_id=site_id,
+                    camera_id=1,  # Default camera for manual uploads
+                    timestamp=image_timestamp,
+                    embedding=face_result['embedding'],
+                    bbox=face_result['bbox'],
+                    confidence=face_result['confidence'],
+                    snapshot_url=None,  # Will be set during processing
+                    is_staff_local=False,
+                    staff_id=None
+                )
+                
+                # Process through the existing face recognition pipeline WITH the actual image data
+                face_match_result = await face_service.process_face_event_with_image(
+                    event=event,
+                    face_image_data=image_data,  # Pass the actual uploaded image data
+                    face_image_filename=image.filename or "uploaded_image.jpg",
+                    db_session=db_session,
+                    tenant_id=user["tenant_id"]
+                )
+                
+                # Convert face service result to our format
+                if face_match_result.get("match") == "new":
+                    # New customer was created
+                    result = ImageProcessingResult(
+                        success=True,
+                        customer_id=face_match_result.get("person_id"),
+                        customer_name=f"Customer {face_match_result.get('person_id')}",
+                        confidence=face_result['confidence'],
+                        is_new_customer=True
+                    )
+                    successful_count += 1
+                    new_customers_count += 1
+                    
+                elif face_match_result.get("match") == "known":
+                    # Existing customer recognized
+                    result = ImageProcessingResult(
+                        success=True,
+                        customer_id=face_match_result.get("person_id"),
+                        customer_name=f"Customer {face_match_result.get('person_id')}",
+                        confidence=face_match_result.get("similarity", face_result['confidence']),
+                        is_new_customer=False
+                    )
+                    successful_count += 1
+                    recognized_count += 1
+                    
+                else:
+                    # Recognition failed or rejected
+                    result = ImageProcessingResult(
+                        success=False,
+                        error=face_match_result.get("message", "Face recognition failed")
+                    )
+                    failed_count += 1
             
             results.append(result)
             
@@ -178,6 +234,23 @@ async def process_uploaded_images(
                 error=f"Processing error: {str(e)}"
             ))
             failed_count += 1
+    
+    # Commit all database changes
+    try:
+        await db_session.commit()
+    except Exception as e:
+        await db_session.rollback()
+        logger.error(f"Failed to commit database changes: {e}")
+        # Update results to reflect the rollback
+        for result in results:
+            if result.success and result.is_new_customer:
+                result.success = False
+                result.error = "Failed to save customer to database"
+                result.customer_id = None
+                result.customer_name = None
+                successful_count -= 1
+                new_customers_count -= 1
+                failed_count += 1
     
     return ImageProcessingResponse(
         results=results,
