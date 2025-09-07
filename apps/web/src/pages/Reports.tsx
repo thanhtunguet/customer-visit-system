@@ -728,6 +728,7 @@ export const Reports: React.FC = () => {
           dataSource={siteData}
           pagination={false}
           size="middle"
+          rowKey="site"
           columns={[
             {
               title: 'Site',

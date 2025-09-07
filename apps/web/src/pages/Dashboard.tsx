@@ -295,7 +295,7 @@ export const Dashboard: React.FC = () => {
           <Card title="Recent Visits" loading={loading}>
             <Space direction="vertical" className="w-full">
               {(recentVisits.length > 0 ? recentVisits : seedRecentVisits).slice(0, 6).map((visit, index) => (
-                <div key={visit.visit_id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div key={visit.visit_id || `visit-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                   <div>
                     <div className="font-medium text-sm">
                       {visit.person_type === 'staff' ? '👤' : '👥'} {visit.person_id}
