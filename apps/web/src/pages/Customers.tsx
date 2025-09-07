@@ -1,8 +1,9 @@
-import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
-import { Avatar, Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
+import { AuthenticatedAvatar } from '../components/AuthenticatedAvatar';
 import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
 import { useState, useEffect } from 'react';
@@ -19,6 +20,9 @@ export const Customers: React.FC = () => {
   // Details modal state
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  
+  // Backfill state
+  const [backfillLoading, setBackfillLoading] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadCustomers();
@@ -87,6 +91,33 @@ export const Customers: React.FC = () => {
     }
   };
 
+  const handleBackfillAvatar = async (customer: Customer) => {
+    setBackfillLoading(prev => new Set([...prev, customer.customer_id]));
+    
+    try {
+      const result = await apiClient.backfillCustomerFaceImages(customer.customer_id);
+      
+      if (result.visits_processed > 0) {
+        setError(null);
+        // Reload customers to show updated avatars
+        await loadCustomers();
+        // You could also show a success message here
+        console.log(`✅ Backfilled ${result.visits_processed} face images for customer ${customer.customer_id}`);
+      } else {
+        setError(`No face images found to backfill for customer ${customer.name || customer.customer_id}`);
+      }
+    } catch (err: any) {
+      console.error('Backfill failed:', err);
+      setError(err.response?.data?.detail || `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`);
+    } finally {
+      setBackfillLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(customer.customer_id);
+        return newSet;
+      });
+    }
+  };
+
   const columns = [
     {
       title: 'Avatar',
@@ -94,12 +125,12 @@ export const Customers: React.FC = () => {
       key: 'avatar',
       width: 60,
       render: (avatar_url: string, customer: Customer) => (
-        <Avatar 
-          size={40}
+        <AuthenticatedAvatar
           src={avatar_url}
-          icon={!avatar_url ? <UserOutlined /> : undefined}
+          size={40}
           className="flex-shrink-0"
           alt={`${customer.name || 'Customer'} Avatar`}
+          icon={<UserOutlined />}
         />
       ),
     },
@@ -176,7 +207,7 @@ export const Customers: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 130,
+      width: 160,
       fixed: 'right' as const,
       render: (_, customer: Customer) => (
         <Space size="small">
@@ -187,6 +218,16 @@ export const Customers: React.FC = () => {
             onClick={() => handleViewDetails(customer)}
             title="View details"
             className="p-0"
+          />
+          <Button
+            type="link"
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={backfillLoading.has(customer.customer_id)}
+            onClick={() => handleBackfillAvatar(customer)}
+            title="Backfill avatar from visits"
+            className="p-0 text-blue-600"
+            disabled={backfillLoading.has(customer.customer_id)}
           />
           <EditAction
             onClick={() => handleEditCustomer(customer)}

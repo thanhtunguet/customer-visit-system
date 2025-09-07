@@ -456,6 +456,16 @@ class ApiClient {
     return response.data;
   }
 
+  async backfillCustomerFaceImages(customerId: number): Promise<{
+    message: string;
+    customer_id: number;
+    visits_processed: number;
+    total_visits_found: number;
+  }> {
+    const response = await this.client.post(`/customers/${customerId}/face-images/backfill`);
+    return response.data;
+  }
+
   // Visits
   async getVisits(params?: {
     site_id?: string;

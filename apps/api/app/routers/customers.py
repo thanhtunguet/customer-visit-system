@@ -60,6 +60,7 @@ async def list_customers(
             )
             
             face_image = face_result.scalar_one_or_none()
+            logger.info(f"Customer {customer.customer_id}: Found face image path: {face_image}")
             if face_image:
                 # Generate MinIO presigned URL for the avatar
                 from ..core.minio_client import minio_client
@@ -74,10 +75,11 @@ async def list_customers(
                         3600  # 1 hour expiry
                     )
                 except Exception as url_error:
-                    logger.debug(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
+                    logger.error(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
+                    logger.error(f"Face image path was: {face_image}")
                     
         except Exception as e:
-            logger.debug(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
+            logger.error(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
         
         # Create customer response with avatar URL
         customer_response = CustomerResponse(
@@ -667,3 +669,169 @@ async def get_customer_face_gallery_stats(
     except Exception as e:
         logger.error(f"Error getting customer face gallery stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get gallery statistics")
+
+
+@router.get("/customers/face-images/debug")
+async def debug_customer_face_images(
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Debug endpoint to check customer face images status"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..models.database import CustomerFaceImage
+        
+        # Count total face images
+        total_result = await db_session.execute(
+            select(func.count(CustomerFaceImage.image_id)).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            )
+        )
+        total_images = total_result.scalar()
+        
+        # Count customers with face images
+        customers_with_images_result = await db_session.execute(
+            select(func.count(func.distinct(CustomerFaceImage.customer_id))).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            )
+        )
+        customers_with_images = customers_with_images_result.scalar()
+        
+        # Get sample of recent images
+        recent_images_result = await db_session.execute(
+            select(
+                CustomerFaceImage.customer_id,
+                CustomerFaceImage.image_path,
+                CustomerFaceImage.confidence_score,
+                CustomerFaceImage.created_at
+            ).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"]
+            ).order_by(desc(CustomerFaceImage.created_at)).limit(5)
+        )
+        recent_images = recent_images_result.fetchall()
+        
+        return {
+            "tenant_id": user["tenant_id"],
+            "total_face_images": total_images,
+            "customers_with_images": customers_with_images,
+            "recent_images": [
+                {
+                    "customer_id": img.customer_id,
+                    "image_path": img.image_path,
+                    "confidence_score": img.confidence_score,
+                    "created_at": img.created_at.isoformat()
+                }
+                for img in recent_images
+            ],
+            "message": f"Found {total_images} face images for {customers_with_images} customers"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
+
+@router.post("/customers/{customer_id:int}/face-images/backfill")
+async def backfill_customer_face_images(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Backfill customer face images from existing visits"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        # Verify customer exists
+        from ..models.database import Customer, Visit
+        customer_result = await db_session.execute(
+            select(Customer).where(
+                Customer.tenant_id == user["tenant_id"],
+                Customer.customer_id == customer_id
+            )
+        )
+        customer = customer_result.scalar_one_or_none()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Find recent visits with face image URLs for this customer
+        visits_result = await db_session.execute(
+            select(Visit).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer",
+                Visit.face_image_url != None,
+                Visit.confidence_score >= 0.7
+            ).order_by(desc(Visit.confidence_score)).limit(3)
+        )
+        visits = visits_result.scalars().all()
+        
+        if not visits:
+            return {
+                "message": "No visits with face images found for backfilling",
+                "customer_id": customer_id,
+                "visits_processed": 0
+            }
+        
+        # Process each visit and try to save face image
+        from ..services.customer_face_service import customer_face_service
+        from ..core.minio_client import minio_client
+        import asyncio
+        
+        processed = 0
+        for visit in visits:
+            try:
+                logger.info(f"Processing visit {visit.visit_id} for customer {customer_id}")
+                
+                # Download the face image from MinIO
+                def download_sync():
+                    return minio_client.download_file("faces-raw", visit.face_image_url)
+                
+                face_image_bytes = await asyncio.get_event_loop().run_in_executor(None, download_sync)
+                
+                if not face_image_bytes:
+                    logger.warning(f"Could not download face image from {visit.face_image_url}")
+                    continue
+                
+                # Try to save to customer face gallery
+                result = await customer_face_service.add_face_image(
+                    db=db_session,
+                    tenant_id=user["tenant_id"],
+                    customer_id=customer_id,
+                    image_data=face_image_bytes,
+                    confidence_score=visit.confidence_score,
+                    face_bbox=visit.bbox if visit.bbox else [0, 0, 100, 100],
+                    embedding=visit.embedding if visit.embedding else [0.0] * 512,
+                    visit_id=visit.visit_id,
+                    metadata={
+                        "source": "backfill_from_visit",
+                        "visit_id": visit.visit_id
+                    }
+                )
+                
+                if result:
+                    logger.info(f"✅ Successfully saved face image from visit {visit.visit_id}")
+                    processed += 1
+                else:
+                    logger.warning(f"❌ Failed to save face image from visit {visit.visit_id}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing visit {visit.visit_id}: {e}")
+                continue
+        
+        # Commit all changes
+        if processed > 0:
+            await db_session.commit()
+        
+        return {
+            "message": f"Backfilled {processed} face images for customer {customer_id}",
+            "customer_id": customer_id,
+            "visits_processed": processed,
+            "total_visits_found": len(visits)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in backfill endpoint: {e}")
+        await db_session.rollback()
+        raise HTTPException(status_code=500, detail=f"Backfill failed: {str(e)}")
