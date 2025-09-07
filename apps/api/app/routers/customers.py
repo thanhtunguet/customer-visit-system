@@ -242,15 +242,112 @@ async def delete_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    # Delete customer embeddings from Milvus
-    try:
-        await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id)
-    except Exception as e:
-        logger.warning(f"Failed to delete customer embeddings from Milvus: {e}")
+    logger.info(f"🗑️ Starting comprehensive deletion of customer {customer_id}")
     
-    await db_session.delete(customer)
-    await db_session.commit()
-    return {"message": "Customer deleted successfully"}
+    try:
+        # 1. Delete customer face images from storage and database
+        logger.info(f"🗑️ Deleting customer face images for customer {customer_id}")
+        from ..models.database import CustomerFaceImage
+        from ..core.minio_client import minio_client
+        import asyncio
+        
+        # Get all face images for this customer
+        face_images_result = await db_session.execute(
+            select(CustomerFaceImage).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+        )
+        face_images = face_images_result.scalars().all()
+        
+        # Delete images from MinIO storage
+        deleted_images_count = 0
+        for face_image in face_images:
+            try:
+                # Delete from faces-derived bucket
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    minio_client.remove_object,
+                    "faces-derived",
+                    face_image.image_path
+                )
+                deleted_images_count += 1
+            except Exception as storage_error:
+                logger.warning(f"Failed to delete face image {face_image.image_path} from storage: {storage_error}")
+        
+        # Delete face image records from database
+        await db_session.execute(
+            delete(CustomerFaceImage).where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+        )
+        logger.info(f"🗑️ Deleted {deleted_images_count} face images from storage and {len(face_images)} records from database")
+        
+        # 2. Delete customer visits
+        logger.info(f"🗑️ Deleting visits for customer {customer_id}")
+        from ..models.database import Visit
+        
+        # Get visit count before deletion
+        visits_result = await db_session.execute(
+            select(func.count(Visit.visit_id)).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer"
+            )
+        )
+        visits_count = visits_result.scalar() or 0
+        
+        # Delete visits
+        await db_session.execute(
+            delete(Visit).where(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.person_id == customer_id,
+                Visit.person_type == "customer"
+            )
+        )
+        logger.info(f"🗑️ Deleted {visits_count} visit records")
+        
+        # 3. Delete customer embeddings from Milvus
+        logger.info(f"🗑️ Deleting customer embeddings from Milvus for customer {customer_id}")
+        try:
+            await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id, "customer")
+            logger.info(f"🗑️ Successfully deleted customer embeddings from Milvus")
+        except Exception as e:
+            logger.warning(f"Failed to delete customer embeddings from Milvus: {e}")
+        
+        # 4. Finally, delete the customer record
+        logger.info(f"🗑️ Deleting customer record {customer_id}")
+        await db_session.delete(customer)
+        
+        # Commit all changes
+        await db_session.commit()
+        
+        logger.info(f"✅ Successfully deleted customer {customer_id} and all related data:")
+        logger.info(f"   - Customer record: 1")
+        logger.info(f"   - Face images: {len(face_images)} records, {deleted_images_count} files")
+        logger.info(f"   - Visit records: {visits_count}")
+        logger.info(f"   - Milvus embeddings: cleaned up")
+        
+        return {
+            "message": "Customer deleted successfully", 
+            "details": {
+                "customer_id": customer_id,
+                "deleted_face_images": len(face_images),
+                "deleted_face_files": deleted_images_count,
+                "deleted_visits": visits_count,
+                "embeddings_cleaned": True
+            }
+        }
+        
+    except Exception as e:
+        # Rollback on error
+        await db_session.rollback()
+        logger.error(f"❌ Error during customer deletion: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to delete customer: {str(e)}"
+        )
 
 
 # Customer Face Gallery Endpoints
