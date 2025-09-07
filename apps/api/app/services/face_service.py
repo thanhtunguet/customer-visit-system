@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 
 class FaceMatchingService:
     def __init__(self):
-        # DEBUG: Temporarily lower thresholds for troubleshooting
-        self.similarity_threshold = 0.6  # Back to original for debugging
-        self.staff_similarity_threshold = 0.75  # Slightly lower for staff
+        # Improved thresholds for better face recognition accuracy
+        self.similarity_threshold = 0.6  # Lower threshold for initial filtering
+        self.staff_similarity_threshold = 0.75  # Staff matching threshold
         self.max_search_results = 10  # Keep increased for better filtering
-        self.min_confidence_score = 0.6  # Lower to accept more faces
-        self.customer_merge_threshold = 0.75  # Lower for customer matching (was 0.85)
+        self.min_confidence_score = 0.6  # Minimum face detection confidence
+        self.customer_merge_threshold = 0.80  # Higher threshold for customer matching to prevent false positives
         
         # Debug mode - extra logging
         self.debug_mode = True  # Very high threshold for customer merging
@@ -65,13 +65,14 @@ class FaceMatchingService:
                 "message": f"Detection quality too low: {event.confidence:.3f}"
             }
 
-        # Search for similar faces in Milvus with enhanced filtering
-        logger.info(f"🔍 Searching Milvus for similar faces with threshold {self.similarity_threshold}")
+        # Use customer_merge_threshold for Milvus search to prevent false positives
+        search_threshold = self.customer_merge_threshold
+        logger.info(f"🔍 Searching Milvus for similar faces with threshold {search_threshold}")
         similar_faces = await milvus_client.search_similar_faces(
             tenant_id=tenant_id,
             embedding=event.embedding,
             limit=self.max_search_results,
-            threshold=self.similarity_threshold,
+            threshold=search_threshold,  # Use higher threshold for better precision
         )
         logger.info(f"🔍 Milvus returned {len(similar_faces)} similar faces")
         for i, face in enumerate(similar_faces):
@@ -83,36 +84,25 @@ class FaceMatchingService:
         match_type = "new"
 
         if similar_faces:
-            # Enhanced matching logic with multiple candidates
-            best_match = None
+            # Since we're using customer_merge_threshold in Milvus search,
+            # all returned results should be valid matches
+            best_match = similar_faces[0]  # Already sorted by similarity in Milvus
             
-            # Filter and sort by quality
-            quality_filtered_matches = []
-            for match in similar_faces:
-                # Additional confidence check on the match
-                if match["similarity"] >= self.similarity_threshold:
-                    quality_filtered_matches.append(match)
+            logger.info(f"🔍 Best match found: {best_match['person_type']} {best_match['person_id']} with similarity {best_match['similarity']:.3f}")
             
-            if quality_filtered_matches:
-                # Sort by similarity score and select the best match
-                quality_filtered_matches.sort(key=lambda x: x["similarity"], reverse=True)
-                best_match = quality_filtered_matches[0]
+            # Double-check the threshold (should always pass since we used it in search)
+            required_threshold = self.customer_merge_threshold if best_match["person_type"] == "customer" else self.staff_similarity_threshold
+            logger.info(f"🔍 Required threshold for {best_match['person_type']}: {required_threshold}")
+            
+            if best_match["similarity"] >= required_threshold:
+                person_id = best_match["person_id"]
+                person_type = best_match["person_type"]
+                similarity = best_match["similarity"]
+                match_type = "known"
                 
-                logger.info(f"🔍 Best match found: {best_match['person_type']} {best_match['person_id']} with similarity {best_match['similarity']:.3f}")
-                
-                # For customer matching, use higher threshold to prevent false positives
-                required_threshold = self.customer_merge_threshold if best_match["person_type"] == "customer" else self.staff_similarity_threshold
-                logger.info(f"🔍 Required threshold for {best_match['person_type']}: {required_threshold}")
-                
-                if best_match["similarity"] >= required_threshold:
-                    person_id = best_match["person_id"]
-                    person_type = best_match["person_type"]
-                    similarity = best_match["similarity"]
-                    match_type = "known"
-                    
-                    logger.info(f"High-confidence match found: {person_type} {person_id} with similarity {similarity:.3f}")
-                else:
-                    logger.info(f"Match found but below threshold: {best_match['similarity']:.3f} < {required_threshold:.3f}, creating new customer")
+                logger.info(f"High-confidence match found: {person_type} {person_id} with similarity {similarity:.3f}")
+            else:
+                logger.warning(f"Unexpected: match below threshold after Milvus filtering: {best_match['similarity']:.3f} < {required_threshold:.3f}")
 
         if not person_id:
             # Create new customer only if no high-confidence match
