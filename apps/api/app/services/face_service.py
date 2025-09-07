@@ -22,11 +22,13 @@ logger = logging.getLogger(__name__)
 class FaceMatchingService:
     def __init__(self):
         # Improved thresholds for better face recognition accuracy
-        self.similarity_threshold = 0.6  # Lower threshold for initial filtering
-        self.staff_similarity_threshold = 0.75  # Staff matching threshold
+        self.similarity_threshold = 0.6  # Initial filtering
+        self.staff_similarity_threshold = 0.8  # Safer staff matching
         self.max_search_results = 10  # Keep increased for better filtering
         self.min_confidence_score = 0.6  # Minimum face detection confidence
-        self.customer_merge_threshold = 0.80  # Higher threshold for customer matching to prevent false positives
+        # Higher threshold for customer matching to prevent false positives
+        # Raised to reduce erroneous merging when embeddings are approximate
+        self.customer_merge_threshold = 0.92
         
         # Debug mode - extra logging
         self.debug_mode = True  # Very high threshold for customer merging

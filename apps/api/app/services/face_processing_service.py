@@ -158,48 +158,56 @@ class FaceProcessingService:
     
     def extract_face_embedding(self, image: ArrayType, landmarks: List[List[float]]) -> List[float]:
         """
-        Extract 512-dimensional face embedding from aligned face.
-        
-        This is a placeholder implementation. In production, use:
-        - InsightFace ArcFace
-        - FaceNet
-        - Or other production-ready embedding model
+        Extract a deterministic 512D embedding from an aligned face region.
+
+        Deterministic placeholder to ensure distinct faces don't collapse
+        to the same vector in absence of a real model.
         """
         try:
-            # Placeholder: generate a random 512-D vector
-            # In production, this would:
-            # 1. Align the face using landmarks
-            # 2. Preprocess for the embedding model
-            # 3. Run inference to get embedding
-            # 4. Normalize the embedding
-            
-            # For now, create a deterministic embedding based on image properties
-            # This ensures consistent results for the same image
             face_region = self._extract_face_region(image, landmarks)
-            
-            # Simple feature extraction (placeholder)
-            features = []
-            
-            # Add some basic statistical features
-            features.extend([
-                float(np.mean(face_region)),
-                float(np.std(face_region)),
-                float(np.median(face_region)),
-            ])
-            
-            # Pad to 512 dimensions with deterministic values
-            while len(features) < 512:
-                features.append(float(np.random.random()))
-            
-            # Normalize to unit vector
-            features = np.array(features[:512])
-            features = features / (np.linalg.norm(features) + 1e-8)
-            
-            return features.tolist()
-            
+
+            # Convert to grayscale and small size
+            gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+            small = cv2.resize(gray, (32, 32))
+
+            # Stable seed from bytes
+            import hashlib
+            h = hashlib.sha256(small.tobytes()).hexdigest()
+            seed = int(h[:16], 16)
+
+            # Low-frequency DCT features (256 dims)
+            dct = cv2.dct(small.astype(np.float32))
+            lf = dct[:16, :16].flatten()
+
+            # Histogram (32 dims)
+            hist = cv2.calcHist([small], [0], None, [32], [0, 256]).flatten()
+
+            # Basic stats (3 dims)
+            mean = float(np.mean(small))
+            std = float(np.std(small) + 1e-6)
+            stats = np.array([mean, std, mean / (std + 1e-6)], dtype=np.float32)
+
+            base = np.concatenate([lf.astype(np.float32), hist.astype(np.float32), stats])
+
+            # Pad deterministically to 512
+            if base.size >= 512:
+                vec = base[:512]
+            else:
+                rng = np.random.default_rng(seed)
+                pad = rng.normal(0, 1, 512 - base.size).astype(np.float32)
+                vec = np.concatenate([base, pad])
+
+            # L2-normalize
+            vec = vec / (np.linalg.norm(vec) + 1e-12)
+            return vec.astype(np.float32).tolist()
+
         except Exception as e:
             logger.error(f"Embedding extraction failed: {e}")
-            return [0.0] * 512  # Return zero vector on error
+            # Deterministic zero-like fallback seeded by shape
+            size = 512
+            vec = np.zeros(size, dtype=np.float32)
+            vec[0] = 1.0
+            return vec.tolist()
     
     def _extract_face_region(self, image: ArrayType, landmarks: List[List[float]]) -> ArrayType:
         """Extract face region using landmarks for alignment."""
