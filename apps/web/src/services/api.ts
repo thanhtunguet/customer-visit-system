@@ -794,6 +794,41 @@ class ApiClient {
     return response.data;
   }
 
+  // Process uploaded images for face recognition
+  async processUploadedImages(images: File[], siteId: number): Promise<{
+    results: Array<{
+      success: boolean;
+      customer_id?: number;
+      customer_name?: string;
+      confidence?: number;
+      is_new_customer?: boolean;
+      error?: string;
+    }>;
+    total_processed: number;
+    successful_count: number;
+    failed_count: number;
+    new_customers_count: number;
+    recognized_count: number;
+  }> {
+    const formData = new FormData();
+    
+    // Add all images
+    images.forEach((image) => {
+      formData.append('images', image);
+    });
+    
+    // Add site ID
+    formData.append('site_id', siteId.toString());
+    
+    const response = await this.client.post('/events/process-images', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: Math.max(60000, images.length * 10000), // Dynamic timeout based on number of images
+    });
+    return response.data;
+  }
+
   // Generic HTTP methods for flexibility
   async get<T = any>(url: string, params?: any): Promise<T> {
     const response = await this.client.get(url, { params });

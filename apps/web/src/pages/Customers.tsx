@@ -1,9 +1,10 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
 import { AuthenticatedAvatar } from '../components/AuthenticatedAvatar';
+import { ImageUploadModal } from '../components/ImageUploadModal';
 import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
 import { useState, useEffect } from 'react';
@@ -23,6 +24,9 @@ export const Customers: React.FC = () => {
   
   // Backfill state
   const [backfillLoading, setBackfillLoading] = useState<Set<number>>(new Set());
+  
+  // Upload images modal state
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -264,18 +268,27 @@ export const Customers: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Title level={2} className="mb-0">Customers</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingCustomer(null);
-            form.resetFields();
-            setModalVisible(true);
-          }}
-          className="bg-blue-600"
-        >
-          Add Customer
-        </Button>
+        <Space>
+          <Button
+            type="default"
+            icon={<UploadOutlined />}
+            onClick={() => setUploadModalVisible(true)}
+          >
+            Upload Images
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingCustomer(null);
+              form.resetFields();
+              setModalVisible(true);
+            }}
+            className="bg-blue-600"
+          >
+            Add Customer
+          </Button>
+        </Space>
       </div>
 
       {error && (
@@ -365,6 +378,12 @@ export const Customers: React.FC = () => {
           setSelectedCustomerId(null);
         }}
         onEdit={handleDetailsModalEdit}
+      />
+
+      <ImageUploadModal
+        visible={uploadModalVisible}
+        onClose={() => setUploadModalVisible(false)}
+        onCustomersChange={loadCustomers}
       />
     </div>
   );

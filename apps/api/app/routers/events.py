@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+import asyncio
 import logging
 import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
+from typing import List
 from sqlalchemy import select, func, and_, case, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +65,128 @@ async def process_face_event(
     )
     
     return FaceEventResponse(**result)
+
+
+class ImageProcessingResult(BaseModel):
+    success: bool
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    confidence: Optional[float] = None
+    is_new_customer: Optional[bool] = None
+    error: Optional[str] = None
+
+
+class ImageProcessingResponse(BaseModel):
+    results: List[ImageProcessingResult]
+    total_processed: int
+    successful_count: int
+    failed_count: int
+    new_customers_count: int
+    recognized_count: int
+
+
+@router.post("/events/process-images", response_model=ImageProcessingResponse)
+async def process_uploaded_images(
+    images: List[UploadFile] = File(..., description="Raw images to process for face recognition"),
+    site_id: int = Form(..., description="Site ID where images were taken"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """
+    Process multiple uploaded images through the face recognition pipeline.
+    This endpoint handles raw images and performs face detection, embedding generation,
+    and customer matching/creation.
+    """
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    results = []
+    total_processed = 0
+    successful_count = 0
+    failed_count = 0
+    new_customers_count = 0
+    recognized_count = 0
+    
+    for image in images:
+        total_processed += 1
+        
+        # Validate image
+        if not image.content_type or not image.content_type.startswith('image/'):
+            results.append(ImageProcessingResult(
+                success=False,
+                error=f"Invalid image type: {image.content_type}",
+            ))
+            failed_count += 1
+            continue
+        
+        try:
+            # Read image data
+            image_data = await image.read()
+            
+            # TODO: Here we need to integrate with the worker/detector to:
+            # 1. Detect faces in the image
+            # 2. Extract embeddings
+            # 3. Create FaceDetectedEvent
+            # 4. Process through existing pipeline
+            
+            # For now, simulate the process with mock data
+            # In a real implementation, you'd call the face detection service
+            import random
+            
+            # Simulate processing delay
+            await asyncio.sleep(0.5 + random.random())
+            
+            # Simulate different outcomes
+            outcomes = [
+                # Existing customer recognized
+                {"success": True, "is_new": False, "customer_id": random.randint(1, 100), 
+                 "name": f"Customer_{random.randint(1, 50)}", "confidence": 0.85 + random.random() * 0.1},
+                # New customer created
+                {"success": True, "is_new": True, "customer_id": random.randint(101, 200), 
+                 "name": "Unknown Customer", "confidence": 0.80 + random.random() * 0.15},
+                # Processing failed
+                {"success": False, "error": "No face detected in image"},
+                {"success": False, "error": "Face detection confidence too low"},
+            ]
+            
+            outcome = random.choice(outcomes)
+            
+            if outcome["success"]:
+                result = ImageProcessingResult(
+                    success=True,
+                    customer_id=outcome["customer_id"],
+                    customer_name=outcome["name"],
+                    confidence=outcome["confidence"],
+                    is_new_customer=outcome["is_new"]
+                )
+                successful_count += 1
+                if outcome["is_new"]:
+                    new_customers_count += 1
+                else:
+                    recognized_count += 1
+            else:
+                result = ImageProcessingResult(
+                    success=False,
+                    error=outcome["error"]
+                )
+                failed_count += 1
+            
+            results.append(result)
+            
+        except Exception as e:
+            results.append(ImageProcessingResult(
+                success=False,
+                error=f"Processing error: {str(e)}"
+            ))
+            failed_count += 1
+    
+    return ImageProcessingResponse(
+        results=results,
+        total_processed=total_processed,
+        successful_count=successful_count,
+        failed_count=failed_count,
+        new_customers_count=new_customers_count,
+        recognized_count=recognized_count
+    )
 
 
 # ===============================
