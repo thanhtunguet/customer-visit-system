@@ -354,6 +354,132 @@ class FaceProcessingService:
                 'error': str(e),
                 'face_count': 0
             }
+
+    async def process_customer_faces_from_image(
+        self, 
+        base64_image: str, 
+        tenant_id: str
+    ) -> Dict:
+        """
+        Process all faces in an uploaded image for customer detection.
+        Unlike staff processing which only uses the first face, this processes ALL faces.
+        
+        Returns:
+            {
+                'success': bool,
+                'faces': List[face_data],  # All detected faces
+                'face_count': int,
+                'error': str (if success=False)
+            }
+        """
+        try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            
+            # Decode image
+            image = self.decode_base64_image(base64_image)
+            
+            # Calculate image hash for duplicate detection
+            image_bytes = base64.b64decode(base64_image.split(',')[-1])
+            image_hash = hashlib.sha256(image_bytes).hexdigest()
+            
+            # Detect faces
+            face_results = self.detect_faces_and_landmarks(image)
+            
+            if not face_results:
+                return {
+                    'success': False,
+                    'error': 'No faces detected in image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            logger.info(f"Detected {len(face_results)} faces in uploaded image")
+            
+            # Process ALL faces, not just the first one
+            processed_faces = []
+            
+            for i, face_data in enumerate(face_results):
+                try:
+                    landmarks = face_data['landmarks']
+                    
+                    # Generate embedding for this face
+                    embedding = self.extract_face_embedding(image, landmarks)
+                    
+                    # Extract face crop for this face
+                    face_crop = self._extract_face_region(image, landmarks)
+                    
+                    # Convert face crop to base64
+                    face_crop_b64 = None
+                    try:
+                        _, buffer = cv2.imencode('.jpg', face_crop)
+                        face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+                    except Exception as e:
+                        logger.warning(f"Failed to encode face crop {i} to base64: {e}")
+                    
+                    # Ensure all data is JSON serializable
+                    def ensure_json_serializable(obj):
+                        """Convert NumPy types to Python native types"""
+                        if isinstance(obj, np.integer):
+                            return int(obj)
+                        elif isinstance(obj, np.floating):
+                            return float(obj)
+                        elif isinstance(obj, list):
+                            return [ensure_json_serializable(item) for item in obj]
+                        elif isinstance(obj, dict):
+                            return {key: ensure_json_serializable(value) for key, value in obj.items()}
+                        else:
+                            return obj
+                    
+                    # Prepare face data
+                    processed_face = {
+                        'face_index': i,
+                        'landmarks': ensure_json_serializable(landmarks),
+                        'embedding': ensure_json_serializable(embedding),
+                        'confidence': float(face_data['confidence']),
+                        'bbox': ensure_json_serializable(face_data['bbox']),
+                        'face_crop_b64': face_crop_b64
+                    }
+                    
+                    processed_faces.append(processed_face)
+                    logger.info(f"Successfully processed face {i+1}/{len(face_results)} with confidence {face_data['confidence']:.3f}")
+                    
+                except Exception as face_error:
+                    logger.error(f"Failed to process face {i}: {face_error}")
+                    # Continue with other faces even if one fails
+                    continue
+            
+            if not processed_faces:
+                return {
+                    'success': False,
+                    'error': 'Failed to process any faces from the image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            result = {
+                'success': True,
+                'image_hash': image_hash,
+                'faces': processed_faces,
+                'face_count': len(processed_faces),
+                'total_detected': len(face_results)
+            }
+            
+            logger.info(f"Successfully processed {len(processed_faces)} faces from uploaded image")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Customer face processing failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': str(e),
+                'face_count': 0,
+                'faces': []
+            }
     
     async def test_face_recognition(
         self, 

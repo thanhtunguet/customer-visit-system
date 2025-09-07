@@ -81,8 +81,12 @@ class CustomerFaceService:
                 logger.info(f"Created missing customer {customer_id} for tenant {tenant_id}")
             
             # Check if confidence meets minimum threshold
-            if confidence_score < self.min_confidence_to_save:
-                logger.debug(f"Face confidence {confidence_score:.3f} below threshold {self.min_confidence_to_save}, skipping")
+            # For manual uploads, use a more lenient threshold since they are curated by users
+            is_manual_upload = metadata and metadata.get('source') == 'manual_upload'
+            effective_threshold = 0.3 if is_manual_upload else self.min_confidence_to_save
+            
+            if confidence_score < effective_threshold:
+                logger.debug(f"Face confidence {confidence_score:.3f} below threshold {effective_threshold:.3f} ({'manual' if is_manual_upload else 'auto'}), skipping")
                 return None
             
             # Calculate image hash for duplicate detection

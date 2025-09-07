@@ -76,6 +76,7 @@ class ImageProcessingResult(BaseModel):
     confidence: Optional[float] = None
     is_new_customer: Optional[bool] = None
     error: Optional[str] = None
+    additional_info: Optional[str] = None
 
 
 class ImageProcessingResponse(BaseModel):
@@ -157,12 +158,15 @@ async def process_uploaded_images(
             base64_image = base64.b64encode(image_data).decode('utf-8')
             base64_image = f"data:image/jpeg;base64,{base64_image}"
             
-            # Process the uploaded image to detect faces and generate embeddings
-            face_result = await face_processing_service.process_staff_face_image(
+            # Process the uploaded image to detect ALL faces (not just first one)
+            logger.info(f"Processing image {image.filename} for multiple face detection")
+            face_result = await face_processing_service.process_customer_faces_from_image(
                 base64_image,
-                user["tenant_id"],
-                f"manual_upload_{uuid.uuid4().hex[:8]}"  # Temporary ID for processing
+                user["tenant_id"]
             )
+            
+            if face_result['success']:
+                logger.info(f"Detected {face_result['face_count']} faces in {image.filename}")
             
             if not face_result['success']:
                 result = ImageProcessingResult(
@@ -171,71 +175,107 @@ async def process_uploaded_images(
                 )
                 failed_count += 1
             else:
-                # Create FaceDetectedEvent from the processed result
-                event = FaceDetectedEvent(
-                    tenant_id=user["tenant_id"],
-                    site_id=site_id,
-                    camera_id=1,  # Default camera for manual uploads
-                    timestamp=image_timestamp,
-                    embedding=face_result['embedding'],
-                    bbox=face_result['bbox'],
-                    confidence=face_result['confidence'],
-                    snapshot_url=None,  # Will be set during processing
-                    is_staff_local=False,
-                    staff_id=None
-                )
+                # Process EACH face detected in the image as a separate customer/visit
+                faces_processed = []
                 
-                # Extract face crop if available from face processing result
-                face_image_to_save = image_data  # Default to full image
-                if face_result.get('face_crop_b64'):
+                for face_data in face_result['faces']:
                     try:
-                        # Decode the base64 face crop
-                        import base64
-                        face_image_to_save = base64.b64decode(face_result['face_crop_b64'])
-                        logger.info(f"Using cropped face image ({len(face_image_to_save)} bytes) instead of full image ({len(image_data)} bytes)")
-                    except Exception as crop_error:
-                        logger.warning(f"Failed to decode face crop, using full image: {crop_error}")
-                        face_image_to_save = image_data
+                        face_id = f"face_{face_data['face_index']}_{uuid.uuid4().hex[:6]}"
+                        logger.info(f"🎭 Processing {face_id} from {image.filename} (confidence: {face_data['confidence']:.3f})")
+                        
+                        # Create FaceDetectedEvent from each face
+                        event = FaceDetectedEvent(
+                            tenant_id=user["tenant_id"],
+                            site_id=site_id,
+                            camera_id=1,  # Default camera for manual uploads
+                            timestamp=image_timestamp,
+                            embedding=face_data['embedding'],
+                            bbox=face_data['bbox'],
+                            confidence=face_data['confidence'],
+                            snapshot_url=None,  # Will be set during processing
+                            is_staff_local=False,
+                            staff_id=None
+                        )
+                        
+                        # Extract face crop for this specific face
+                        face_image_to_save = image_data  # Default to full image
+                        if face_data.get('face_crop_b64'):
+                            try:
+                                # Decode the base64 face crop for this specific face
+                                import base64
+                                face_image_to_save = base64.b64decode(face_data['face_crop_b64'])
+                                logger.info(f"Using cropped face image for face {face_data['face_index']} ({len(face_image_to_save)} bytes)")
+                            except Exception as crop_error:
+                                logger.warning(f"Failed to decode face crop for face {face_data['face_index']}: {crop_error}")
+                                face_image_to_save = image_data
+                        
+                        # Process through the face recognition pipeline for this specific face
+                        logger.info(f"🔍 Starting face matching for {face_id}")
+                        face_match_result = await face_service.process_face_event_with_image(
+                            event=event,
+                            face_image_data=face_image_to_save,  # Pass the cropped face image for this face
+                            face_image_filename=f"{image.filename or 'uploaded_image'}_face_{face_data['face_index']}.jpg",
+                            db_session=db_session,
+                            tenant_id=user["tenant_id"]
+                        )
+                        logger.info(f"🎯 Face matching result for {face_id}: {face_match_result.get('match')} (person_id: {face_match_result.get('person_id')}, similarity: {face_match_result.get('similarity', 0):.3f})")
+                        
+                        # Convert face service result to our format
+                        if face_match_result.get("match") == "new":
+                            # New customer was created for this face
+                            face_result_data = ImageProcessingResult(
+                                success=True,
+                                customer_id=face_match_result.get("person_id"),
+                                customer_name=f"Customer {face_match_result.get('person_id')}",
+                                confidence=face_data['confidence'],
+                                is_new_customer=True
+                            )
+                            successful_count += 1
+                            new_customers_count += 1
+                            
+                        elif face_match_result.get("match") == "known":
+                            # Existing customer recognized for this face
+                            face_result_data = ImageProcessingResult(
+                                success=True,
+                                customer_id=face_match_result.get("person_id"),
+                                customer_name=f"Customer {face_match_result.get('person_id')}",
+                                confidence=face_match_result.get("similarity", face_data['confidence']),
+                                is_new_customer=False
+                            )
+                            successful_count += 1
+                            recognized_count += 1
+                        else:
+                            # Face was rejected or other issue
+                            face_result_data = ImageProcessingResult(
+                                success=False,
+                                error=f"Face processing failed: {face_match_result.get('message', 'Unknown error')}"
+                            )
+                            failed_count += 1
+                        
+                        faces_processed.append(face_result_data)
+                        logger.info(f"Processed face {face_data['face_index']+1}/{len(face_result['faces'])}: {face_result_data.success}")
+                        
+                    except Exception as face_processing_error:
+                        logger.error(f"Failed to process face {face_data['face_index']}: {face_processing_error}")
+                        failed_count += 1
+                        faces_processed.append(ImageProcessingResult(
+                            success=False,
+                            error=f"Face processing error: {str(face_processing_error)}"
+                        ))
                 
-                # Process through the existing face recognition pipeline WITH the face crop data
-                face_match_result = await face_service.process_face_event_with_image(
-                    event=event,
-                    face_image_data=face_image_to_save,  # Pass the cropped face image
-                    face_image_filename=image.filename or "uploaded_image.jpg",
-                    db_session=db_session,
-                    tenant_id=user["tenant_id"]
-                )
-                
-                # Convert face service result to our format
-                if face_match_result.get("match") == "new":
-                    # New customer was created
-                    result = ImageProcessingResult(
-                        success=True,
-                        customer_id=face_match_result.get("person_id"),
-                        customer_name=f"Customer {face_match_result.get('person_id')}",
-                        confidence=face_result['confidence'],
-                        is_new_customer=True
-                    )
-                    successful_count += 1
-                    new_customers_count += 1
+                # For backward compatibility, return the result of the first successfully processed face
+                # or the first face if none succeeded
+                if faces_processed:
+                    # Find first successful result, or use first result
+                    result = next((r for r in faces_processed if r.success), faces_processed[0])
                     
-                elif face_match_result.get("match") == "known":
-                    # Existing customer recognized
-                    result = ImageProcessingResult(
-                        success=True,
-                        customer_id=face_match_result.get("person_id"),
-                        customer_name=f"Customer {face_match_result.get('person_id')}",
-                        confidence=face_match_result.get("similarity", face_result['confidence']),
-                        is_new_customer=False
-                    )
-                    successful_count += 1
-                    recognized_count += 1
-                    
+                    # Add info about multiple faces
+                    if len(faces_processed) > 1:
+                        result.additional_info = f"Processed {len(faces_processed)} faces total"
                 else:
-                    # Recognition failed or rejected
                     result = ImageProcessingResult(
                         success=False,
-                        error=face_match_result.get("message", "Face recognition failed")
+                        error="No faces could be processed from the image"
                     )
                     failed_count += 1
             
