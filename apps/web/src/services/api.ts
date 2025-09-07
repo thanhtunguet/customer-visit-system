@@ -467,6 +467,60 @@ class ApiClient {
     return response.data;
   }
 
+  // Customer Data Cleanup
+  async findSimilarCustomers(customerId: number, params?: {
+    threshold?: number;
+    limit?: number;
+  }): Promise<{
+    customer_id: number;
+    customer_name?: string;
+    similar_customers: Array<{
+      customer_id: number;
+      name?: string;
+      visit_count: number;
+      first_seen?: string;
+      last_seen?: string;
+      max_similarity: number;
+      gender?: string;
+      estimated_age_range?: string;
+    }>;
+    threshold_used: number;
+    total_found: number;
+  }> {
+    const response = await this.client.get(`/customers/${customerId}/similar`, { params });
+    return response.data;
+  }
+
+  async mergeCustomers(primaryCustomerId: number, secondaryCustomerId: number, notes?: string): Promise<{
+    message: string;
+    primary_customer_id: number;
+    secondary_customer_id: number;
+    merged_visits: number;
+    merged_face_images: number;
+    new_visit_count: number;
+    merge_notes?: string;
+  }> {
+    const response = await this.client.post('/customers/merge', {
+      primary_customer_id: primaryCustomerId,
+      secondary_customer_id: secondaryCustomerId,
+      notes
+    });
+    return response.data;
+  }
+
+  async cleanupLowConfidenceFaces(customerId: number, params?: {
+    min_confidence?: number;
+    max_to_remove?: number;
+  }): Promise<{
+    message: string;
+    customer_id: number;
+    removed_count: number;
+    min_confidence_threshold: number;
+  }> {
+    const response = await this.client.post(`/customers/${customerId}/cleanup-low-confidence-faces`, params || {});
+    return response.data;
+  }
+
   // Visits
   async getVisits(params?: {
     site_id?: string;
@@ -502,6 +556,17 @@ class ApiClient {
     }>('/visits/delete', {
       visit_ids: visitIds
     });
+    return response.data;
+  }
+
+  async removeVisitFaceDetection(visitId: string): Promise<{
+    message: string;
+    visit_id: string;
+    customer_id?: number;
+    images_cleaned: number;
+    embedding_cleaned: boolean;
+  }> {
+    const response = await this.client.delete(`/visits/${visitId}/face`);
     return response.data;
   }
 

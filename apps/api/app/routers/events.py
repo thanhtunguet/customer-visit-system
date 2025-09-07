@@ -555,6 +555,219 @@ async def delete_visits(
         "images_cleaned": images_cleaned
     }
 
+@router.delete("/visits/{visit_id}/face")
+async def remove_visit_face_detection(
+    visit_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Remove a specific face detection visit and clean up all associated data"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..core.milvus_client import milvus_client
+        from ..core.minio_client import minio_client
+        from ..models.database import CustomerFaceImage
+        
+        # Get the visit to be deleted
+        visit_result = await db_session.execute(
+            select(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.visit_id == visit_id
+                )
+            )
+        )
+        visit = visit_result.scalar_one_or_none()
+        
+        if not visit:
+            raise HTTPException(status_code=404, detail="Visit not found")
+        
+        customer_id = visit.person_id if visit.person_type == "customer" else None
+        
+        # Get associated customer face image for cleanup
+        if customer_id:
+            face_image_result = await db_session.execute(
+                select(CustomerFaceImage.image_path).where(
+                    and_(
+                        CustomerFaceImage.tenant_id == user["tenant_id"],
+                        CustomerFaceImage.visit_id == visit_id
+                    )
+                )
+            )
+            customer_face_image_path = face_image_result.scalar_one_or_none()
+        else:
+            customer_face_image_path = None
+        
+        # Delete associated customer face image first
+        if customer_id:
+            await db_session.execute(
+                delete(CustomerFaceImage).where(
+                    and_(
+                        CustomerFaceImage.tenant_id == user["tenant_id"],
+                        CustomerFaceImage.visit_id == visit_id
+                    )
+                )
+            )
+        
+        # Delete from Milvus if face embedding exists
+        if visit.face_embedding:
+            try:
+                await milvus_client.delete_face_embedding(
+                    tenant_id=user["tenant_id"], 
+                    visit_id=visit_id
+                )
+                logger.info(f"Deleted face embedding from Milvus for visit {visit_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete face embedding from Milvus for visit {visit_id}: {e}")
+        
+        # Delete the visit from database
+        await db_session.execute(
+            delete(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.visit_id == visit_id
+                )
+            )
+        )
+        
+        # Update customer visit count if this was a customer visit
+        if customer_id:
+            from ..models.database import Customer
+            await db_session.execute(
+                select(Customer).where(
+                    and_(
+                        Customer.tenant_id == user["tenant_id"],
+                        Customer.customer_id == customer_id
+                    )
+                ).update({
+                    Customer.visit_count: Customer.visit_count - 1
+                })
+            )
+        
+        await db_session.commit()
+        
+        # Clean up images from MinIO (after database commit)
+        images_cleaned = 0
+        
+        # Clean up visit image
+        if visit.image_path:
+            try:
+                if visit.image_path.startswith('s3://'):
+                    # Extract bucket and object name from s3://bucket/object format
+                    path_parts = visit.image_path[5:].split('/', 1)
+                    if len(path_parts) == 2:
+                        bucket, object_name = path_parts
+                        minio_client.delete_file(bucket, object_name)
+                        images_cleaned += 1
+                elif visit.image_path.startswith('visits-faces/'):
+                    # API-generated face crops are in faces-derived bucket
+                    object_path = visit.image_path.replace('visits-faces/', '')
+                    minio_client.delete_file('faces-derived', object_path)
+                    images_cleaned += 1
+                elif not visit.image_path.startswith('http'):
+                    # Assume it's a path in the faces-raw bucket
+                    minio_client.delete_file('faces-raw', visit.image_path)
+                    images_cleaned += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete visit image {visit.image_path}: {e}")
+        
+        # Clean up customer face image
+        if customer_face_image_path:
+            try:
+                if customer_face_image_path.startswith('customer-faces/'):
+                    # Legacy format - remove the prefix
+                    object_path = customer_face_image_path.replace('customer-faces/', '')
+                else:
+                    # New format - use path directly
+                    object_path = customer_face_image_path
+                minio_client.delete_file('faces-derived', object_path)
+                images_cleaned += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete customer face image {customer_face_image_path}: {e}")
+        
+        return {
+            "message": "Face detection removed successfully",
+            "visit_id": visit_id,
+            "customer_id": customer_id,
+            "images_cleaned": images_cleaned,
+            "embedding_cleaned": bool(visit.face_embedding)
+        }
+        
+    except HTTPException:
+        await db_session.rollback()
+        raise
+    except Exception as e:
+        await db_session.rollback()
+        logger.error(f"Error removing face detection: {e}")
+        raise HTTPException(status_code=500, detail="Failed to remove face detection")
+
+
+@router.post("/customers/{customer_id:int}/cleanup-low-confidence-faces")
+async def cleanup_low_confidence_faces(
+    customer_id: int,
+    request: dict,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Remove low-confidence face detections for a specific customer"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    min_confidence = request.get("min_confidence", 0.7)
+    max_to_remove = request.get("max_to_remove", 10)
+    
+    try:
+        from ..models.database import Customer
+        
+        # Verify customer exists
+        customer_result = await db_session.execute(
+            select(Customer).where(
+                and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+            )
+        )
+        customer = customer_result.scalar_one_or_none()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Find low-confidence visits for this customer
+        low_confidence_visits_result = await db_session.execute(
+            select(Visit.visit_id).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_id == customer_id,
+                    Visit.person_type == "customer",
+                    Visit.confidence_score < min_confidence
+                )
+            ).order_by(Visit.confidence_score.asc()).limit(max_to_remove)
+        )
+        
+        visit_ids_to_remove = [row[0] for row in low_confidence_visits_result.fetchall()]
+        
+        if not visit_ids_to_remove:
+            return {
+                "message": f"No low-confidence visits found below threshold {min_confidence}",
+                "customer_id": customer_id,
+                "removed_count": 0
+            }
+        
+        # Use the bulk delete functionality
+        request_obj = DeleteVisitsRequest(visit_ids=visit_ids_to_remove)
+        result = await delete_visits(request_obj, user, db_session)
+        
+        return {
+            "message": f"Removed {len(visit_ids_to_remove)} low-confidence face detections",
+            "customer_id": customer_id,
+            "removed_count": len(visit_ids_to_remove),
+            "min_confidence_threshold": min_confidence,
+            "cleanup_details": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cleaning up low-confidence faces: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cleanup low-confidence faces")
+
 
 # ===============================
 # Reports
