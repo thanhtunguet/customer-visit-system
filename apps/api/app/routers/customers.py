@@ -67,12 +67,13 @@ async def list_customers(
                 import asyncio
                 
                 try:
+                    from datetime import timedelta
                     avatar_url = await asyncio.get_event_loop().run_in_executor(
                         None, 
                         minio_client.get_presigned_url,
                         "faces-derived",  # Use derived bucket for processed face images
                         face_image,
-                        3600  # 1 hour expiry
+                        timedelta(hours=1)  # 1 hour expiry
                     )
                 except Exception as url_error:
                     logger.error(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
@@ -164,12 +165,13 @@ async def get_customer(
             import asyncio
             
             try:
+                from datetime import timedelta
                 avatar_url = await asyncio.get_event_loop().run_in_executor(
                     None, 
                     minio_client.get_presigned_url,
                     "faces-derived",
                     face_image,
-                    3600  # 1 hour expiry
+                    timedelta(hours=1)  # 1 hour expiry
                 )
             except Exception as url_error:
                 logger.debug(f"Could not generate avatar URL for customer {customer_id}: {url_error}")
@@ -753,13 +755,14 @@ async def backfill_customer_face_images(
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # Find recent visits with face image URLs for this customer
+        # Find recent visits with face images for this customer  
+        from sqlalchemy import desc
         visits_result = await db_session.execute(
             select(Visit).where(
                 Visit.tenant_id == user["tenant_id"],
                 Visit.person_id == customer_id,
                 Visit.person_type == "customer",
-                Visit.face_image_url != None,
+                Visit.image_path != None,
                 Visit.confidence_score >= 0.7
             ).order_by(desc(Visit.confidence_score)).limit(3)
         )
@@ -782,15 +785,42 @@ async def backfill_customer_face_images(
             try:
                 logger.info(f"Processing visit {visit.visit_id} for customer {customer_id}")
                 
-                # Download the face image from MinIO
+                # Download the face image from MinIO synchronously
                 def download_sync():
-                    return minio_client.download_file("faces-raw", visit.face_image_url)
+                    try:
+                        response = minio_client.client.get_object("faces-raw", visit.image_path)
+                        data = response.read()
+                        response.close()
+                        response.release_conn()
+                        return data
+                    except Exception as e:
+                        logger.warning(f"Failed to download face image from MinIO: {e}")
+                        return None
                 
-                face_image_bytes = await asyncio.get_event_loop().run_in_executor(None, download_sync)
+                face_image_bytes = download_sync()
                 
                 if not face_image_bytes:
-                    logger.warning(f"Could not download face image from {visit.face_image_url}")
+                    logger.warning(f"Could not download face image from {visit.image_path}")
                     continue
+                
+                # Construct bbox from individual components
+                bbox = []
+                if all(x is not None for x in [visit.bbox_x, visit.bbox_y, visit.bbox_w, visit.bbox_h]):
+                    bbox = [visit.bbox_x, visit.bbox_y, visit.bbox_w, visit.bbox_h]
+                else:
+                    bbox = [0, 0, 100, 100]  # Default bbox if missing
+                
+                # Parse face embedding from JSON string
+                embedding = []
+                if visit.face_embedding:
+                    try:
+                        import json
+                        embedding = json.loads(visit.face_embedding)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse face embedding for visit {visit.visit_id}: {e}")
+                        embedding = [0.0] * 512  # Default embedding
+                else:
+                    embedding = [0.0] * 512  # Default embedding
                 
                 # Try to save to customer face gallery
                 result = await customer_face_service.add_face_image(
@@ -799,8 +829,8 @@ async def backfill_customer_face_images(
                     customer_id=customer_id,
                     image_data=face_image_bytes,
                     confidence_score=visit.confidence_score,
-                    face_bbox=visit.bbox if visit.bbox else [0, 0, 100, 100],
-                    embedding=visit.embedding if visit.embedding else [0.0] * 512,
+                    face_bbox=bbox,
+                    embedding=embedding,
                     visit_id=visit.visit_id,
                     metadata={
                         "source": "backfill_from_visit",
