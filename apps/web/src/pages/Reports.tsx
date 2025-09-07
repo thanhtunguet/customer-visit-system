@@ -47,6 +47,7 @@ import {
 } from 'recharts';
 import type { RangePickerProps } from 'antd/es/date-picker';
 import dayjs from 'dayjs';
+import { apiClient } from '../services/api';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -164,19 +165,246 @@ export const Reports: React.FC = () => {
   ]);
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week' | 'month'>('day');
   
-  // Seed data
-  const [visitorTrends] = useState(generateVisitorTrendsData());
-  const [hourlyData] = useState(generateHourlyData());
-  const [dayOfWeekData] = useState(generateDayOfWeekData());
-  const [demographics] = useState(generateDemographicsData());
-  const [siteData] = useState(generateSiteData());
-  const [peakHours] = useState(generatePeakHoursData());
+  // Real data states
+  const [realVisitorReport, setRealVisitorReport] = useState<any[]>([]);
+  const [realStats, setRealStats] = useState({
+    totalVisits: 0,
+    totalCustomers: 0,
+    totalStaff: 0,
+    avgDailyVisits: 0
+  });
+  const [realDemographics, setRealDemographics] = useState<any>(null);
+  
+  // Seed data (fallback)
+  const [visitorTrends, setVisitorTrends] = useState(generateVisitorTrendsData());
+  const [hourlyData, setHourlyData] = useState(generateHourlyData());
+  const [dayOfWeekData, setDayOfWeekData] = useState(generateDayOfWeekData());
+  const [demographicsSeed] = useState(generateDemographicsData());
+  const [siteData, setSiteData] = useState(generateSiteData());
+  const [peakHours, setPeakHours] = useState(generatePeakHoursData());
 
-  // Summary statistics
-  const totalVisits = visitorTrends.reduce((sum, day) => sum + day.totalVisits, 0);
-  const totalCustomers = visitorTrends.reduce((sum, day) => sum + day.customerVisits, 0);
-  const totalStaff = visitorTrends.reduce((sum, day) => sum + day.staffVisits, 0);
-  const avgDailyVisits = Math.round(totalVisits / visitorTrends.length);
+  // Use real demographics if available, otherwise fallback to seed data
+  const demographics = realDemographics || demographicsSeed;
+
+  // Summary statistics (use real data if available, otherwise seed data)
+  const totalVisits = realStats.totalVisits || visitorTrends.reduce((sum, day) => sum + day.totalVisits, 0);
+  const totalCustomers = realStats.totalCustomers || visitorTrends.reduce((sum, day) => sum + day.customerVisits, 0);
+  const totalStaff = realStats.totalStaff || visitorTrends.reduce((sum, day) => sum + day.staffVisits, 0);
+  const avgDailyVisits = realStats.avgDailyVisits || Math.round(totalVisits / visitorTrends.length);
+
+  useEffect(() => {
+    loadReportsData();
+  }, [dateRange, selectedSites, granularity]);
+
+  const loadReportsData = async () => {
+    try {
+      setLoading(true);
+
+      // Prepare API parameters
+      const params: any = {
+        granularity,
+        start_date: dateRange[0] ? dayjs(dateRange[0]).toISOString() : undefined,
+        end_date: dateRange[1] ? dayjs(dateRange[1]).toISOString() : undefined,
+      };
+
+      // Add site filter if selected
+      if (selectedSites.length > 0) {
+        // For now, we'll use the first selected site
+        // TODO: Backend should support multiple site filtering
+        params.site_id = selectedSites[0];
+      }
+
+      const [visitorReport, sites, customers, staff, demographicsReport] = await Promise.all([
+        apiClient.getVisitorReport(params),
+        apiClient.getSites(),
+        apiClient.getCustomers({ limit: 1000 }),
+        apiClient.getStaff(),
+        // Get demographics report
+        apiClient.getDemographicsReport({
+          site_id: selectedSites.length > 0 ? selectedSites[0] : undefined,
+          start_date: dateRange[0] ? dayjs(dateRange[0]).toISOString() : undefined,
+          end_date: dateRange[1] ? dayjs(dateRange[1]).toISOString() : undefined,
+        }).catch(error => {
+          console.warn('Demographics API not available, using seed data:', error);
+          return null;
+        })
+      ]);
+
+      // Store raw report data
+      setRealVisitorReport(visitorReport);
+      
+      // Store demographics data if available
+      if (demographicsReport) {
+        setRealDemographics(demographicsReport);
+      }
+
+      // Transform visitor report data for charts
+      const transformedTrends = visitorReport.map(item => ({
+        date: dayjs(item.period).format('MM/DD'),
+        fullDate: dayjs(item.period).format('YYYY-MM-DD'),
+        totalVisits: item.total_visits,
+        customerVisits: Math.round(item.total_visits * 0.8), // Approximate breakdown
+        staffVisits: Math.round(item.total_visits * 0.2),
+        uniqueVisitors: item.unique_visitors || Math.round(item.total_visits * 0.7),
+        repeatVisitors: Math.max(0, item.total_visits - (item.unique_visitors || Math.round(item.total_visits * 0.7)))
+      }));
+
+      // Update charts with real data
+      if (transformedTrends.length > 0) {
+        setVisitorTrends(transformedTrends);
+      }
+
+      // Calculate real statistics
+      const totalVisitsReal = visitorReport.reduce((sum, item) => sum + item.total_visits, 0);
+      const totalCustomersReal = customers.length;
+      const totalStaffReal = staff.length;
+      const avgDailyVisitsReal = visitorReport.length > 0 ? Math.round(totalVisitsReal / visitorReport.length) : 0;
+
+      setRealStats({
+        totalVisits: totalVisitsReal,
+        totalCustomers: Math.round(totalVisitsReal * 0.8), // Approximate customer visits
+        totalStaff: Math.round(totalVisitsReal * 0.2), // Approximate staff visits  
+        avgDailyVisits: avgDailyVisitsReal
+      });
+
+      // Generate day of week data from visitor report if enough data
+      if (visitorReport.length >= 7) {
+        const dayOfWeekMap = new Map();
+        visitorReport.forEach(item => {
+          const dayOfWeek = dayjs(item.period).format('ddd');
+          const existing = dayOfWeekMap.get(dayOfWeek) || { visits: 0, count: 0 };
+          dayOfWeekMap.set(dayOfWeek, {
+            visits: existing.visits + item.total_visits,
+            count: existing.count + 1
+          });
+        });
+
+        const daysOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const realDayOfWeekData = daysOrder.map(day => {
+          const data = dayOfWeekMap.get(day) || { visits: 0, count: 1 };
+          const avgVisits = Math.round(data.visits / data.count);
+          return {
+            day,
+            fullDay: day === 'Mon' ? 'Monday' : 
+                     day === 'Tue' ? 'Tuesday' :
+                     day === 'Wed' ? 'Wednesday' :
+                     day === 'Thu' ? 'Thursday' :
+                     day === 'Fri' ? 'Friday' :
+                     day === 'Sat' ? 'Saturday' : 'Sunday',
+            visits: avgVisits,
+            customers: Math.round(avgVisits * 0.8),
+            staff: Math.round(avgVisits * 0.2)
+          };
+        });
+
+        setDayOfWeekData(realDayOfWeekData);
+      }
+
+      // Generate hourly data if granularity is hour
+      if (granularity === 'hour' && visitorReport.length > 0) {
+        const hourlyMap = new Map();
+        visitorReport.forEach(item => {
+          const hour = dayjs(item.period).hour();
+          const existing = hourlyMap.get(hour) || { visits: 0, count: 0 };
+          hourlyMap.set(hour, {
+            visits: existing.visits + item.total_visits,
+            count: existing.count + 1
+          });
+        });
+
+        const realHourlyData = Array.from({ length: 24 }, (_, h) => {
+          const data = hourlyMap.get(h) || { visits: 0, count: 1 };
+          const avgVisits = Math.round(data.visits / data.count);
+          return {
+            hour: h,
+            label: `${h.toString().padStart(2, '0')}:00`,
+            visits: avgVisits,
+            density: avgVisits
+          };
+        });
+
+        setHourlyData(realHourlyData);
+        
+        // Calculate peak hours from real hourly data
+        const sortedHours = realHourlyData
+          .filter(hour => hour.visits > 0)
+          .sort((a, b) => b.visits - a.visits)
+          .slice(0, 5);
+        
+        const totalHourlyVisits = realHourlyData.reduce((sum, hour) => sum + hour.visits, 0);
+        
+        const realPeakHours = sortedHours.map(hour => ({
+          timeRange: `${hour.label}-${(hour.hour + 1).toString().padStart(2, '0')}:00`,
+          visits: hour.visits,
+          percentage: totalHourlyVisits > 0 ? Math.round((hour.visits / totalHourlyVisits) * 100 * 10) / 10 : 0
+        }));
+        
+        if (realPeakHours.length > 0) {
+          setPeakHours(realPeakHours);
+        }
+      }
+
+      // Generate site performance data with real API calls
+      if (sites.length > 0) {
+        try {
+          const sitePromises = sites.map(async (site) => {
+            try {
+              // Get visitor data for this specific site
+              const siteVisitorReport = await apiClient.getVisitorReport({
+                ...params,
+                site_id: site.site_id.toString()
+              });
+
+              // Get previous period for growth calculation
+              const previousPeriodStart = dateRange[0] ? 
+                dayjs(dateRange[0]).subtract(dayjs(dateRange[1]).diff(dayjs(dateRange[0]), 'days'), 'days').toISOString() :
+                dayjs().subtract(60, 'days').toISOString();
+              
+              const previousPeriodEnd = dateRange[0] || dayjs().subtract(30, 'days').toISOString();
+
+              const previousVisitorReport = await apiClient.getVisitorReport({
+                ...params,
+                site_id: site.site_id.toString(),
+                start_date: previousPeriodStart,
+                end_date: previousPeriodEnd
+              });
+
+              const currentTotal = siteVisitorReport.reduce((sum, item) => sum + item.total_visits, 0);
+              const previousTotal = previousVisitorReport.reduce((sum, item) => sum + item.total_visits, 0);
+              
+              const growth = previousTotal > 0 ? 
+                Math.round(((currentTotal - previousTotal) / previousTotal) * 100 * 10) / 10 : 0;
+
+              return {
+                site: site.site_name,
+                visits: currentTotal,
+                customers: Math.round(currentTotal * 0.8), // Approximate
+                staff: Math.round(currentTotal * 0.2), // Approximate  
+                growth: growth
+              };
+            } catch (siteError) {
+              console.warn(`Failed to load data for site ${site.site_name}:`, siteError);
+              return null;
+            }
+          });
+
+          const siteResults = await Promise.all(sitePromises);
+          const validSiteData = siteResults.filter(site => site !== null);
+          
+          if (validSiteData.length > 0) {
+            setSiteData(validSiteData.sort((a, b) => b.visits - a.visits));
+          }
+        } catch (siteError) {
+          console.error('Failed to load site performance data:', siteError);
+        }
+      }
+
+    } catch (error) {
+      console.error('Failed to load reports data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleExport = (type: 'visitor-trends' | 'demographics' | 'site-comparison') => {
     // Mock CSV export - in real implementation, this would call API
@@ -363,15 +591,15 @@ export const Reports: React.FC = () => {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie
-                        data={demographics.visitorType}
+                        data={demographics.visitorType || []}
                         cx="50%"
                         cy="50%"
                         outerRadius={60}
                         dataKey="value"
                       >
-                        {demographics.visitorType.map((entry, index) => (
+                        {demographics.visitorType?.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
+                        )) || []}
                       </Pie>
                       <RechartsTooltip />
                       <Legend />
@@ -385,15 +613,15 @@ export const Reports: React.FC = () => {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie
-                        data={demographics.gender}
+                        data={demographics.gender || []}
                         cx="50%"
                         cy="50%"
                         outerRadius={60}
                         dataKey="value"
                       >
-                        {demographics.gender.map((entry, index) => (
+                        {demographics.gender?.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
+                        )) || []}
                       </Pie>
                       <RechartsTooltip />
                       <Legend />
@@ -408,7 +636,7 @@ export const Reports: React.FC = () => {
             <div>
               <Text strong>Age Groups</Text>
               <div className="mt-3 space-y-3">
-                {demographics.ageGroups.map((group) => (
+                {demographics.ageGroups?.map((group) => (
                   <div key={group.group} className="flex items-center justify-between">
                     <div className="flex items-center space-x-3 flex-1">
                       <Text className="w-12">{group.group}</Text>
@@ -473,7 +701,7 @@ export const Reports: React.FC = () => {
         <Col xs={24} lg={8}>
           <Card title="Peak Hours" className="h-full">
             <div className="space-y-4">
-              {peakHours.map((hour, index) => (
+              {peakHours?.map((hour, index) => (
                 <div key={hour.timeRange} className="flex items-center justify-between">
                   <div>
                     <Text strong>{hour.timeRange}</Text>

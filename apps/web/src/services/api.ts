@@ -10,7 +10,8 @@ import {
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
 import axios, { AxiosInstance } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+// Force use of window.location.origin in development to use Vite proxy
+const API_BASE_URL = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
 
 class ApiClient {
   private client: AxiosInstance;
@@ -273,7 +274,7 @@ class ApiClient {
   }
 
   getCameraStreamUrl(siteId: string, cameraId: number): string {
-    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
     const token = this.token || localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);
     if (token) {
@@ -283,7 +284,7 @@ class ApiClient {
   }
 
   getWorkerWebSocketUrl(tenantId: string): string {
-    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
     const token = this.token || localStorage.getItem('access_token');
     
     // Convert HTTP(S) URL to WebSocket URL
@@ -512,6 +513,27 @@ class ApiClient {
     end_date?: string;
   }): Promise<VisitorReport[]> {
     const response = await this.client.get<VisitorReport[]>('/reports/visitors', { params });
+    return response.data;
+  }
+
+  async getDemographicsReport(params?: {
+    site_id?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<{
+    visitor_type: Array<{ name: string; value: number; color: string }>;
+    gender: Array<{ name: string; value: number; color: string }>;
+    age_groups: Array<{ group: string; count: number; percentage: number }>;
+    summary: {
+      total_visits: number;
+      unique_visitors: number;
+      repeat_visitors: number;
+      customer_visits: number;
+      staff_visits: number;
+    };
+    note: string;
+  }> {
+    const response = await this.client.get('/reports/demographics', { params });
     return response.data;
   }
 
