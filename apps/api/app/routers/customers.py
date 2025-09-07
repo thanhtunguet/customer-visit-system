@@ -26,6 +26,7 @@ async def list_customers(
 ):
     await db.set_tenant_context(db_session, user["tenant_id"])
     
+    # Get customers first
     result = await db_session.execute(
         select(Customer)
         .where(Customer.tenant_id == user["tenant_id"])
@@ -34,7 +35,67 @@ async def list_customers(
         .offset(offset)
     )
     customers = result.scalars().all()
-    return customers
+    
+    # Get avatar URLs for each customer by fetching their best face image
+    customer_responses = []
+    for customer in customers:
+        avatar_url = None
+        
+        try:
+            # Get the best face image for this customer (highest confidence + quality)
+            from ..models.database import CustomerFaceImage
+            from sqlalchemy import func, desc
+            
+            face_result = await db_session.execute(
+                select(CustomerFaceImage.image_path)
+                .where(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer.customer_id
+                )
+                .order_by(
+                    desc(CustomerFaceImage.confidence_score + 
+                         func.coalesce(CustomerFaceImage.quality_score, 0.5))
+                )
+                .limit(1)
+            )
+            
+            face_image = face_result.scalar_one_or_none()
+            if face_image:
+                # Generate MinIO presigned URL for the avatar
+                from ..core.minio_client import minio_client
+                import asyncio
+                
+                try:
+                    avatar_url = await asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        minio_client.get_presigned_url,
+                        "faces-derived",  # Use derived bucket for processed face images
+                        face_image,
+                        3600  # 1 hour expiry
+                    )
+                except Exception as url_error:
+                    logger.debug(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
+                    
+        except Exception as e:
+            logger.debug(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
+        
+        # Create customer response with avatar URL
+        customer_response = CustomerResponse(
+            customer_id=customer.customer_id,
+            tenant_id=customer.tenant_id,
+            name=customer.name,
+            gender=customer.gender,
+            estimated_age_range=customer.estimated_age_range,
+            phone=customer.phone,
+            email=customer.email,
+            first_seen=customer.first_seen,
+            last_seen=customer.last_seen,
+            visit_count=customer.visit_count,
+            avatar_url=avatar_url
+        )
+        customer_responses.append(customer_response)
+    
+    return customer_responses
 
 
 @router.post("/customers", response_model=CustomerResponse)
@@ -76,7 +137,57 @@ async def get_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    return customer
+    # Get avatar URL for this customer
+    avatar_url = None
+    try:
+        from ..models.database import CustomerFaceImage
+        from sqlalchemy import func, desc
+        
+        face_result = await db_session.execute(
+            select(CustomerFaceImage.image_path)
+            .where(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.customer_id == customer_id
+            )
+            .order_by(
+                desc(CustomerFaceImage.confidence_score + 
+                     func.coalesce(CustomerFaceImage.quality_score, 0.5))
+            )
+            .limit(1)
+        )
+        
+        face_image = face_result.scalar_one_or_none()
+        if face_image:
+            from ..core.minio_client import minio_client
+            import asyncio
+            
+            try:
+                avatar_url = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    minio_client.get_presigned_url,
+                    "faces-derived",
+                    face_image,
+                    3600  # 1 hour expiry
+                )
+            except Exception as url_error:
+                logger.debug(f"Could not generate avatar URL for customer {customer_id}: {url_error}")
+                
+    except Exception as e:
+        logger.debug(f"Could not fetch avatar for customer {customer_id}: {e}")
+    
+    return CustomerResponse(
+        customer_id=customer.customer_id,
+        tenant_id=customer.tenant_id,
+        name=customer.name,
+        gender=customer.gender,
+        estimated_age_range=customer.estimated_age_range,
+        phone=customer.phone,
+        email=customer.email,
+        first_seen=customer.first_seen,
+        last_seen=customer.last_seen,
+        visit_count=customer.visit_count,
+        avatar_url=avatar_url
+    )
 
 
 @router.put("/customers/{customer_id:int}", response_model=CustomerResponse)

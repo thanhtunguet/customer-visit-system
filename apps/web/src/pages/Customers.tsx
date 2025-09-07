@@ -1,23 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Table, 
-  Button, 
-  Modal, 
-  Form, 
-  Input, 
-  Typography, 
-  Space, 
-  Alert,
-  Select,
-  Popconfirm
-} from 'antd';
 import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
+import { Avatar, Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
 import { Customer, CustomerCreate } from '../types/api';
 import dayjs from 'dayjs';
-
+import { useState, useEffect } from 'react';
 const { Title } = Typography;
 
 export const Customers: React.FC = () => {
@@ -100,6 +88,21 @@ export const Customers: React.FC = () => {
   };
 
   const columns = [
+    {
+      title: 'Avatar',
+      dataIndex: 'avatar_url',
+      key: 'avatar',
+      width: 60,
+      render: (avatar_url: string, customer: Customer) => (
+        <Avatar 
+          size={40}
+          src={avatar_url}
+          icon={!avatar_url ? <UserOutlined /> : undefined}
+          className="flex-shrink-0"
+          alt={`${customer.name || 'Customer'} Avatar`}
+        />
+      ),
+    },
     {
       title: 'ID',
       dataIndex: 'customer_id',

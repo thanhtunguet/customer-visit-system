@@ -267,6 +267,7 @@ class CustomerResponse(BaseModel):
     first_seen: datetime
     last_seen: Optional[datetime]
     visit_count: int
+    avatar_url: Optional[str] = None  # URL to first face image for avatar
 
 
 class CustomerCreate(BaseModel):
