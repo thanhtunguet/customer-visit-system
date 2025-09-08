@@ -58,6 +58,7 @@ class BackgroundJobService:
                 "merge_visits": merge_service.execute_merge_visits_job,
                 "cleanup_customer_faces": merge_service.execute_cleanup_customer_faces_job,
                 "bulk_delete_visits": merge_service.execute_bulk_delete_visits_job,
+                "bulk_merge_customers": merge_service.execute_bulk_merge_customers_job,
             }
             self._handlers_registered = True
     

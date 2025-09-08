@@ -522,6 +522,23 @@ class ApiClient {
     return response.data;
   }
 
+  async bulkMergeCustomers(mergeOperations: Array<{
+    primary_customer_id: number;
+    secondary_customer_ids: number[];
+  }>): Promise<{
+    message: string;
+    job_id: string;
+    status: string;
+    total_operations: number;
+    total_customers: number;
+    check_status_url: string;
+  }> {
+    const response = await this.client.post('/customers/bulk-merge', {
+      merges: mergeOperations
+    });
+    return response.data;
+  }
+
   async reassignVisit(visitId: string, newCustomerId: number, update_embeddings: boolean = true): Promise<{
     message: string;
     visit_id: string;
@@ -977,6 +994,52 @@ class ApiClient {
       },
       timeout: Math.max(60000, images.length * 10000), // Dynamic timeout based on number of images
     });
+    return response.data;
+  }
+
+  // Background Job Management
+  async getJobStatus(jobId: string): Promise<{
+    job_id: string;
+    job_type: string;
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    tenant_id: string;
+    created_at: string;
+    started_at?: string;
+    completed_at?: string;
+    progress: number;
+    message: string;
+    result?: any;
+    error?: string;
+  }> {
+    const response = await this.client.get(`/jobs/${jobId}`);
+    return response.data;
+  }
+
+  async listJobs(params?: {
+    status_filter?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    job_type_filter?: string;
+  }): Promise<{
+    jobs: Array<{
+      job_id: string;
+      job_type: string;
+      status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+      tenant_id: string;
+      created_at: string;
+      started_at?: string;
+      completed_at?: string;
+      progress: number;
+      message: string;
+      result?: any;
+      error?: string;
+    }>;
+    total: number;
+  }> {
+    const response = await this.client.get('/jobs', { params });
+    return response.data;
+  }
+
+  async cancelJob(jobId: string): Promise<{ message: string }> {
+    const response = await this.client.post(`/jobs/${jobId}/cancel`);
     return response.data;
   }
 

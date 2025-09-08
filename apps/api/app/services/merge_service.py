@@ -272,6 +272,97 @@ class MergeService:
             logger.error(f"Bulk delete visits job {job.job_id} failed: {e}")
             raise
     
+    async def execute_bulk_merge_customers_job(
+        self, 
+        job: BackgroundJob, 
+        db_session: AsyncSession
+    ) -> Dict[str, Any]:
+        """Execute bulk customer merge operation in background"""
+        try:
+            metadata = job.metadata or {}
+            merges = metadata.get("merges", [])
+            
+            if not merges:
+                raise ValueError("No merge operations provided")
+            
+            self._update_job_progress(job.job_id, 10, "Starting bulk customer merge")
+            
+            total_operations = len(merges)
+            completed_merges = []
+            failed_merges = []
+            
+            for i, merge_op in enumerate(merges):
+                try:
+                    primary_id = merge_op["primary_customer_id"]
+                    secondary_ids = merge_op["secondary_customer_ids"]
+                    
+                    progress = 10 + int((i / total_operations) * 80)  # 10-90% range
+                    self._update_job_progress(
+                        job.job_id, 
+                        progress, 
+                        f"Processing merge {i+1}/{total_operations}: merging {len(secondary_ids)} customers into {primary_id}"
+                    )
+                    
+                    # Execute merges for each secondary customer
+                    merge_results = []
+                    for secondary_id in secondary_ids:
+                        try:
+                            result = await self._execute_single_customer_merge(
+                                db_session, job.tenant_id, primary_id, secondary_id
+                            )
+                            merge_results.append({
+                                "primary_id": primary_id,
+                                "secondary_id": secondary_id,
+                                "status": "success",
+                                "details": result
+                            })
+                        except Exception as merge_error:
+                            logger.error(f"Failed to merge customer {secondary_id} into {primary_id}: {merge_error}")
+                            merge_results.append({
+                                "primary_id": primary_id,
+                                "secondary_id": secondary_id,
+                                "status": "failed",
+                                "error": str(merge_error)
+                            })
+                    
+                    completed_merges.append({
+                        "operation_index": i,
+                        "primary_customer_id": primary_id,
+                        "secondary_customer_ids": secondary_ids,
+                        "merge_results": merge_results,
+                        "successful_merges": len([r for r in merge_results if r["status"] == "success"]),
+                        "failed_merges": len([r for r in merge_results if r["status"] == "failed"])
+                    })
+                    
+                except Exception as op_error:
+                    logger.error(f"Failed merge operation {i}: {op_error}")
+                    failed_merges.append({
+                        "operation_index": i,
+                        "merge_operation": merge_op,
+                        "error": str(op_error)
+                    })
+            
+            self._update_job_progress(job.job_id, 100, "Bulk customer merge completed")
+            
+            # Calculate summary statistics
+            total_successful_merges = sum(op.get("successful_merges", 0) for op in completed_merges)
+            total_failed_merges = sum(op.get("failed_merges", 0) for op in completed_merges) + len(failed_merges)
+            
+            return {
+                "message": f"Bulk customer merge completed: {total_successful_merges} successful, {total_failed_merges} failed",
+                "total_operations": total_operations,
+                "completed_operations": len(completed_merges),
+                "failed_operations": len(failed_merges),
+                "total_successful_merges": total_successful_merges,
+                "total_failed_merges": total_failed_merges,
+                "completed_merges": completed_merges,
+                "failed_operations": failed_merges
+            }
+            
+        except Exception as e:
+            logger.error(f"Bulk merge customers job {job.job_id} failed: {e}")
+            raise
+    
     async def _bulk_delete_visits(
         self, 
         db_session: AsyncSession, 
@@ -434,6 +525,301 @@ class MergeService:
             .where(and_(Customer.tenant_id == tenant_id, Customer.customer_id == customer_id))
             .values(visit_count=int(count or 0), first_seen=c_first, last_seen=c_last)
         )
+    
+    async def _execute_single_customer_merge(
+        self,
+        db_session: AsyncSession,
+        tenant_id: str,
+        primary_customer_id: int,
+        secondary_customer_id: int
+    ) -> Dict[str, Any]:
+        """Execute a single customer merge operation"""
+        from ..models.database import Customer, Visit, CustomerFaceImage
+        from ..core.milvus_client import milvus_client
+        import json
+        import hashlib
+        from datetime import datetime
+        
+        # Validate both customers exist
+        result = await db_session.execute(
+            select(Customer).where(
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.customer_id.in_([primary_customer_id, secondary_customer_id])
+                )
+            )
+        )
+        customers = {c.customer_id: c for c in result.scalars().all()}
+        
+        if primary_customer_id not in customers:
+            raise ValueError(f"Primary customer {primary_customer_id} not found")
+        if secondary_customer_id not in customers:
+            # Already merged or deleted - return success
+            return {
+                "message": f"Secondary customer {secondary_customer_id} already merged or deleted",
+                "status": "already_merged"
+            }
+        
+        primary_customer = customers[primary_customer_id]
+        secondary_customer = customers[secondary_customer_id]
+        
+        # Count data to be merged
+        visits_result = await db_session.execute(
+            select(func.count(Visit.visit_id)).where(
+                and_(
+                    Visit.tenant_id == tenant_id,
+                    Visit.person_type == "customer",
+                    Visit.person_id == secondary_customer_id
+                )
+            )
+        )
+        visits_to_merge = visits_result.scalar() or 0
+        
+        face_images_result = await db_session.execute(
+            select(func.count(CustomerFaceImage.image_id)).where(
+                and_(
+                    CustomerFaceImage.tenant_id == tenant_id,
+                    CustomerFaceImage.customer_id == secondary_customer_id
+                )
+            )
+        )
+        face_images_to_merge = face_images_result.scalar() or 0
+        
+        # 1. Reassign visits
+        if visits_to_merge > 0:
+            await db_session.execute(
+                update(Visit)
+                .where(
+                    and_(
+                        Visit.tenant_id == tenant_id,
+                        Visit.person_type == "customer",
+                        Visit.person_id == secondary_customer_id,
+                    )
+                )
+                .values(person_id=primary_customer_id)
+            )
+        
+        # 2. Reassign face images
+        if face_images_to_merge > 0:
+            await db_session.execute(
+                update(CustomerFaceImage)
+                .where(
+                    and_(
+                        CustomerFaceImage.tenant_id == tenant_id,
+                        CustomerFaceImage.customer_id == secondary_customer_id,
+                    )
+                )
+                .values(customer_id=primary_customer_id)
+            )
+        
+        # 3. Deduplicate face images by hash (keep highest quality)
+        dedup_count = await self._deduplicate_customer_face_images(
+            db_session, tenant_id, primary_customer_id
+        )
+        
+        # 4. Copy missing attributes from secondary to primary
+        updates = {}
+        if not primary_customer.name and secondary_customer.name:
+            updates["name"] = secondary_customer.name
+        if not primary_customer.gender and secondary_customer.gender:
+            updates["gender"] = secondary_customer.gender
+        if not primary_customer.estimated_age_range and secondary_customer.estimated_age_range:
+            updates["estimated_age_range"] = secondary_customer.estimated_age_range
+        if not primary_customer.phone and secondary_customer.phone:
+            updates["phone"] = secondary_customer.phone
+        if not primary_customer.email and secondary_customer.email:
+            updates["email"] = secondary_customer.email
+        
+        # 5. Recompute primary customer stats
+        await self._recompute_customer_stats(db_session, tenant_id, primary_customer_id)
+        
+        # Apply attribute updates if any
+        if updates:
+            await db_session.execute(
+                update(Customer)
+                .where(and_(Customer.tenant_id == tenant_id, Customer.customer_id == primary_customer_id))
+                .values(**updates)
+            )
+        
+        # 6. Delete secondary customer
+        await db_session.execute(
+            delete(Customer).where(
+                and_(Customer.tenant_id == tenant_id, Customer.customer_id == secondary_customer_id)
+            )
+        )
+        
+        # 7. Handle embeddings (best effort)
+        embeddings_updated = False
+        try:
+            # Delete old embeddings for both customers
+            await milvus_client.delete_person_embeddings(tenant_id, secondary_customer_id, "customer")
+            await milvus_client.delete_person_embeddings(tenant_id, primary_customer_id, "customer")
+            
+            # Rebuild embeddings for primary customer from gallery and visits
+            embeddings_count = await self._rebuild_customer_embeddings(
+                db_session, tenant_id, primary_customer_id
+            )
+            embeddings_updated = True
+            
+        except Exception as e:
+            logger.warning(f"Embedding maintenance failed during merge {primary_customer_id}<-{secondary_customer_id}: {e}")
+        
+        return {
+            "message": f"Successfully merged customer {secondary_customer_id} into {primary_customer_id}",
+            "primary_customer_id": primary_customer_id,
+            "secondary_customer_id": secondary_customer_id,
+            "visits_merged": visits_to_merge,
+            "face_images_merged": face_images_to_merge,
+            "face_images_deduplicated": dedup_count,
+            "attributes_copied": list(updates.keys()),
+            "embeddings_updated": embeddings_updated
+        }
+    
+    async def _deduplicate_customer_face_images(
+        self,
+        db_session: AsyncSession,
+        tenant_id: str,
+        customer_id: int
+    ) -> int:
+        """Remove duplicate face images based on hash, keeping highest quality"""
+        from ..models.database import CustomerFaceImage
+        
+        # Get all images with hashes for this customer
+        images_result = await db_session.execute(
+            select(CustomerFaceImage).where(
+                and_(
+                    CustomerFaceImage.tenant_id == tenant_id,
+                    CustomerFaceImage.customer_id == customer_id,
+                    CustomerFaceImage.image_hash.is_not(None),
+                )
+            )
+        )
+        
+        images = images_result.scalars().all()
+        if len(images) <= 1:
+            return 0
+        
+        # Group by hash and find duplicates
+        by_hash = {}
+        to_delete = []
+        
+        def quality_score(img):
+            return float((img.confidence_score or 0.0) + (img.quality_score or 0.5))
+        
+        for img in images:
+            if not img.image_hash:
+                continue
+                
+            existing = by_hash.get(img.image_hash)
+            if not existing:
+                by_hash[img.image_hash] = img
+            else:
+                # Keep the higher quality image
+                if quality_score(img) > quality_score(existing):
+                    to_delete.append(int(existing.image_id))
+                    by_hash[img.image_hash] = img
+                else:
+                    to_delete.append(int(img.image_id))
+        
+        # Delete duplicates
+        if to_delete:
+            await db_session.execute(
+                delete(CustomerFaceImage).where(
+                    and_(
+                        CustomerFaceImage.tenant_id == tenant_id,
+                        CustomerFaceImage.customer_id == customer_id,
+                        CustomerFaceImage.image_id.in_(to_delete),
+                    )
+                )
+            )
+        
+        return len(to_delete)
+    
+    async def _rebuild_customer_embeddings(
+        self,
+        db_session: AsyncSession,
+        tenant_id: str,
+        customer_id: int
+    ) -> int:
+        """Rebuild embeddings for a customer from gallery and visits"""
+        from ..models.database import CustomerFaceImage, Visit
+        from ..core.milvus_client import milvus_client
+        from datetime import datetime
+        import json
+        import hashlib
+        
+        aggregated = []
+        inserted_keys = set()
+        
+        # Get embeddings from gallery
+        gallery_result = await db_session.execute(
+            select(CustomerFaceImage.embedding, CustomerFaceImage.created_at, CustomerFaceImage.image_hash)
+            .where(
+                and_(
+                    CustomerFaceImage.tenant_id == tenant_id,
+                    CustomerFaceImage.customer_id == customer_id,
+                    CustomerFaceImage.embedding.is_not(None),
+                )
+            )
+        )
+        
+        for emb, created_at, img_hash in gallery_result.all():
+            if not emb or not isinstance(emb, list) or len(emb) != 512:
+                continue
+            
+            key = f"img:{img_hash}" if img_hash else f"vec:{hashlib.sha256(str(emb).encode()).hexdigest()}"
+            if key in inserted_keys:
+                continue
+                
+            inserted_keys.add(key)
+            timestamp = int((created_at or datetime.utcnow()).timestamp())
+            aggregated.append((emb, timestamp))
+        
+        # Get embeddings from visits
+        visits_result = await db_session.execute(
+            select(Visit.face_embedding, Visit.timestamp)
+            .where(
+                and_(
+                    Visit.tenant_id == tenant_id,
+                    Visit.person_type == "customer",
+                    Visit.person_id == customer_id,
+                    Visit.face_embedding.is_not(None),
+                )
+            )
+        )
+        
+        for emb_text, timestamp_dt in visits_result.all():
+            if not emb_text:
+                continue
+                
+            try:
+                emb = json.loads(emb_text)
+            except Exception:
+                continue
+                
+            if not isinstance(emb, list) or len(emb) != 512:
+                continue
+                
+            key = f"vis:{hashlib.sha256(str(emb).encode()).hexdigest()}"
+            if key in inserted_keys:
+                continue
+                
+            inserted_keys.add(key)
+            timestamp = int((timestamp_dt or datetime.utcnow()).timestamp())
+            aggregated.append((emb, timestamp))
+        
+        # Insert into Milvus
+        inserted_count = 0
+        for emb, timestamp in aggregated:
+            try:
+                await milvus_client.insert_embedding(
+                    tenant_id, customer_id, "customer", emb, timestamp
+                )
+                inserted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to insert embedding for customer {customer_id}: {e}")
+        
+        return inserted_count
 
 
 # Create service instance

@@ -1,8 +1,9 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
 import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert, List, Tag } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
+import { BulkCustomerMergeModal } from '../components/BulkCustomerMergeModal';
 import { AuthenticatedAvatar } from '../components/AuthenticatedAvatar';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { Customer, CustomerCreate } from '../types/api';
@@ -36,6 +37,10 @@ export const Customers: React.FC = () => {
   // Multi-select state
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  
+  // Bulk merge state
+  const [bulkMergeModalVisible, setBulkMergeModalVisible] = useState(false);
+  const [bulkMergeLoading, setBulkMergeLoading] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -168,6 +173,49 @@ export const Customers: React.FC = () => {
         }
       }
     });
+  };
+
+  const handleBulkMerge = async (mergeOperations: Array<{
+    primary_customer_id: number;
+    secondary_customer_ids: number[];
+  }>) => {
+    setBulkMergeLoading(true);
+    try {
+      const result = await apiClient.bulkMergeCustomers(mergeOperations);
+      
+      // Show success message with job information
+      Modal.success({
+        title: 'Bulk Merge Started',
+        content: (
+          <div>
+            <p>Bulk customer merge has been started in the background.</p>
+            <p><strong>Job ID:</strong> {result.job_id}</p>
+            <p><strong>Operations:</strong> {result.total_operations}</p>
+            <p><strong>Customers:</strong> {result.total_customers}</p>
+            <p className="text-gray-600 text-sm mt-2">
+              You can monitor the progress in the background jobs section or refresh the customer list after completion.
+            </p>
+          </div>
+        ),
+      });
+      
+      setSelectedRowKeys([]);
+      setBulkMergeModalVisible(false);
+      
+      // Optionally refresh customers after a delay
+      setTimeout(async () => {
+        await loadCustomers();
+      }, 5000);
+      
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to start bulk merge');
+    } finally {
+      setBulkMergeLoading(false);
+    }
+  };
+
+  const getSelectedCustomers = () => {
+    return customers.filter(customer => selectedRowKeys.includes(customer.customer_id));
   };
 
   const handleBackfillAvatar = async (customer: Customer) => {
@@ -352,6 +400,17 @@ export const Customers: React.FC = () => {
       <div className="flex items-center justify-between">
         <Title level={2} className="mb-0">Customers</Title>
         <Space>
+          {selectedRowKeys.length > 1 && (
+            <Button
+              type="default"
+              icon={<SwapOutlined />}
+              loading={bulkMergeLoading}
+              onClick={() => setBulkMergeModalVisible(true)}
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+            >
+              Bulk Merge ({selectedRowKeys.length})
+            </Button>
+          )}
           {selectedRowKeys.length > 0 && (
             <Button
               type="primary"
@@ -530,6 +589,13 @@ export const Customers: React.FC = () => {
           />
         )}
       </Modal>
+
+      <BulkCustomerMergeModal
+        visible={bulkMergeModalVisible}
+        selectedCustomers={getSelectedCustomers()}
+        onClose={() => setBulkMergeModalVisible(false)}
+        onMerge={handleBulkMerge}
+      />
     </div>
   );
 };

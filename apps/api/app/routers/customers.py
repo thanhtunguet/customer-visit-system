@@ -1124,6 +1124,113 @@ async def delete_customer(
         logger.error(f"Error deleting customer {customer_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete customer")
 
+@router.post("/customers/bulk-merge")
+async def bulk_merge_customers(
+    request: dict = Body(..., description="{ merges: [{ primary_customer_id: int, secondary_customer_ids: List[int] }] }"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Start asynchronous bulk customer merge operation.
+    
+    This endpoint accepts multiple merge operations and processes them in background.
+    Each merge operation specifies one primary customer and multiple secondary customers to merge into it.
+    
+    Returns job ID immediately for tracking progress.
+    Use GET /jobs/{job_id} to check status and results.
+    """
+    from ..services.background_jobs import background_job_service
+    from ..core.database import db
+    
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    merges = request.get("merges", [])
+    if not isinstance(merges, list) or len(merges) == 0:
+        raise HTTPException(status_code=400, detail="merges must be a non-empty list")
+    
+    # Validate merge structure
+    all_customer_ids = set()
+    validated_merges = []
+    
+    for i, merge_op in enumerate(merges):
+        if not isinstance(merge_op, dict):
+            raise HTTPException(status_code=400, detail=f"Merge operation {i} must be an object")
+            
+        primary_id = merge_op.get("primary_customer_id")
+        secondary_ids = merge_op.get("secondary_customer_ids", [])
+        
+        if not isinstance(primary_id, int):
+            raise HTTPException(status_code=400, detail=f"Merge operation {i}: primary_customer_id must be an integer")
+            
+        if not isinstance(secondary_ids, list) or not all(isinstance(x, int) for x in secondary_ids):
+            raise HTTPException(status_code=400, detail=f"Merge operation {i}: secondary_customer_ids must be a list of integers")
+            
+        if len(secondary_ids) == 0:
+            raise HTTPException(status_code=400, detail=f"Merge operation {i}: secondary_customer_ids cannot be empty")
+            
+        # Check for conflicts (customer can't be in multiple operations)
+        operation_customers = {primary_id} | set(secondary_ids)
+        conflicts = operation_customers & all_customer_ids
+        if conflicts:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Merge operation {i}: Customer(s) {list(conflicts)} are already included in other merge operations"
+            )
+        
+        all_customer_ids.update(operation_customers)
+        
+        # Check for self-merge
+        if primary_id in secondary_ids:
+            raise HTTPException(status_code=400, detail=f"Merge operation {i}: Customer cannot merge with itself")
+            
+        validated_merges.append({
+            "primary_customer_id": primary_id,
+            "secondary_customer_ids": secondary_ids
+        })
+    
+    # Quick validation that all customers exist
+    result = await db_session.execute(
+        select(Customer.customer_id).where(
+            and_(
+                Customer.tenant_id == user["tenant_id"],
+                Customer.customer_id.in_(list(all_customer_ids))
+            )
+        )
+    )
+    found_ids = set(row[0] for row in result.fetchall())
+    missing_ids = all_customer_ids - found_ids
+    
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Customers not found: {list(missing_ids)}"
+        )
+    
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="bulk_merge_customers",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "merges": validated_merges,
+            "user_id": user.get("user_id"),
+            "total_operations": len(validated_merges),
+            "total_customers": len(all_customer_ids)
+        }
+    )
+    
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
+    
+    return {
+        "message": f"Bulk customer merge job started for {len(validated_merges)} operations involving {len(all_customer_ids)} customers",
+        "job_id": job_id,
+        "status": "started",
+        "total_operations": len(validated_merges),
+        "total_customers": len(all_customer_ids),
+        "check_status_url": f"/v1/jobs/{job_id}"
+    }
+
+
 @router.post("/customers/bulk-delete")
 async def bulk_delete_customers(
     request: dict = Body(..., description="{ customer_ids: List[int] }"),
