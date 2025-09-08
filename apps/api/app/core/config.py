@@ -70,7 +70,8 @@ class Settings:
     max_face_results: int = int(os.getenv("MAX_FACE_RESULTS", "5"))
     
     # Customer face gallery settings
-    max_face_images: int = int(os.getenv("MAX_FACE_IMAGES", "5"))
+    # Default increased to 12 per requirement (was 4/5 previously)
+    max_face_images: int = int(os.getenv("MAX_FACE_IMAGES", "12"))
     min_face_confidence_to_save: float = float(os.getenv("MIN_FACE_CONFIDENCE_TO_SAVE", "0.7"))
 
     # Identity assignment / clustering knobs

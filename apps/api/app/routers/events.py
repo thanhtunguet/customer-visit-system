@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
 from typing import List
-from sqlalchemy import select, func, and_, case, delete
+from sqlalchemy import select, func, and_, case, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
@@ -433,6 +433,24 @@ async def list_visits(
 class DeleteVisitsRequest(BaseModel):
     visit_ids: List[str]
 
+class MergeVisitsRequest(BaseModel):
+    visit_ids: List[str]
+    primary_visit_id: Optional[str] = None
+
+class MergeVisitsResponse(BaseModel):
+    message: str
+    primary_visit_id: str
+    merged_visit_ids: List[str]
+    person_id: int
+    person_type: str
+    site_id: int
+    camera_ids: List[int]
+    first_seen: datetime
+    last_seen: datetime
+    visit_duration_seconds: int
+    detection_count: int
+    highest_confidence: float
+
 @router.post("/visits/delete")
 async def delete_visits(
     request: DeleteVisitsRequest,
@@ -554,6 +572,190 @@ async def delete_visits(
         "deleted_visit_ids": request.visit_ids,
         "images_cleaned": images_cleaned
     }
+
+@router.post("/visits/merge", response_model=MergeVisitsResponse)
+async def merge_visits(
+    request: MergeVisitsRequest,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Merge multiple visit records into a single consolidated visit.
+
+    Rules:
+    - All visits must belong to the current tenant and exist
+    - All visits must reference the same person_id and person_type
+    - If primary_visit_id is not provided, choose the visit with the highest confidence; tie-breaker earliest first_seen
+    - Aggregation strategy:
+        - first_seen = min(first_seen)
+        - last_seen = max(last_seen)
+        - visit_duration_seconds = (last_seen - first_seen)
+        - detection_count = sum(detection_count)
+        - highest_confidence = max(highest_confidence)
+        - confidence_score = highest_confidence
+        - image_path/bbox/embedding taken from the best-confidence visit with an image
+    - Reassign any CustomerFaceImage.visit_id references from merged visits to the primary visit
+    - Delete non-primary visits; cleanup their MinIO images best-effort
+    - Recompute Customer visit_count/first_seen/last_seen if person_type == 'customer'
+    """
+    await db.set_tenant_context(db_session, user["tenant_id"])
+
+    if not request.visit_ids or len(request.visit_ids) < 2:
+        raise HTTPException(status_code=400, detail="Provide at least two visit_ids to merge")
+
+    # Load visits
+    result = await db_session.execute(
+        select(Visit).where(
+            and_(Visit.tenant_id == user["tenant_id"], Visit.visit_id.in_(request.visit_ids))
+        )
+    )
+    visits = result.scalars().all()
+    if len(visits) != len(set(request.visit_ids)):
+        found_ids = {v.visit_id for v in visits}
+        missing = [vid for vid in request.visit_ids if vid not in found_ids]
+        raise HTTPException(status_code=404, detail=f"Visit(s) not found: {missing}")
+
+    # Validate same person and type
+    person_ids = {int(v.person_id) for v in visits}
+    person_types = {v.person_type for v in visits}
+    site_ids = {int(v.site_id) for v in visits}
+    if len(person_ids) != 1 or len(person_types) != 1:
+        raise HTTPException(status_code=400, detail="All visits must reference the same person and type")
+    # Allow multiple cameras within same site; require same site
+    if len(site_ids) != 1:
+        raise HTTPException(status_code=400, detail="All visits must belong to the same site")
+
+    person_id = person_ids.pop()
+    person_type = person_types.pop()
+    site_id = site_ids.pop()
+    camera_ids = sorted({int(v.camera_id) for v in visits})
+
+    # Determine primary visit
+    primary = None
+    if request.primary_visit_id:
+        primary = next((v for v in visits if v.visit_id == request.primary_visit_id), None)
+        if not primary:
+            raise HTTPException(status_code=400, detail="primary_visit_id must be in visit_ids")
+    else:
+        # Choose by highest highest_confidence, then earliest first_seen
+        def _score(v: Visit):
+            return (float(v.highest_confidence or v.confidence_score or 0.0), -v.first_seen.timestamp())
+        primary = sorted(visits, key=_score, reverse=True)[0]
+
+    # Aggregations
+    first_seen = min(v.first_seen for v in visits)
+    last_seen = max(v.last_seen for v in visits)
+    visit_duration_seconds = int((last_seen - first_seen).total_seconds()) if last_seen and first_seen else 0
+    detection_count = sum(int(v.detection_count or 0) for v in visits)
+    highest_confidence = max(float(v.highest_confidence or v.confidence_score or 0.0) for v in visits)
+
+    # Choose best image/bbox/embedding from the best-confidence visit that has an image
+    best_with_image = None
+    for v in sorted(visits, key=lambda x: float(x.highest_confidence or x.confidence_score or 0.0), reverse=True):
+        if v.image_path:
+            best_with_image = v
+            break
+
+    # Update primary
+    primary.first_seen = first_seen
+    primary.last_seen = last_seen
+    primary.visit_duration_seconds = visit_duration_seconds
+    primary.detection_count = detection_count
+    primary.highest_confidence = highest_confidence
+    primary.confidence_score = highest_confidence
+    if best_with_image:
+        primary.image_path = best_with_image.image_path
+        primary.bbox_x = best_with_image.bbox_x
+        primary.bbox_y = best_with_image.bbox_y
+        primary.bbox_w = best_with_image.bbox_w
+        primary.bbox_h = best_with_image.bbox_h
+        primary.face_embedding = best_with_image.face_embedding
+
+    # Reassign CustomerFaceImage.visit_id
+    from ..models.database import CustomerFaceImage, Customer
+    await db_session.execute(
+        update(CustomerFaceImage)
+        .where(
+            and_(
+                CustomerFaceImage.tenant_id == user["tenant_id"],
+                CustomerFaceImage.visit_id.in_([v.visit_id for v in visits if v.visit_id != primary.visit_id]),
+            )
+        )
+        .values(visit_id=primary.visit_id)
+    )
+
+    # Delete non-primary visits and cleanup their images from MinIO best-effort
+    non_primary_ids = [v.visit_id for v in visits if v.visit_id != primary.visit_id]
+    non_primary_with_images: List[tuple[str, Optional[str]]] = [(v.visit_id, v.image_path) for v in visits if v.visit_id != primary.visit_id]
+
+    await db_session.execute(
+        delete(Visit).where(
+            and_(Visit.tenant_id == user["tenant_id"], Visit.visit_id.in_(non_primary_ids))
+        )
+    )
+
+    # Commit DB changes before external cleanup
+    await db_session.commit()
+
+    # MinIO cleanup (after commit)
+    from ..core.minio_client import minio_client
+    images_cleaned = 0
+    for vid, image_path in non_primary_with_images:
+        if not image_path:
+            continue
+        try:
+            if image_path.startswith('s3://'):
+                parts = image_path[5:].split('/', 1)
+                if len(parts) == 2:
+                    bucket, object_name = parts
+                    minio_client.delete_file(bucket, object_name)
+                    images_cleaned += 1
+            elif image_path.startswith('visits-faces/'):
+                object_path = image_path.replace('visits-faces/', '')
+                minio_client.delete_file('faces-derived', object_path)
+                images_cleaned += 1
+            elif not image_path.startswith('http'):
+                minio_client.delete_file('faces-raw', image_path)
+                images_cleaned += 1
+        except Exception as e:
+            logger.warning(f"Failed to delete merged visit image {image_path} for {vid}: {e}")
+
+    # Recompute customer stats if needed
+    if person_type == "customer":
+        stats_res = await db_session.execute(
+            select(
+                func.count(Visit.visit_id),
+                func.min(Visit.first_seen),
+                func.max(Visit.last_seen),
+            ).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_type == "customer",
+                    Visit.person_id == person_id,
+                )
+            )
+        )
+        count, c_first, c_last = stats_res.first() or (0, None, None)
+        await db_session.execute(
+            update(Customer)
+            .where(and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == person_id))
+            .values(visit_count=int(count or 0), first_seen=c_first, last_seen=c_last)
+        )
+        await db_session.commit()
+
+    return MergeVisitsResponse(
+        message=f"Merged {len(request.visit_ids)} visits into {primary.visit_id}",
+        primary_visit_id=primary.visit_id,
+        merged_visit_ids=non_primary_ids,
+        person_id=person_id,
+        person_type=person_type,
+        site_id=site_id,
+        camera_ids=camera_ids,
+        first_seen=first_seen,
+        last_seen=last_seen,
+        visit_duration_seconds=visit_duration_seconds,
+        detection_count=detection_count,
+        highest_confidence=highest_confidence,
+    )
 
 @router.delete("/visits/{visit_id}/face")
 async def remove_visit_face_detection(
