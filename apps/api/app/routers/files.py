@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..core.minio_client import minio_client
 from ..core.security import verify_jwt, get_current_user
 
+import logging
 router = APIRouter(prefix="/v1", tags=["File Management"])
 
 
@@ -30,6 +31,8 @@ class FileDownloadResponse(BaseModel):
     download_url: str
     filename: str
 
+
+logger = logging.getLogger(__name__)
 
 @router.post("/files/upload-url", response_model=FileUrlResponse)
 async def get_upload_url(
@@ -157,7 +160,17 @@ async def serve_file(
         # These are from faces-derived bucket, require authentication but no tenant isolation 
         bucket = "faces-derived"
         object_path = file_path.replace("visits-faces/", "")
-        
+    elif file_path.startswith("customers/"):
+        # Customer gallery images: customers/{tenant_id}/{customer_id}/...
+        parts = file_path.split("/")
+        if len(parts) < 3:
+            raise HTTPException(status_code=404, detail="File not found")
+        path_tenant_id = parts[1]
+        if path_tenant_id != payload.get("tenant_id"):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        bucket = "faces-derived"
+        object_path = file_path
+    
     else:
         # Only allow specific secure path types
         raise HTTPException(status_code=404, detail="File not found")

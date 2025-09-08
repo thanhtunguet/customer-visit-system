@@ -975,11 +975,18 @@ class ApiClient {
         return imagePath;
       }
       
-      // If imagePath already starts with /v1/files/, use it directly
-      const url = imagePath.startsWith('/v1/files/') ? imagePath : `/v1/files/${imagePath}`;
-      
+      // Normalize to avoid duplicating baseURL path (/v1)
+      let filesPath: string;
+      if (imagePath.startsWith('/v1/files/')) {
+        filesPath = imagePath.replace(/^\/v1\//, '/'); // -> '/files/...'
+      } else if (imagePath.startsWith('/files/')) {
+        filesPath = imagePath;
+      } else {
+        filesPath = `/files/${imagePath.replace(/^\/+/, '')}`;
+      }
+
       // Make authenticated request to get the image
-      const response = await this.client.get(url, {
+      const response = await this.client.get(filesPath, {
         responseType: 'blob',
       });
       
