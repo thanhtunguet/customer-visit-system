@@ -825,3 +825,106 @@ async def reassign_face_image(
         await db_session.rollback()
         logger.error(f"Error reassigning face image: {e}")
         raise HTTPException(status_code=500, detail="Failed to reassign face image")
+
+
+@router.delete("/customers/{customer_id:int}")
+async def delete_customer(
+    customer_id: int,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete a customer and clean up associated data."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        # Check if customer exists
+        result = await db_session.execute(
+            select(Customer).where(
+                and_(
+                    Customer.tenant_id == user["tenant_id"],
+                    Customer.customer_id == customer_id
+                )
+            )
+        )
+        customer = result.scalar_one_or_none()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        # Delete associated data first
+        from ..models.database import Visit, CustomerFaceImage
+        
+        # Delete visits
+        visits_result = await db_session.execute(
+            select(func.count(Visit.visit_id)).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_type == "customer",
+                    Visit.person_id == customer_id
+                )
+            )
+        )
+        visit_count = visits_result.scalar() or 0
+        
+        await db_session.execute(
+            delete(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_type == "customer", 
+                    Visit.person_id == customer_id
+                )
+            )
+        )
+        
+        # Delete face images
+        face_images_result = await db_session.execute(
+            select(func.count(CustomerFaceImage.image_id)).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer_id
+                )
+            )
+        )
+        face_image_count = face_images_result.scalar() or 0
+        
+        await db_session.execute(
+            delete(CustomerFaceImage).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id == customer_id
+                )
+            )
+        )
+        
+        # Delete the customer
+        await db_session.execute(
+            delete(Customer).where(
+                and_(
+                    Customer.tenant_id == user["tenant_id"],
+                    Customer.customer_id == customer_id
+                )
+            )
+        )
+        
+        await db_session.commit()
+        
+        # Clean up embeddings from Milvus (best effort)
+        try:
+            await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id, "customer")
+            logger.info(f"Deleted embeddings for customer {customer_id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete embeddings for customer {customer_id}: {e}")
+        
+        return {
+            "message": "Customer deleted successfully",
+            "customer_id": customer_id,
+            "deleted_visits": visit_count,
+            "deleted_face_images": face_image_count
+        }
+        
+    except HTTPException:
+        await db_session.rollback()
+        raise
+    except Exception as e:
+        await db_session.rollback()
+        logger.error(f"Error deleting customer {customer_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete customer")
