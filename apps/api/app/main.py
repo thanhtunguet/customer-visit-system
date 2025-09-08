@@ -20,7 +20,7 @@ from .services.worker_registry import worker_registry
 from .services.worker_command_service import worker_command_service
 from .services.camera_delegation_service import camera_delegation_service
 from .core.task_manager import task_manager
-from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management, workers_consolidated
+from .routers import health, auth, tenants, sites, cameras, staff, customers, events, files, jobs, workers, worker_registry as worker_registry_router, worker_camera_management, lease_management, workers_consolidated
 
 
 async def initialize_camera_proxy():
@@ -175,6 +175,7 @@ app.include_router(cameras.router)
 app.include_router(staff.router)
 app.include_router(customers.router)
 app.include_router(events.router)
+app.include_router(jobs.router)
 app.include_router(files.router)
 
 # NEW: Consolidated Worker API - replaces fragmented worker endpoints

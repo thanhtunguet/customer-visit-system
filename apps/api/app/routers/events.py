@@ -452,17 +452,19 @@ class MergeVisitsResponse(BaseModel):
     highest_confidence: float
 
 @router.post("/visits/delete")
-async def delete_visits(
+async def delete_visits_async(
     request: DeleteVisitsRequest,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    """Delete multiple visits by their visit_ids"""
-    from ..core.minio_client import minio_client
-    from ..models.database import CustomerFaceImage
-    import logging
+    """Start an asynchronous visit deletion operation.
     
-    logger = logging.getLogger(__name__)
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    
     await db.set_tenant_context(db_session, user["tenant_id"])
     
     if not request.visit_ids:
@@ -471,291 +473,117 @@ async def delete_visits(
             detail="No visit IDs provided"
         )
     
-    # First get the visits with their image paths for cleanup
-    visits_with_images_query = select(Visit.visit_id, Visit.image_path).where(
-        and_(
-            Visit.tenant_id == user["tenant_id"],
-            Visit.visit_id.in_(request.visit_ids)
+    # Quick validation that visits exist
+    result = await db_session.execute(
+        select(Visit.visit_id).where(
+            and_(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.visit_id.in_(request.visit_ids)
+            )
         )
     )
-    result = await db_session.execute(visits_with_images_query)
-    visits_with_images = result.all()
-    
-    existing_visit_ids = [row[0] for row in visits_with_images]
+    existing_visit_ids = [row[0] for row in result.all()]
     missing_visits = set(request.visit_ids) - set(existing_visit_ids)
+    
     if missing_visits:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Visit(s) not found: {', '.join(missing_visits)}"
         )
     
-    # Get associated customer face images for cleanup
-    customer_face_images_query = select(CustomerFaceImage.image_path).where(
-        and_(
-            CustomerFaceImage.tenant_id == user["tenant_id"],
-            CustomerFaceImage.visit_id.in_(request.visit_ids)
-        )
-    )
-    result = await db_session.execute(customer_face_images_query)
-    customer_face_image_paths = [row[0] for row in result.all()]
-    
-    # Delete associated customer face images first (database records)
-    delete_customer_face_images_query = delete(CustomerFaceImage).where(
-        and_(
-            CustomerFaceImage.tenant_id == user["tenant_id"],
-            CustomerFaceImage.visit_id.in_(request.visit_ids)
-        )
-    )
-    await db_session.execute(delete_customer_face_images_query)
-    
-    # Delete the visits
-    delete_query = delete(Visit).where(
-        and_(
-            Visit.tenant_id == user["tenant_id"],
-            Visit.visit_id.in_(request.visit_ids)
-        )
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="bulk_delete_visits",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "visit_ids": request.visit_ids,
+            "user_id": user.get("user_id")
+        }
     )
     
-    result = await db_session.execute(delete_query)
-    await db_session.commit()
-    
-    deleted_count = result.rowcount
-    
-    # Clean up image files from MinIO (do this after database commit)
-    images_cleaned = 0
-    for visit_id, image_path in visits_with_images:
-        if image_path:
-            try:
-                # Determine bucket and object path from image_path
-                if image_path.startswith('s3://'):
-                    # Extract bucket and object name from s3://bucket/object format
-                    path_parts = image_path[5:].split('/', 1)
-                    if len(path_parts) == 2:
-                        bucket, object_name = path_parts
-                        minio_client.delete_file(bucket, object_name)
-                        images_cleaned += 1
-                elif image_path.startswith('visits-faces/'):
-                    # API-generated face crops are in faces-derived bucket
-                    object_path = image_path.replace('visits-faces/', '')
-                    minio_client.delete_file('faces-derived', object_path)
-                    images_cleaned += 1
-                elif not image_path.startswith('http'):
-                    # Assume it's a path in the faces-raw bucket
-                    minio_client.delete_file('faces-raw', image_path)
-                    images_cleaned += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete image {image_path} for visit {visit_id}: {e}")
-    
-    # Clean up customer face images from MinIO
-    for image_path in customer_face_image_paths:
-        if image_path:
-            try:
-                # Handle both old (customer-faces/ prefix) and new (direct path) formats
-                if image_path.startswith('customer-faces/'):
-                    # Legacy format - remove the prefix
-                    object_path = image_path.replace('customer-faces/', '')
-                else:
-                    # New format - use path directly
-                    object_path = image_path
-                minio_client.delete_file('faces-derived', object_path)
-                images_cleaned += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete customer face image {image_path}: {e}")
-    
-    message = f"Successfully deleted {deleted_count} visit(s)"
-    if images_cleaned > 0:
-        message += f" and cleaned up {images_cleaned} associated image(s)"
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
     
     return {
-        "message": message,
-        "deleted_count": deleted_count,
-        "deleted_visit_ids": request.visit_ids,
-        "images_cleaned": images_cleaned
+        "message": f"Visit deletion job started for {len(request.visit_ids)} visits",
+        "job_id": job_id,
+        "status": "started",
+        "visit_ids": request.visit_ids,
+        "check_status_url": f"/v1/jobs/{job_id}"
     }
 
-@router.post("/visits/merge", response_model=MergeVisitsResponse)
-async def merge_visits(
+@router.post("/visits/merge")
+async def merge_visits_async(
     request: MergeVisitsRequest,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    """Merge multiple visit records into a single consolidated visit.
-
+    """Start an asynchronous visit merge operation.
+    
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    
     Rules:
     - All visits must belong to the current tenant and exist
     - All visits must reference the same person_id and person_type
-    - If primary_visit_id is not provided, choose the visit with the highest confidence; tie-breaker earliest first_seen
-    - Aggregation strategy:
-        - first_seen = min(first_seen)
-        - last_seen = max(last_seen)
-        - visit_duration_seconds = (last_seen - first_seen)
-        - detection_count = sum(detection_count)
-        - highest_confidence = max(highest_confidence)
-        - confidence_score = highest_confidence
-        - image_path/bbox/embedding taken from the best-confidence visit with an image
-    - Reassign any CustomerFaceImage.visit_id references from merged visits to the primary visit
-    - Delete non-primary visits; cleanup their MinIO images best-effort
-    - Recompute Customer visit_count/first_seen/last_seen if person_type == 'customer'
+    - If primary_visit_id is not provided, the system will choose the visit with highest confidence
     """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    
     await db.set_tenant_context(db_session, user["tenant_id"])
-
+    
     if not request.visit_ids or len(request.visit_ids) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two visit_ids to merge")
-
-    # Load visits
+    
+    # Quick validation that visits exist and belong to same person (lightweight check)
     result = await db_session.execute(
-        select(Visit).where(
+        select(Visit.person_id, Visit.person_type, Visit.site_id).where(
             and_(Visit.tenant_id == user["tenant_id"], Visit.visit_id.in_(request.visit_ids))
         )
     )
-    visits = result.scalars().all()
-    if len(visits) != len(set(request.visit_ids)):
-        found_ids = {v.visit_id for v in visits}
-        missing = [vid for vid in request.visit_ids if vid not in found_ids]
-        raise HTTPException(status_code=404, detail=f"Visit(s) not found: {missing}")
-
-    # Validate same person and type
-    person_ids = {int(v.person_id) for v in visits}
-    person_types = {v.person_type for v in visits}
-    site_ids = {int(v.site_id) for v in visits}
+    visit_data = result.all()
+    
+    if len(visit_data) != len(set(request.visit_ids)):
+        found_count = len(visit_data)
+        raise HTTPException(status_code=404, detail=f"Only {found_count} of {len(request.visit_ids)} visits found")
+    
+    # Validate same person and type (quick check)
+    person_ids = {int(row[0]) for row in visit_data}
+    person_types = {row[1] for row in visit_data}
+    site_ids = {int(row[2]) for row in visit_data}
+    
     if len(person_ids) != 1 or len(person_types) != 1:
         raise HTTPException(status_code=400, detail="All visits must reference the same person and type")
-    # Allow multiple cameras within same site; require same site
     if len(site_ids) != 1:
         raise HTTPException(status_code=400, detail="All visits must belong to the same site")
-
-    person_id = person_ids.pop()
-    person_type = person_types.pop()
-    site_id = site_ids.pop()
-    camera_ids = sorted({int(v.camera_id) for v in visits})
-
-    # Determine primary visit
-    primary = None
-    if request.primary_visit_id:
-        primary = next((v for v in visits if v.visit_id == request.primary_visit_id), None)
-        if not primary:
-            raise HTTPException(status_code=400, detail="primary_visit_id must be in visit_ids")
-    else:
-        # Choose by highest highest_confidence, then earliest first_seen
-        def _score(v: Visit):
-            return (float(v.highest_confidence or v.confidence_score or 0.0), -v.first_seen.timestamp())
-        primary = sorted(visits, key=_score, reverse=True)[0]
-
-    # Aggregations
-    first_seen = min(v.first_seen for v in visits)
-    last_seen = max(v.last_seen for v in visits)
-    visit_duration_seconds = int((last_seen - first_seen).total_seconds()) if last_seen and first_seen else 0
-    detection_count = sum(int(v.detection_count or 0) for v in visits)
-    highest_confidence = max(float(v.highest_confidence or v.confidence_score or 0.0) for v in visits)
-
-    # Choose best image/bbox/embedding from the best-confidence visit that has an image
-    best_with_image = None
-    for v in sorted(visits, key=lambda x: float(x.highest_confidence or x.confidence_score or 0.0), reverse=True):
-        if v.image_path:
-            best_with_image = v
-            break
-
-    # Update primary
-    primary.first_seen = first_seen
-    primary.last_seen = last_seen
-    primary.visit_duration_seconds = visit_duration_seconds
-    primary.detection_count = detection_count
-    primary.highest_confidence = highest_confidence
-    primary.confidence_score = highest_confidence
-    if best_with_image:
-        primary.image_path = best_with_image.image_path
-        primary.bbox_x = best_with_image.bbox_x
-        primary.bbox_y = best_with_image.bbox_y
-        primary.bbox_w = best_with_image.bbox_w
-        primary.bbox_h = best_with_image.bbox_h
-        primary.face_embedding = best_with_image.face_embedding
-
-    # Reassign CustomerFaceImage.visit_id
-    from ..models.database import CustomerFaceImage, Customer
-    await db_session.execute(
-        update(CustomerFaceImage)
-        .where(
-            and_(
-                CustomerFaceImage.tenant_id == user["tenant_id"],
-                CustomerFaceImage.visit_id.in_([v.visit_id for v in visits if v.visit_id != primary.visit_id]),
-            )
-        )
-        .values(visit_id=primary.visit_id)
+    
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="merge_visits",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "visit_ids": request.visit_ids,
+            "primary_visit_id": request.primary_visit_id,
+            "user_id": user.get("user_id"),
+            "person_id": person_ids.pop(),
+            "person_type": person_types.pop(),
+            "site_id": site_ids.pop()
+        }
     )
-
-    # Delete non-primary visits and cleanup their images from MinIO best-effort
-    non_primary_ids = [v.visit_id for v in visits if v.visit_id != primary.visit_id]
-    non_primary_with_images: List[tuple[str, Optional[str]]] = [(v.visit_id, v.image_path) for v in visits if v.visit_id != primary.visit_id]
-
-    await db_session.execute(
-        delete(Visit).where(
-            and_(Visit.tenant_id == user["tenant_id"], Visit.visit_id.in_(non_primary_ids))
-        )
-    )
-
-    # Commit DB changes before external cleanup
-    await db_session.commit()
-
-    # MinIO cleanup (after commit)
-    from ..core.minio_client import minio_client
-    images_cleaned = 0
-    for vid, image_path in non_primary_with_images:
-        if not image_path:
-            continue
-        try:
-            if image_path.startswith('s3://'):
-                parts = image_path[5:].split('/', 1)
-                if len(parts) == 2:
-                    bucket, object_name = parts
-                    minio_client.delete_file(bucket, object_name)
-                    images_cleaned += 1
-            elif image_path.startswith('visits-faces/'):
-                object_path = image_path.replace('visits-faces/', '')
-                minio_client.delete_file('faces-derived', object_path)
-                images_cleaned += 1
-            elif not image_path.startswith('http'):
-                minio_client.delete_file('faces-raw', image_path)
-                images_cleaned += 1
-        except Exception as e:
-            logger.warning(f"Failed to delete merged visit image {image_path} for {vid}: {e}")
-
-    # Recompute customer stats if needed
-    if person_type == "customer":
-        stats_res = await db_session.execute(
-            select(
-                func.count(Visit.visit_id),
-                func.min(Visit.first_seen),
-                func.max(Visit.last_seen),
-            ).where(
-                and_(
-                    Visit.tenant_id == user["tenant_id"],
-                    Visit.person_type == "customer",
-                    Visit.person_id == person_id,
-                )
-            )
-        )
-        count, c_first, c_last = stats_res.first() or (0, None, None)
-        await db_session.execute(
-            update(Customer)
-            .where(and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == person_id))
-            .values(visit_count=int(count or 0), first_seen=c_first, last_seen=c_last)
-        )
-        await db_session.commit()
-
-    return MergeVisitsResponse(
-        message=f"Merged {len(request.visit_ids)} visits into {primary.visit_id}",
-        primary_visit_id=primary.visit_id,
-        merged_visit_ids=non_primary_ids,
-        person_id=person_id,
-        person_type=person_type,
-        site_id=site_id,
-        camera_ids=camera_ids,
-        first_seen=first_seen,
-        last_seen=last_seen,
-        visit_duration_seconds=visit_duration_seconds,
-        detection_count=detection_count,
-        highest_confidence=highest_confidence,
-    )
+    
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
+    
+    return {
+        "message": f"Visit merge job started for {len(request.visit_ids)} visits",
+        "job_id": job_id,
+        "status": "started",
+        "visit_ids": request.visit_ids,
+        "check_status_url": f"/v1/jobs/{job_id}"
+    }
 
 @router.delete("/visits/{visit_id}/face")
 async def remove_visit_face_detection(
@@ -906,69 +734,61 @@ async def remove_visit_face_detection(
 
 
 @router.post("/customers/{customer_id:int}/cleanup-low-confidence-faces")
-async def cleanup_low_confidence_faces(
+async def cleanup_low_confidence_faces_async(
     customer_id: int,
     request: dict,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    """Remove low-confidence face detections for a specific customer"""
+    """Start an asynchronous cleanup of low-confidence face detections for a customer.
+    
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    from ..models.database import Customer
+    
     await db.set_tenant_context(db_session, user["tenant_id"])
     
     min_confidence = request.get("min_confidence", 0.7)
     max_to_remove = request.get("max_to_remove", 10)
     
-    try:
-        from ..models.database import Customer
-        
-        # Verify customer exists
-        customer_result = await db_session.execute(
-            select(Customer).where(
-                and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
-            )
+    # Verify customer exists
+    customer_result = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
         )
-        customer = customer_result.scalar_one_or_none()
-        if not customer:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        
-        # Find low-confidence visits for this customer
-        low_confidence_visits_result = await db_session.execute(
-            select(Visit.visit_id).where(
-                and_(
-                    Visit.tenant_id == user["tenant_id"],
-                    Visit.person_id == customer_id,
-                    Visit.person_type == "customer",
-                    Visit.confidence_score < min_confidence
-                )
-            ).order_by(Visit.confidence_score.asc()).limit(max_to_remove)
-        )
-        
-        visit_ids_to_remove = [row[0] for row in low_confidence_visits_result.fetchall()]
-        
-        if not visit_ids_to_remove:
-            return {
-                "message": f"No low-confidence visits found below threshold {min_confidence}",
-                "customer_id": customer_id,
-                "removed_count": 0
-            }
-        
-        # Use the bulk delete functionality
-        request_obj = DeleteVisitsRequest(visit_ids=visit_ids_to_remove)
-        result = await delete_visits(request_obj, user, db_session)
-        
-        return {
-            "message": f"Removed {len(visit_ids_to_remove)} low-confidence face detections",
+    )
+    customer = customer_result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="cleanup_customer_faces",
+        tenant_id=user["tenant_id"],
+        metadata={
             "customer_id": customer_id,
-            "removed_count": len(visit_ids_to_remove),
-            "min_confidence_threshold": min_confidence,
-            "cleanup_details": result
+            "min_confidence": min_confidence,
+            "max_to_remove": max_to_remove,
+            "user_id": user.get("user_id")
         }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error cleaning up low-confidence faces: {e}")
-        raise HTTPException(status_code=500, detail="Failed to cleanup low-confidence faces")
+    )
+    
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
+    
+    return {
+        "message": f"Face cleanup job started for customer {customer_id}",
+        "job_id": job_id,
+        "status": "started",
+        "customer_id": customer_id,
+        "min_confidence_threshold": min_confidence,
+        "max_to_remove": max_to_remove,
+        "check_status_url": f"/v1/jobs/{job_id}"
+    }
 
 
 # ===============================
