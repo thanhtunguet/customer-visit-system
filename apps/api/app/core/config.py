@@ -77,14 +77,14 @@ class Settings:
     api_min_face_size: int = int(os.getenv("API_MIN_FACE_SIZE", "60"))
 
     # Identity assignment / clustering knobs
-    embedding_distance_thr: float = float(os.getenv("EMBEDDING_DISTANCE_THR", "0.85"))
-    merge_distance_thr: float = float(os.getenv("MERGE_DISTANCE_THR", "0.90"))
-    merge_margin: float = float(os.getenv("MERGE_MARGIN", "0.04"))
+    embedding_distance_thr: float = float(os.getenv("EMBEDDING_DISTANCE_THR", "0.70"))
+    merge_distance_thr: float = float(os.getenv("MERGE_DISTANCE_THR", "0.75"))
+    merge_margin: float = float(os.getenv("MERGE_MARGIN", "0.05"))
     # Require multiple samples within a short window before creating a new identity
-    min_cluster_samples: int = int(os.getenv("MIN_CLUSTER_SAMPLES", "3"))
+    min_cluster_samples: int = int(os.getenv("MIN_CLUSTER_SAMPLES", "2"))
     min_track_length: int = int(os.getenv("MIN_TRACK_LENGTH", "1"))
     # Extend temporal hysteresis to stabilize identity across frames
-    temporal_hysteresis_secs: float = float(os.getenv("TEMPORAL_HYSTERESIS_SECS", "6.0"))
+    temporal_hysteresis_secs: float = float(os.getenv("TEMPORAL_HYSTERESIS_SECS", "10.0"))
     # Stricter minimum detection quality to reduce false positives
     quality_min_score: float = float(os.getenv("QUALITY_MIN_SCORE", "0.7"))
 
