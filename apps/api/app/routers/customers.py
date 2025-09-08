@@ -1,6 +1,6 @@
 import logging
-import logging
 import uuid
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
@@ -62,7 +62,6 @@ async def list_customers(
             )
             
             face_image = face_result.scalar_one_or_none()
-            logger.info(f"Customer {customer.customer_id}: Found face image path: {face_image}")
             if face_image:
                 # Generate MinIO presigned URL for the avatar
                 from ..core.minio_client import minio_client
@@ -78,27 +77,34 @@ async def list_customers(
                         timedelta(hours=1)  # 1 hour expiry
                     )
                 except Exception as url_error:
-                    logger.error(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
-                    logger.error(f"Face image path was: {face_image}")
+                    logger.warning(f"Could not generate avatar URL for customer {customer.customer_id}: {url_error}")
+                    avatar_url = None  # Continue without avatar
                     
         except Exception as e:
-            logger.error(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
+            logger.warning(f"Could not fetch avatar for customer {customer.customer_id}: {e}")
+            avatar_url = None  # Continue without avatar
         
-        # Create customer response with avatar URL
-        customer_response = CustomerResponse(
-            customer_id=customer.customer_id,
-            tenant_id=customer.tenant_id,
-            name=customer.name,
-            gender=customer.gender,
-            estimated_age_range=customer.estimated_age_range,
-            phone=customer.phone,
-            email=customer.email,
-            first_seen=customer.first_seen,
-            last_seen=customer.last_seen,
-            visit_count=customer.visit_count,
-            avatar_url=avatar_url
-        )
-        customer_responses.append(customer_response)
+        try:
+            # Create customer response with proper null handling
+            customer_response = CustomerResponse(
+                customer_id=customer.customer_id,
+                tenant_id=customer.tenant_id,
+                name=customer.name,
+                gender=customer.gender,
+                estimated_age_range=customer.estimated_age_range,
+                phone=customer.phone,
+                email=customer.email,
+                first_seen=customer.first_seen or datetime.utcnow(),  # Fallback if null
+                last_seen=customer.last_seen,
+                visit_count=customer.visit_count or 0,  # Fallback if null
+                avatar_url=avatar_url
+            )
+            customer_responses.append(customer_response)
+        except Exception as customer_error:
+            logger.error(f"Failed to create response for customer {customer.customer_id}: {customer_error}")
+            logger.error(f"Customer data: first_seen={customer.first_seen}, last_seen={customer.last_seen}, visit_count={customer.visit_count}")
+            # Skip this customer to prevent entire API from failing
+            continue
     
     return customer_responses
 
