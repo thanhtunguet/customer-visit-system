@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, 
   Row, 
@@ -154,6 +154,9 @@ export const VisitsPage: React.FC = () => {
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
+  const [mergeOpen, setMergeOpen] = useState<boolean>(false);
+  const [merging, setMerging] = useState<boolean>(false);
+  const [primaryVisitId, setPrimaryVisitId] = useState<string | undefined>(undefined);
 
 
   // Load initial data from API
@@ -407,6 +410,49 @@ export const VisitsPage: React.FC = () => {
     }
   };
 
+  const selectedVisits = useMemo(() => {
+    const set = selectedVisitIds;
+    return visits.filter(v => set.has(v.visit_id));
+  }, [selectedVisitIds, visits]);
+
+  const bestPrimaryCandidateId = useMemo(() => {
+    if (selectedVisits.length === 0) return undefined;
+    const sorted = [...selectedVisits].sort((a, b) => {
+      const ah = (a.highest_confidence ?? a.confidence_score) || 0;
+      const bh = (b.highest_confidence ?? b.confidence_score) || 0;
+      if (bh !== ah) return bh - ah;
+      // tie-breaker: earliest first_seen
+      return new Date(a.first_seen).getTime() - new Date(b.first_seen).getTime();
+    });
+    return sorted[0]?.visit_id;
+  }, [selectedVisits]);
+
+  const openMergeModal = () => {
+    if (selectedVisitIds.size < 2) {
+      message.info('Select at least two visits to merge');
+      return;
+    }
+    setPrimaryVisitId(bestPrimaryCandidateId);
+    setMergeOpen(true);
+  };
+
+  const handleMerge = async () => {
+    if (selectedVisitIds.size < 2) return;
+    setMerging(true);
+    try {
+      const ids = Array.from(selectedVisitIds);
+      const res = await apiClient.mergeVisits(ids, primaryVisitId);
+      message.success(res.message || 'Merged visits');
+      setMergeOpen(false);
+      setSelectedVisitIds(new Set([res.primary_visit_id]));
+      await loadInitialData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Failed to merge visits');
+    } finally {
+      setMerging(false);
+    }
+  };
+
   // Keyboard shortcuts - moved after handleDeleteSelected is defined
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -547,6 +593,15 @@ export const VisitsPage: React.FC = () => {
                   </Button>
                 </Popconfirm>
               )}
+            </Col>
+            <Col>
+              <Button 
+                type="primary"
+                disabled={selectedVisitIds.size < 2}
+                onClick={openMergeModal}
+              >
+                Merge Selected ({selectedVisitIds.size || 0})
+              </Button>
             </Col>
           </Row>
         )}
@@ -868,6 +923,36 @@ export const VisitsPage: React.FC = () => {
             className="w-full border rounded px-2 py-1"
             placeholder="Enter customer id"
           />
+        </div>
+      </Modal>
+
+      {/* Merge Visits Modal */}
+      <Modal
+        open={mergeOpen}
+        onCancel={() => setMergeOpen(false)}
+        title={`Merge ${selectedVisitIds.size} visits`}
+        okText={merging ? 'Merging…' : 'Merge'}
+        onOk={handleMerge}
+        confirmLoading={merging}
+      >
+        <div className="space-y-3">
+          <div>
+            Choose primary visit (keeps best image/fields):
+          </div>
+          <Select
+            className="w-full"
+            value={primaryVisitId}
+            onChange={(v) => setPrimaryVisitId(v)}
+          >
+            {selectedVisits.map(v => (
+              <Select.Option key={v.visit_id} value={v.visit_id}>
+                {v.visit_id} • {new Date(v.first_seen).toLocaleString()} • conf {(100 * (v.highest_confidence ?? v.confidence_score)).toFixed(1)}%
+              </Select.Option>
+            ))}
+          </Select>
+          <div className="text-xs text-gray-500">
+            All visits must belong to the same person and site. The primary visit will absorb the others.
+          </div>
         </div>
       </Modal>
     </div>

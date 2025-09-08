@@ -602,6 +602,27 @@ class ApiClient {
     return response.data;
   }
 
+  async mergeVisits(visitIds: string[], primaryVisitId?: string): Promise<{
+    message: string;
+    primary_visit_id: string;
+    merged_visit_ids: string[];
+    person_id: number;
+    person_type: 'customer' | 'staff';
+    site_id: number;
+    camera_ids: number[];
+    first_seen: string;
+    last_seen: string;
+    visit_duration_seconds: number;
+    detection_count: number;
+    highest_confidence: number;
+  }> {
+    const response = await this.client.post('/visits/merge', {
+      visit_ids: visitIds,
+      primary_visit_id: primaryVisitId,
+    });
+    return response.data;
+  }
+
   async removeVisitFaceDetection(visitId: string): Promise<{
     message: string;
     visit_id: string;
