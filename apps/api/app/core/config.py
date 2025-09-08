@@ -73,6 +73,14 @@ class Settings:
     max_face_images: int = int(os.getenv("MAX_FACE_IMAGES", "5"))
     min_face_confidence_to_save: float = float(os.getenv("MIN_FACE_CONFIDENCE_TO_SAVE", "0.7"))
 
+    # Identity assignment / clustering knobs
+    embedding_distance_thr: float = float(os.getenv("EMBEDDING_DISTANCE_THR", "0.85"))
+    merge_distance_thr: float = float(os.getenv("MERGE_DISTANCE_THR", "0.90"))
+    merge_margin: float = float(os.getenv("MERGE_MARGIN", "0.04"))
+    min_cluster_samples: int = int(os.getenv("MIN_CLUSTER_SAMPLES", "1"))
+    min_track_length: int = int(os.getenv("MIN_TRACK_LENGTH", "1"))
+    temporal_hysteresis_secs: float = float(os.getenv("TEMPORAL_HYSTERESIS_SECS", "3.0"))
+    quality_min_score: float = float(os.getenv("QUALITY_MIN_SCORE", "0.6"))
+
 
 settings = Settings()
-

@@ -561,6 +561,113 @@ async def find_similar_customers(
         raise HTTPException(status_code=500, detail="Failed to find similar customers")
 
 
+@router.post("/customers/reconcile")
+async def reconcile_customers(
+    request: dict = Body({}, description="{ limit?: int }"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    """Re-cluster and reconcile duplicate customers created by over-segmentation.
+
+    Strategy:
+    - For each customer, query Milvus for similar customers using MERGE_DISTANCE_THR
+    - Merge pairs where similarity >= MERGE_DISTANCE_THR (idempotent via merge endpoint)
+    - Stop at configured limit per run
+    """
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    from ..core.config import settings
+    tenant_id = user["tenant_id"]
+    try:
+        # Fetch recent customers ordered by last_seen desc
+        limit = int(request.get("limit", 100))
+        res = await db_session.execute(
+            select(Customer).where(Customer.tenant_id == tenant_id).order_by(Customer.last_seen.desc()).limit(limit)
+        )
+        customers = res.scalars().all()
+        merges = []
+        examined = 0
+
+        for c in customers:
+            examined += 1
+            # Use best embeddings from gallery; fallback to visits
+            from ..models.database import CustomerFaceImage, Visit
+            img_res = await db_session.execute(
+                select(CustomerFaceImage.embedding).where(
+                    and_(CustomerFaceImage.tenant_id == tenant_id, CustomerFaceImage.customer_id == c.customer_id)
+                ).limit(3)
+            )
+            embs = [row[0] for row in img_res if row[0]]
+            if not embs:
+                vres = await db_session.execute(
+                    select(Visit.face_embedding).where(
+                        and_(
+                            Visit.tenant_id == tenant_id,
+                            Visit.person_type == "customer",
+                            Visit.person_id == c.customer_id,
+                            Visit.face_embedding.is_not(None),
+                        )
+                    ).limit(3)
+                )
+                import json as _json
+                embs = []
+                for (etxt,) in vres.all():
+                    try:
+                        vec = _json.loads(etxt) if etxt else None
+                        if isinstance(vec, list) and len(vec) == 512:
+                            embs.append(vec)
+                    except Exception:
+                        pass
+            if not embs:
+                continue
+
+            # Search for similar customers
+            best_pair = None
+            best_sim = 0.0
+            for emb in embs:
+                try:
+                    matches = await milvus_client.search_similar_faces(
+                        tenant_id=tenant_id, embedding=emb, limit=5, threshold=settings.embedding_distance_thr
+                    )
+                    for m in matches:
+                        if m.get("person_type") != "customer":
+                            continue
+                        other_id = int(m.get("person_id"))
+                        if other_id == c.customer_id:
+                            continue
+                        sim = float(m.get("similarity", 0.0))
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_pair = other_id
+                except Exception as se:
+                    logger.warning(f"Milvus search failed during reconcile for {c.customer_id}: {se}")
+                    continue
+
+            if best_pair and best_sim >= settings.merge_distance_thr:
+                primary_id = min(int(c.customer_id), int(best_pair))
+                secondary_id = max(int(c.customer_id), int(best_pair))
+                # Call the existing merge endpoint logic (idempotent)
+                try:
+                    merge_req = {"primary_customer_id": primary_id, "secondary_customer_id": secondary_id, "notes": "reconcile"}
+                    result = await merge_customers(merge_req, user, db_session)
+                    merges.append({
+                        "primary": primary_id,
+                        "secondary": secondary_id,
+                        "similarity": best_sim,
+                        "result": result.get("message") if isinstance(result, dict) else "ok",
+                    })
+                except Exception as me:
+                    logger.warning(f"Merge failed for {primary_id}<-{secondary_id}: {me}")
+                    continue
+
+        return {"examined": examined, "merges": merges, "merge_count": len(merges)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during reconciliation: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reconcile customers")
+
+
 @router.get("/customers/{customer_id:int}/face-images")
 async def get_customer_face_images(
     customer_id: int,
