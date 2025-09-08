@@ -54,7 +54,6 @@ class FaceMatchingService:
         is_manual_upload = hasattr(event, '_manual_face_data')
         filename = getattr(event, '_manual_filename', 'camera_stream')
         logger.info(f"🔍 Processing face event from {filename}: confidence={event.confidence:.3f}, bbox={event.bbox}, manual_upload={is_manual_upload}")
-        logger.info(f"🔍 Thresholds: similarity={self.similarity_threshold}, customer_merge={self.customer_merge_threshold}, min_confidence={self.min_confidence_score}")
         
         # Skip if it's already identified as staff locally
         if event.is_staff_local:
