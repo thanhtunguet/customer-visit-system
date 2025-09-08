@@ -1,4 +1,4 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert, List, Tag } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
@@ -32,6 +32,10 @@ export const Customers: React.FC = () => {
   const [similarLoading, setSimilarLoading] = useState(false);
   const [similarList, setSimilarList] = useState<Array<{ customer_id: number; name?: string; visit_count: number; max_similarity: number; }>>([]);
   const [similarSourceId, setSimilarSourceId] = useState<number | null>(null);
+  
+  // Multi-select state
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -132,6 +136,38 @@ export const Customers: React.FC = () => {
       setDetailsModalVisible(false);
       handleEditCustomer(customer);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRowKeys.length === 0) return;
+
+    Modal.confirm({
+      title: 'Delete Selected Customers',
+      icon: <DeleteOutlined className="text-red-500" />,
+      content: (
+        <div>
+          <p>Are you sure you want to delete <strong>{selectedRowKeys.length}</strong> selected customers?</p>
+          <p className="text-red-600 text-sm">
+            This will permanently remove their recognition data, face images, and visit history.
+          </p>
+        </div>
+      ),
+      okText: 'Delete All',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setBulkDeleteLoading(true);
+        try {
+          await apiClient.bulkDeleteCustomers(selectedRowKeys);
+          setSelectedRowKeys([]);
+          await loadCustomers();
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Failed to delete selected customers');
+        } finally {
+          setBulkDeleteLoading(false);
+        }
+      }
+    });
   };
 
   const handleBackfillAvatar = async (customer: Customer) => {
@@ -316,6 +352,17 @@ export const Customers: React.FC = () => {
       <div className="flex items-center justify-between">
         <Title level={2} className="mb-0">Customers</Title>
         <Space>
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              danger
+              icon={<DeleteOutlined />}
+              loading={bulkDeleteLoading}
+              onClick={handleBulkDelete}
+            >
+              Delete Selected ({selectedRowKeys.length})
+            </Button>
+          )}
           <Button
             type="default"
             icon={<UploadOutlined />}
@@ -353,6 +400,13 @@ export const Customers: React.FC = () => {
           dataSource={customers}
           rowKey="customer_id"
           loading={loading}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys) => setSelectedRowKeys(keys as number[]),
+            getCheckboxProps: (record: Customer) => ({
+              name: `customer-${record.customer_id}`,
+            }),
+          }}
           pagination={{
             total: customers.length,
             pageSize: 10,

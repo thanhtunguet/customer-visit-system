@@ -428,6 +428,20 @@ class ApiClient {
     await this.client.delete(`/customers/${customerId}`);
   }
 
+  async bulkDeleteCustomers(customerIds: number[]): Promise<{
+    message: string;
+    deleted_customers: number;
+    customer_ids: number[];
+    deleted_visits: number;
+    deleted_face_images: number;
+    failed_embedding_cleanups: number[];
+  }> {
+    const response = await this.client.post('/customers/bulk-delete', {
+      customer_ids: customerIds
+    });
+    return response.data;
+  }
+
   async getCustomerFaceImages(customerId: number): Promise<{
     customer_id: number;
     total_images: number;

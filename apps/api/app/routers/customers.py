@@ -928,3 +928,120 @@ async def delete_customer(
         await db_session.rollback()
         logger.error(f"Error deleting customer {customer_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete customer")
+
+@router.post("/customers/bulk-delete")
+async def bulk_delete_customers(
+    request: dict = Body(..., description="{ customer_ids: List[int] }"),
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Delete multiple customers in a single transaction."""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    customer_ids = request.get("customer_ids", [])
+    if not isinstance(customer_ids, list) or not all(isinstance(x, int) for x in customer_ids):
+        raise HTTPException(status_code=400, detail="customer_ids must be a list of integers")
+    
+    if len(customer_ids) == 0:
+        raise HTTPException(status_code=400, detail="customer_ids cannot be empty")
+    
+    try:
+        # Verify all customers exist and belong to tenant
+        result = await db_session.execute(
+            select(Customer.customer_id).where(
+                and_(
+                    Customer.tenant_id == user["tenant_id"],
+                    Customer.customer_id.in_(customer_ids)
+                )
+            )
+        )
+        found_ids = [row[0] for row in result.fetchall()]
+        
+        if len(found_ids) != len(customer_ids):
+            missing_ids = set(customer_ids) - set(found_ids)
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Customers not found: {list(missing_ids)}"
+            )
+
+        # Count associated data before deletion
+        from ..models.database import Visit, CustomerFaceImage
+        
+        visits_result = await db_session.execute(
+            select(func.count(Visit.visit_id)).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_type == "customer",
+                    Visit.person_id.in_(customer_ids)
+                )
+            )
+        )
+        total_visits = visits_result.scalar() or 0
+        
+        face_images_result = await db_session.execute(
+            select(func.count(CustomerFaceImage.image_id)).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id.in_(customer_ids)
+                )
+            )
+        )
+        total_face_images = face_images_result.scalar() or 0
+        
+        # Delete associated data
+        await db_session.execute(
+            delete(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.person_type == "customer",
+                    Visit.person_id.in_(customer_ids)
+                )
+            )
+        )
+        
+        await db_session.execute(
+            delete(CustomerFaceImage).where(
+                and_(
+                    CustomerFaceImage.tenant_id == user["tenant_id"],
+                    CustomerFaceImage.customer_id.in_(customer_ids)
+                )
+            )
+        )
+        
+        # Delete customers
+        await db_session.execute(
+            delete(Customer).where(
+                and_(
+                    Customer.tenant_id == user["tenant_id"],
+                    Customer.customer_id.in_(customer_ids)
+                )
+            )
+        )
+        
+        await db_session.commit()
+        
+        # Clean up embeddings from Milvus (best effort)
+        failed_embedding_cleanups = []
+        for customer_id in customer_ids:
+            try:
+                await milvus_client.delete_person_embeddings(user["tenant_id"], customer_id, "customer")
+            except Exception as e:
+                logger.warning(f"Failed to delete embeddings for customer {customer_id}: {e}")
+                failed_embedding_cleanups.append(customer_id)
+        
+        return {
+            "message": "Customers deleted successfully",
+            "deleted_customers": len(customer_ids),
+            "customer_ids": customer_ids,
+            "deleted_visits": total_visits,
+            "deleted_face_images": total_face_images,
+            "failed_embedding_cleanups": failed_embedding_cleanups
+        }
+        
+    except HTTPException:
+        await db_session.rollback()
+        raise
+    except Exception as e:
+        await db_session.rollback()
+        logger.error(f"Error bulk deleting customers {customer_ids}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete customers")
