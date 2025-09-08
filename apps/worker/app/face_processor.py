@@ -384,29 +384,39 @@ class FaceProcessor:
         return best_face
 
     async def _generate_embedding(self, image: np.ndarray, face_info: Dict) -> List[float]:
-        """Generate face embedding with enhanced processing"""
+        """Generate face embedding with enhanced cropping"""
         
         def generate():
-            # Extract face region
-            bbox = face_info['bbox']
-            x, y, w, h = bbox
+            from .face_cropper import FaceCropper
             
-            # Add padding to face region (10% on each side)
-            padding = int(min(w, h) * 0.1)
-            x_padded = max(0, x - padding)
-            y_padded = max(0, y - padding)
-            w_padded = min(image.shape[1] - x_padded, w + 2 * padding)
-            h_padded = min(image.shape[0] - y_padded, h + 2 * padding)
+            # Initialize enhanced cropper
+            cropper = FaceCropper()
             
-            face_crop = image[y_padded:y_padded + h_padded, x_padded:x_padded + w_padded]
+            # Crop face using enhanced algorithm
+            crop_result = cropper.crop_face(image, face_info, debug=False)
+            
+            if not cropper.validate_crop_result(crop_result):
+                logger.warning("Face cropping failed, falling back to simple crop")
+                # Fallback to original simple cropping
+                bbox = face_info['bbox']
+                x, y, w, h = bbox
+                padding = int(min(w, h) * 0.1)
+                x_padded = max(0, x - padding)
+                y_padded = max(0, y - padding)
+                w_padded = min(image.shape[1] - x_padded, w + 2 * padding)
+                h_padded = min(image.shape[0] - y_padded, h + 2 * padding)
+                face_crop = image[y_padded:y_padded + h_padded, x_padded:x_padded + w_padded]
+            else:
+                face_crop = crop_result['cropped_face']
             
             # Get landmarks (adjust for crop coordinates if available)
             landmarks = face_info.get('landmarks')
-            if landmarks:
+            if landmarks and 'crop_bbox' in crop_result:
                 landmarks = np.array(landmarks)
-                # Adjust landmark coordinates for the padded crop
-                landmarks[:, 0] -= x_padded
-                landmarks[:, 1] -= y_padded
+                crop_bbox = crop_result['crop_bbox']
+                # Adjust landmark coordinates for the cropped region
+                landmarks[:, 0] -= crop_bbox[0]
+                landmarks[:, 1] -= crop_bbox[1]
             
             # Generate embedding
             embedding = self.embedder.embed(face_crop, landmarks)
