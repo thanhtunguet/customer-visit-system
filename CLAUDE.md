@@ -57,6 +57,7 @@ Create a monorepo:
 	•	**Real-time Communication**: Server-Sent Events for camera status, WebSocket for worker monitoring
 	•	**Multi-tenant Context**: Tenant switching and context management with JWT token updates
 	•	**Authenticated Media**: Secure image loading via blob URLs for protected MinIO resources
+	•	**Antd Context Integration**: ALWAYS use App.useApp() hook for message, notification, modal instead of static methods to avoid context warnings
 	•	UX: Filters by date/site; CSV export. Use shared TS types from /packages/ts/common.
 
 5) DevOps
