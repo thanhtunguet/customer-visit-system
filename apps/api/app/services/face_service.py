@@ -38,7 +38,8 @@ class FaceMatchingService:
         # pending clusters keyed by coarse hash of embedding
         # pending[(tenant_id, site_id, camera_id, key)] = [(ts, embedding)]
         self.pending: dict[tuple[str, int, int, str], list[tuple[float, list[float]]]] = {}
-        self.pending_window_secs = 5.0
+        # Align pending window with (extended) hysteresis for stability
+        self.pending_window_secs = max(self.temporal_hysteresis_secs, 5.0)
         
         self.debug_mode = True
 
@@ -63,6 +64,7 @@ class FaceMatchingService:
                 "person_id": event.staff_id,
                 "similarity": 1.0,
                 "visit_id": None,
+                "person_type": "staff",
                 "message": "Staff member identified locally"
             }
 
@@ -74,12 +76,35 @@ class FaceMatchingService:
                 "person_id": None,
                 "similarity": 0.0,
                 "visit_id": None,
+                "person_type": "customer",
                 "message": f"Detection quality too low: {event.confidence:.3f}"
             }
 
+        # Additional face size gating to reduce non-face false positives
+        try:
+            from ..core.config import settings as _settings
+            if event.bbox and len(event.bbox) >= 4:
+                w = float(event.bbox[2]); h = float(event.bbox[3])
+                if min(w, h) < float(_settings.api_min_face_size):
+                    logger.warning(f"Rejecting small face bbox {w}x{h} < min {_settings.api_min_face_size}")
+                    return {
+                        "match": "rejected",
+                        "person_id": None,
+                        "similarity": 0.0,
+                        "visit_id": None,
+                        "person_type": "customer",
+                        "message": "Face too small for reliable recognition"
+                    }
+        except Exception:
+            pass
+
         # Determine search and decision thresholds
         is_manual_upload = hasattr(event, '_manual_face_data')
-        search_threshold = self.embedding_distance_thr if not is_manual_upload else max(self.merge_distance_thr, 0.95)
+        # Use a slightly lower search threshold to retrieve near misses, but keep decision thresholds strict
+        if not is_manual_upload:
+            search_threshold = max(0.70, self.embedding_distance_thr - 0.05)
+        else:
+            search_threshold = max(self.merge_distance_thr, 0.95)
         logger.info(
             f"🔍 Thresholds: search={search_threshold:.3f}, merge={self.merge_distance_thr:.3f}, "
             f"margin={self.merge_margin:.3f}, min_conf={self.min_confidence_score:.2f}"
@@ -129,7 +154,9 @@ class FaceMatchingService:
                 last = self.recent_assignments.get(cache_key)
                 if last:
                     last_person_id, last_ts, last_sim = last
-                    if (now_ts - last_ts) <= self.temporal_hysteresis_secs and best_match["person_type"] == "customer" and best_sim >= self.embedding_distance_thr:
+                    # Accept slightly-below-threshold matches within hysteresis window to avoid fragmenting identities
+                    soft_thr = max(0.70, self.embedding_distance_thr - self.merge_margin)
+                    if (now_ts - last_ts) <= self.temporal_hysteresis_secs and best_match["person_type"] == "customer" and best_sim >= soft_thr:
                         person_id = best_match["person_id"]
                         person_type = "customer"
                         similarity = best_sim
@@ -151,14 +178,16 @@ class FaceMatchingService:
             lst.append((now_ts, event.embedding))
             self.pending[pkey] = lst
 
-            if len(lst) >= self.min_cluster_samples:
-                logger.info(f"🆕 Creating new customer after cluster min_samples={self.min_cluster_samples}")
+            # Allow manual uploads to create a customer immediately (required_samples=1)
+            required_samples = 1 if is_manual_upload else self.min_cluster_samples
+            if len(lst) >= required_samples:
+                logger.info(f"🆕 Creating new customer after cluster min_samples={required_samples}")
                 person_id = await self._create_new_customer(db_session, tenant_id)
                 person_type = "customer"
             else:
                 # Not enough evidence; treat as rejected to avoid over-segmentation
                 logger.info(
-                    f"⏳ Deferring new customer creation: {len(lst)}/{self.min_cluster_samples} samples in {window}s"
+                    f"⏳ Deferring new customer creation: {len(lst)}/{required_samples} samples in {window}s"
                 )
                 return {
                     "match": "rejected",
