@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile, Form
 from typing import List
-from sqlalchemy import select, func, and_, case, delete
+from sqlalchemy import select, func, and_, case, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session, db
@@ -433,18 +433,38 @@ async def list_visits(
 class DeleteVisitsRequest(BaseModel):
     visit_ids: List[str]
 
+class MergeVisitsRequest(BaseModel):
+    visit_ids: List[str]
+    primary_visit_id: Optional[str] = None
+
+class MergeVisitsResponse(BaseModel):
+    message: str
+    primary_visit_id: str
+    merged_visit_ids: List[str]
+    person_id: int
+    person_type: str
+    site_id: int
+    camera_ids: List[int]
+    first_seen: datetime
+    last_seen: datetime
+    visit_duration_seconds: int
+    detection_count: int
+    highest_confidence: float
+
 @router.post("/visits/delete")
-async def delete_visits(
+async def delete_visits_async(
     request: DeleteVisitsRequest,
     user: dict = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session)
 ):
-    """Delete multiple visits by their visit_ids"""
-    from ..core.minio_client import minio_client
-    from ..models.database import CustomerFaceImage
-    import logging
+    """Start an asynchronous visit deletion operation.
     
-    logger = logging.getLogger(__name__)
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    
     await db.set_tenant_context(db_session, user["tenant_id"])
     
     if not request.visit_ids:
@@ -453,106 +473,321 @@ async def delete_visits(
             detail="No visit IDs provided"
         )
     
-    # First get the visits with their image paths for cleanup
-    visits_with_images_query = select(Visit.visit_id, Visit.image_path).where(
-        and_(
-            Visit.tenant_id == user["tenant_id"],
-            Visit.visit_id.in_(request.visit_ids)
+    # Quick validation that visits exist
+    result = await db_session.execute(
+        select(Visit.visit_id).where(
+            and_(
+                Visit.tenant_id == user["tenant_id"],
+                Visit.visit_id.in_(request.visit_ids)
+            )
         )
     )
-    result = await db_session.execute(visits_with_images_query)
-    visits_with_images = result.all()
-    
-    existing_visit_ids = [row[0] for row in visits_with_images]
+    existing_visit_ids = [row[0] for row in result.all()]
     missing_visits = set(request.visit_ids) - set(existing_visit_ids)
+    
     if missing_visits:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Visit(s) not found: {', '.join(missing_visits)}"
         )
     
-    # Get associated customer face images for cleanup
-    customer_face_images_query = select(CustomerFaceImage.image_path).where(
-        and_(
-            CustomerFaceImage.tenant_id == user["tenant_id"],
-            CustomerFaceImage.visit_id.in_(request.visit_ids)
-        )
-    )
-    result = await db_session.execute(customer_face_images_query)
-    customer_face_image_paths = [row[0] for row in result.all()]
-    
-    # Delete associated customer face images first (database records)
-    delete_customer_face_images_query = delete(CustomerFaceImage).where(
-        and_(
-            CustomerFaceImage.tenant_id == user["tenant_id"],
-            CustomerFaceImage.visit_id.in_(request.visit_ids)
-        )
-    )
-    await db_session.execute(delete_customer_face_images_query)
-    
-    # Delete the visits
-    delete_query = delete(Visit).where(
-        and_(
-            Visit.tenant_id == user["tenant_id"],
-            Visit.visit_id.in_(request.visit_ids)
-        )
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="bulk_delete_visits",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "visit_ids": request.visit_ids,
+            "user_id": user.get("user_id")
+        }
     )
     
-    result = await db_session.execute(delete_query)
-    await db_session.commit()
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
     
-    deleted_count = result.rowcount
+    return {
+        "message": f"Visit deletion job started for {len(request.visit_ids)} visits",
+        "job_id": job_id,
+        "status": "started",
+        "visit_ids": request.visit_ids,
+        "check_status_url": f"/v1/jobs/{job_id}"
+    }
+
+@router.post("/visits/merge")
+async def merge_visits_async(
+    request: MergeVisitsRequest,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Start an asynchronous visit merge operation.
     
-    # Clean up image files from MinIO (do this after database commit)
-    images_cleaned = 0
-    for visit_id, image_path in visits_with_images:
-        if image_path:
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    
+    Rules:
+    - All visits must belong to the current tenant and exist
+    - All visits must reference the same person_id and person_type
+    - If primary_visit_id is not provided, the system will choose the visit with highest confidence
+    """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    if not request.visit_ids or len(request.visit_ids) < 2:
+        raise HTTPException(status_code=400, detail="Provide at least two visit_ids to merge")
+    
+    # Quick validation that visits exist and belong to same person (lightweight check)
+    result = await db_session.execute(
+        select(Visit.person_id, Visit.person_type, Visit.site_id).where(
+            and_(Visit.tenant_id == user["tenant_id"], Visit.visit_id.in_(request.visit_ids))
+        )
+    )
+    visit_data = result.all()
+    
+    if len(visit_data) != len(set(request.visit_ids)):
+        found_count = len(visit_data)
+        raise HTTPException(status_code=404, detail=f"Only {found_count} of {len(request.visit_ids)} visits found")
+    
+    # Validate same person and type (quick check)
+    person_ids = {int(row[0]) for row in visit_data}
+    person_types = {row[1] for row in visit_data}
+    site_ids = {int(row[2]) for row in visit_data}
+    
+    if len(person_ids) != 1 or len(person_types) != 1:
+        raise HTTPException(status_code=400, detail="All visits must reference the same person and type")
+    if len(site_ids) != 1:
+        raise HTTPException(status_code=400, detail="All visits must belong to the same site")
+    
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="merge_visits",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "visit_ids": request.visit_ids,
+            "primary_visit_id": request.primary_visit_id,
+            "user_id": user.get("user_id"),
+            "person_id": person_ids.pop(),
+            "person_type": person_types.pop(),
+            "site_id": site_ids.pop()
+        }
+    )
+    
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
+    
+    return {
+        "message": f"Visit merge job started for {len(request.visit_ids)} visits",
+        "job_id": job_id,
+        "status": "started",
+        "visit_ids": request.visit_ids,
+        "check_status_url": f"/v1/jobs/{job_id}"
+    }
+
+@router.delete("/visits/{visit_id}/face")
+async def remove_visit_face_detection(
+    visit_id: str,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Remove a specific face detection visit and clean up all associated data"""
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    try:
+        from ..core.milvus_client import milvus_client
+        from ..core.minio_client import minio_client
+        from ..models.database import CustomerFaceImage
+        
+        # Get the visit to be deleted
+        visit_result = await db_session.execute(
+            select(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.visit_id == visit_id
+                )
+            )
+        )
+        visit = visit_result.scalar_one_or_none()
+        
+        if not visit:
+            raise HTTPException(status_code=404, detail="Visit not found")
+        
+        customer_id = visit.person_id if visit.person_type == "customer" else None
+        
+        # Get associated customer face image for cleanup
+        if customer_id:
+            face_image_result = await db_session.execute(
+                select(CustomerFaceImage.image_path).where(
+                    and_(
+                        CustomerFaceImage.tenant_id == user["tenant_id"],
+                        CustomerFaceImage.visit_id == visit_id
+                    )
+                )
+            )
+            customer_face_image_path = face_image_result.scalar_one_or_none()
+        else:
+            customer_face_image_path = None
+        
+        # Delete associated customer face image first
+        if customer_id:
+            await db_session.execute(
+                delete(CustomerFaceImage).where(
+                    and_(
+                        CustomerFaceImage.tenant_id == user["tenant_id"],
+                        CustomerFaceImage.visit_id == visit_id
+                    )
+                )
+            )
+        
+        # Delete from Milvus if face embedding exists
+        if visit.face_embedding:
             try:
-                # Determine bucket and object path from image_path
-                if image_path.startswith('s3://'):
+                await milvus_client.delete_face_embedding(
+                    tenant_id=user["tenant_id"], 
+                    visit_id=visit_id
+                )
+                logger.info(f"Deleted face embedding from Milvus for visit {visit_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete face embedding from Milvus for visit {visit_id}: {e}")
+        
+        # Delete the visit from database
+        await db_session.execute(
+            delete(Visit).where(
+                and_(
+                    Visit.tenant_id == user["tenant_id"],
+                    Visit.visit_id == visit_id
+                )
+            )
+        )
+        
+        # Update customer visit count if this was a customer visit
+        if customer_id:
+            from ..models.database import Customer
+            await db_session.execute(
+                select(Customer).where(
+                    and_(
+                        Customer.tenant_id == user["tenant_id"],
+                        Customer.customer_id == customer_id
+                    )
+                ).update({
+                    Customer.visit_count: Customer.visit_count - 1
+                })
+            )
+        
+        await db_session.commit()
+        
+        # Clean up images from MinIO (after database commit)
+        images_cleaned = 0
+        
+        # Clean up visit image
+        if visit.image_path:
+            try:
+                if visit.image_path.startswith('s3://'):
                     # Extract bucket and object name from s3://bucket/object format
-                    path_parts = image_path[5:].split('/', 1)
+                    path_parts = visit.image_path[5:].split('/', 1)
                     if len(path_parts) == 2:
                         bucket, object_name = path_parts
                         minio_client.delete_file(bucket, object_name)
                         images_cleaned += 1
-                elif image_path.startswith('visits-faces/'):
+                elif visit.image_path.startswith('visits-faces/'):
                     # API-generated face crops are in faces-derived bucket
-                    object_path = image_path.replace('visits-faces/', '')
+                    object_path = visit.image_path.replace('visits-faces/', '')
                     minio_client.delete_file('faces-derived', object_path)
                     images_cleaned += 1
-                elif not image_path.startswith('http'):
+                elif not visit.image_path.startswith('http'):
                     # Assume it's a path in the faces-raw bucket
-                    minio_client.delete_file('faces-raw', image_path)
+                    minio_client.delete_file('faces-raw', visit.image_path)
                     images_cleaned += 1
             except Exception as e:
-                logger.warning(f"Failed to delete image {image_path} for visit {visit_id}: {e}")
-    
-    # Clean up customer face images from MinIO
-    for image_path in customer_face_image_paths:
-        if image_path:
+                logger.warning(f"Failed to delete visit image {visit.image_path}: {e}")
+        
+        # Clean up customer face image
+        if customer_face_image_path:
             try:
-                # Handle both old (customer-faces/ prefix) and new (direct path) formats
-                if image_path.startswith('customer-faces/'):
+                if customer_face_image_path.startswith('customer-faces/'):
                     # Legacy format - remove the prefix
-                    object_path = image_path.replace('customer-faces/', '')
+                    object_path = customer_face_image_path.replace('customer-faces/', '')
                 else:
                     # New format - use path directly
-                    object_path = image_path
+                    object_path = customer_face_image_path
                 minio_client.delete_file('faces-derived', object_path)
                 images_cleaned += 1
             except Exception as e:
-                logger.warning(f"Failed to delete customer face image {image_path}: {e}")
+                logger.warning(f"Failed to delete customer face image {customer_face_image_path}: {e}")
+        
+        return {
+            "message": "Face detection removed successfully",
+            "visit_id": visit_id,
+            "customer_id": customer_id,
+            "images_cleaned": images_cleaned,
+            "embedding_cleaned": bool(visit.face_embedding)
+        }
+        
+    except HTTPException:
+        await db_session.rollback()
+        raise
+    except Exception as e:
+        await db_session.rollback()
+        logger.error(f"Error removing face detection: {e}")
+        raise HTTPException(status_code=500, detail="Failed to remove face detection")
+
+
+@router.post("/customers/{customer_id:int}/cleanup-low-confidence-faces")
+async def cleanup_low_confidence_faces_async(
+    customer_id: int,
+    request: dict,
+    user: dict = Depends(get_current_user),
+    db_session: AsyncSession = Depends(get_db_session)
+):
+    """Start an asynchronous cleanup of low-confidence face detections for a customer.
     
-    message = f"Successfully deleted {deleted_count} visit(s)"
-    if images_cleaned > 0:
-        message += f" and cleaned up {images_cleaned} associated image(s)"
+    This endpoint immediately returns a job ID for tracking progress.
+    Use GET /jobs/{job_id} to check the status and results.
+    """
+    from ..core.database import db
+    from ..services.background_jobs import background_job_service
+    from ..models.database import Customer
+    
+    await db.set_tenant_context(db_session, user["tenant_id"])
+    
+    min_confidence = request.get("min_confidence", 0.7)
+    max_to_remove = request.get("max_to_remove", 10)
+    
+    # Verify customer exists
+    customer_result = await db_session.execute(
+        select(Customer).where(
+            and_(Customer.tenant_id == user["tenant_id"], Customer.customer_id == customer_id)
+        )
+    )
+    customer = customer_result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Create background job
+    job_id = await background_job_service.create_job(
+        job_type="cleanup_customer_faces",
+        tenant_id=user["tenant_id"],
+        metadata={
+            "customer_id": customer_id,
+            "min_confidence": min_confidence,
+            "max_to_remove": max_to_remove,
+            "user_id": user.get("user_id")
+        }
+    )
+    
+    # Start the job
+    from ..core.database import get_db_session
+    await background_job_service.start_job(job_id, get_db_session)
     
     return {
-        "message": message,
-        "deleted_count": deleted_count,
-        "deleted_visit_ids": request.visit_ids,
-        "images_cleaned": images_cleaned
+        "message": f"Face cleanup job started for customer {customer_id}",
+        "job_id": job_id,
+        "status": "started",
+        "customer_id": customer_id,
+        "min_confidence_threshold": min_confidence,
+        "max_to_remove": max_to_remove,
+        "check_status_url": f"/v1/jobs/{job_id}"
     }
 
 

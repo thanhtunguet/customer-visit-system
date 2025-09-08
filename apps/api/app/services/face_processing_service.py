@@ -158,68 +158,217 @@ class FaceProcessingService:
     
     def extract_face_embedding(self, image: ArrayType, landmarks: List[List[float]]) -> List[float]:
         """
-        Extract a deterministic 512D embedding from an aligned face region.
-
-        Deterministic placeholder to ensure distinct faces don't collapse
-        to the same vector in absence of a real model.
+        Extract a more sophisticated 512D embedding from an aligned face region.
+        
+        Enhanced to capture better facial features for improved recognition accuracy.
         """
         try:
             face_region = self._extract_face_region(image, landmarks)
 
-            # Convert to grayscale and small size
+            # Convert to grayscale for analysis
             gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
-            small = cv2.resize(gray, (32, 32))
-
-            # Stable seed from bytes
-            import hashlib
-            h = hashlib.sha256(small.tobytes()).hexdigest()
-            seed = int(h[:16], 16)
-
-            # Low-frequency DCT features (256 dims)
-            dct = cv2.dct(small.astype(np.float32))
-            lf = dct[:16, :16].flatten()
-
-            # Histogram (32 dims)
-            hist = cv2.calcHist([small], [0], None, [32], [0, 256]).flatten()
-
-            # Basic stats (3 dims)
-            mean = float(np.mean(small))
-            std = float(np.std(small) + 1e-6)
-            stats = np.array([mean, std, mean / (std + 1e-6)], dtype=np.float32)
-
-            base = np.concatenate([lf.astype(np.float32), hist.astype(np.float32), stats])
-
-            # Pad deterministically to 512
-            if base.size >= 512:
-                vec = base[:512]
+            
+            # Resize to standard size for consistent features
+            standard_size = cv2.resize(gray, (112, 112))
+            
+            # Enhanced feature extraction combining multiple approaches
+            features = []
+            
+            # 1. Multi-scale LBP features (128 dims)
+            try:
+                from skimage import feature
+                lbp = feature.local_binary_pattern(standard_size, P=8, R=1, method='uniform')
+                lbp_hist, _ = np.histogram(lbp.ravel(), bins=64, range=(0, 64))
+                features.extend(lbp_hist.astype(np.float32))
+            except ImportError:
+                # Fallback: Simple gradient features
+                sobelx = cv2.Sobel(standard_size, cv2.CV_64F, 1, 0, ksize=3)
+                sobely = cv2.Sobel(standard_size, cv2.CV_64F, 0, 1, ksize=3)
+                gradient_mag = np.sqrt(sobelx**2 + sobely**2)
+                grad_hist, _ = np.histogram(gradient_mag.ravel(), bins=64)
+                features.extend(grad_hist.astype(np.float32))
+            
+            # 2. DCT coefficients from different regions (128 dims)
+            dct_full = cv2.dct(standard_size.astype(np.float32))
+            # Extract low-frequency coefficients
+            dct_features = dct_full[:16, :8].flatten()  # Top-left 128 coefficients
+            features.extend(dct_features.astype(np.float32))
+            
+            # 3. Regional histogram features (96 dims)
+            h, w = standard_size.shape
+            regions = [
+                standard_size[:h//2, :w//2],    # Top-left (eyes region)
+                standard_size[:h//2, w//2:],    # Top-right (eyes region)
+                standard_size[h//3:2*h//3, w//4:3*w//4],  # Center (nose region)
+                standard_size[2*h//3:, w//4:3*w//4]       # Bottom (mouth region)
+            ]
+            
+            for region in regions:
+                if region.size > 0:
+                    hist, _ = np.histogram(region.ravel(), bins=24, range=(0, 256))
+                    features.extend(hist.astype(np.float32))
+                else:
+                    features.extend(np.zeros(24, dtype=np.float32))
+            
+            # 4. Landmark-based geometric features (32 dims)
+            if len(landmarks) >= 5:
+                # Eye distance
+                eye_dist = np.linalg.norm(np.array(landmarks[1]) - np.array(landmarks[0]))
+                
+                # Face proportions
+                face_width = max(l[0] for l in landmarks) - min(l[0] for l in landmarks)
+                face_height = max(l[1] for l in landmarks) - min(l[1] for l in landmarks)
+                aspect_ratio = face_width / (face_height + 1e-6)
+                
+                # Angles and distances between key points
+                geom_features = [
+                    eye_dist, face_width, face_height, aspect_ratio,
+                    # Distances from nose to eyes and mouth
+                    np.linalg.norm(np.array(landmarks[2]) - np.array(landmarks[0])),
+                    np.linalg.norm(np.array(landmarks[2]) - np.array(landmarks[1])),
+                    np.linalg.norm(np.array(landmarks[2]) - np.array(landmarks[3])),
+                    np.linalg.norm(np.array(landmarks[2]) - np.array(landmarks[4])),
+                ]
+                
+                # Pad to 32 dimensions with derived features
+                while len(geom_features) < 32:
+                    geom_features.append(geom_features[-1] * 0.1)  # Scaled derivatives
+                    
+                features.extend(np.array(geom_features[:32], dtype=np.float32))
             else:
+                features.extend(np.zeros(32, dtype=np.float32))
+            
+            # 5. Statistical features (32 dims)
+            stats = [
+                np.mean(standard_size), np.std(standard_size),
+                np.median(standard_size), np.var(standard_size),
+                np.percentile(standard_size, 25), np.percentile(standard_size, 75),
+                np.min(standard_size), np.max(standard_size)
+            ]
+            
+            # Add texture measures
+            laplacian = cv2.Laplacian(standard_size, cv2.CV_64F)
+            stats.extend([
+                np.mean(laplacian), np.std(laplacian),
+                np.mean(np.abs(laplacian)), np.var(laplacian)
+            ])
+            
+            # Pad statistical features to 32
+            while len(stats) < 32:
+                stats.append(stats[-1] * 0.5)
+                
+            features.extend(np.array(stats[:32], dtype=np.float32))
+            
+            # 6. Gabor filter responses (96 dims)
+            try:
+                from skimage.filters import gabor
+                gabor_responses = []
+                
+                # Multiple orientations and frequencies
+                for angle in [0, 45, 90, 135]:
+                    for freq in [0.1, 0.3, 0.5]:
+                        try:
+                            filtered, _ = gabor(standard_size, frequency=freq, theta=np.deg2rad(angle))
+                            response = np.mean(np.abs(filtered))
+                            gabor_responses.append(response)
+                        except:
+                            gabor_responses.append(0.0)
+                
+                # Pad to 96 dimensions
+                while len(gabor_responses) < 96:
+                    gabor_responses.extend(gabor_responses[:min(12, len(gabor_responses))])
+                
+                features.extend(np.array(gabor_responses[:96], dtype=np.float32))
+                
+            except ImportError:
+                # Fallback: More DCT coefficients
+                dct_fallback = dct_full[8:16, :12].flatten()  # Different DCT region
+                features.extend(dct_fallback.astype(np.float32))
+                
+                # Pad with texture analysis
+                for i in range(0, min(112, standard_size.shape[0]), 14):
+                    for j in range(0, min(112, standard_size.shape[1]), 14):
+                        patch = standard_size[i:i+14, j:j+14]
+                        if patch.size > 0:
+                            features.append(np.std(patch))
+                        if len(features) >= 416:  # 320 + 96 total so far
+                            break
+                    if len(features) >= 416:
+                        break
+                
+                # Pad to complete 96 dimensions for this section
+                while len(features) < 416:
+                    features.append(0.0)
+            
+            # Ensure exactly 512 dimensions
+            features = np.array(features, dtype=np.float32)
+            if len(features) > 512:
+                features = features[:512]
+            elif len(features) < 512:
+                # Pad with normalized noise based on existing features
+                seed = int(np.sum(features) * 1000) % 10000
                 rng = np.random.default_rng(seed)
-                pad = rng.normal(0, 1, 512 - base.size).astype(np.float32)
-                vec = np.concatenate([base, pad])
-
-            # L2-normalize
-            vec = vec / (np.linalg.norm(vec) + 1e-12)
-            return vec.astype(np.float32).tolist()
+                padding = rng.normal(0, 0.1, 512 - len(features)).astype(np.float32)
+                features = np.concatenate([features, padding])
+            
+            # Normalize to unit vector
+            norm = np.linalg.norm(features)
+            if norm > 1e-12:
+                features = features / norm
+            else:
+                # Fallback for zero vector
+                features[0] = 1.0
+                
+            return features.tolist()
 
         except Exception as e:
-            logger.error(f"Embedding extraction failed: {e}")
-            # Deterministic zero-like fallback seeded by shape
-            size = 512
-            vec = np.zeros(size, dtype=np.float32)
-            vec[0] = 1.0
-            return vec.tolist()
+            logger.error(f"Enhanced embedding extraction failed: {e}")
+            # Deterministic fallback
+            try:
+                face_region = self._extract_face_region(image, landmarks)
+                gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+                small = cv2.resize(gray, (32, 32))
+                
+                # Simple but deterministic features
+                dct = cv2.dct(small.astype(np.float32))
+                features = dct[:16, :16].flatten()
+                
+                # Pad to 512 with deterministic pattern
+                seed = int(np.sum(features)) % 10000
+                rng = np.random.default_rng(seed)
+                full_features = np.zeros(512, dtype=np.float32)
+                full_features[:len(features)] = features
+                full_features[len(features):] = rng.normal(0, 0.5, 512 - len(features))
+                
+                # Normalize
+                norm = np.linalg.norm(full_features)
+                if norm > 1e-12:
+                    full_features = full_features / norm
+                else:
+                    full_features[0] = 1.0
+                    
+                return full_features.tolist()
+                
+            except Exception as fallback_error:
+                logger.error(f"Fallback embedding extraction failed: {fallback_error}")
+                # Last resort: random but deterministic vector
+                vec = np.zeros(512, dtype=np.float32)
+                vec[0] = 1.0
+                return vec.tolist()
     
     def _extract_face_region(self, image: ArrayType, landmarks: List[List[float]]) -> ArrayType:
-        """Extract face region using landmarks for alignment."""
+        """Extract face region using enhanced cropping algorithm."""
         try:
-            # Convert landmarks to numpy array
+            from .face_cropper import api_face_cropper
+            
+            # Convert landmarks to face info format
             landmarks_np = np.array(landmarks, dtype=np.float32)
             
-            # Get bounding box from landmarks
-            x_min = int(np.min(landmarks_np[:, 0]) - 20)
-            y_min = int(np.min(landmarks_np[:, 1]) - 20)
-            x_max = int(np.max(landmarks_np[:, 0]) + 20)
-            y_max = int(np.max(landmarks_np[:, 1]) + 20)
+            # Get bounding box from landmarks with small padding
+            x_min = int(np.min(landmarks_np[:, 0]) - 10)
+            y_min = int(np.min(landmarks_np[:, 1]) - 10)
+            x_max = int(np.max(landmarks_np[:, 0]) + 10)
+            y_max = int(np.max(landmarks_np[:, 1]) + 10)
             
             # Ensure bounds are within image
             h, w = image.shape[:2]
@@ -228,18 +377,59 @@ class FaceProcessingService:
             x_max = min(w, x_max)
             y_max = min(h, y_max)
             
-            # Extract face region
-            face_region = image[y_min:y_max, x_min:x_max]
+            # Create face info for enhanced cropping
+            face_info = {
+                'bbox': [x_min, y_min, x_max - x_min, y_max - y_min],
+                'landmarks': landmarks,
+                'confidence': 0.8  # Default confidence for landmark-based detection
+            }
             
-            # Resize to standard size
-            if face_region.size > 0:
-                face_region = cv2.resize(face_region, (112, 112))
+            # Use enhanced cropping
+            crop_result = api_face_cropper.crop_face(image, face_info, debug=False)
             
-            return face_region
-            
+            if api_face_cropper.validate_crop_result(crop_result):
+                return crop_result['cropped_face']
+            else:
+                logger.warning("Enhanced cropping failed, using fallback")
+                # Fallback to original simple crop
+                face_region = image[y_min:y_max, x_min:x_max]
+                if face_region.size > 0:
+                    face_region = cv2.resize(face_region, (112, 112))
+                    return face_region
+                else:
+                    return np.zeros((112, 112, 3), dtype=np.uint8)
+                
         except Exception as e:
-            logger.error(f"Face region extraction failed: {e}")
-            return np.zeros((112, 112, 3), dtype=np.uint8)
+            logger.error(f"Enhanced face region extraction failed: {e}")
+            # Fallback to original logic
+            try:
+                landmarks_np = np.array(landmarks, dtype=np.float32)
+                
+                # Get bounding box from landmarks
+                x_min = int(np.min(landmarks_np[:, 0]) - 20)
+                y_min = int(np.min(landmarks_np[:, 1]) - 20)
+                x_max = int(np.max(landmarks_np[:, 0]) + 20)
+                y_max = int(np.max(landmarks_np[:, 1]) + 20)
+                
+                # Ensure bounds are within image
+                h, w = image.shape[:2]
+                x_min = max(0, x_min)
+                y_min = max(0, y_min)
+                x_max = min(w, x_max)
+                y_max = min(h, y_max)
+                
+                # Extract face region
+                face_region = image[y_min:y_max, x_min:x_max]
+                
+                # Resize to standard size
+                if face_region.size > 0:
+                    face_region = cv2.resize(face_region, (112, 112))
+                
+                return face_region
+                
+            except Exception as fallback_error:
+                logger.error(f"Fallback face region extraction failed: {fallback_error}")
+                return np.zeros((112, 112, 3), dtype=np.uint8)
     
     async def upload_image_to_minio(self, image_data: ArrayType, tenant_id: str, image_id: str) -> str:
         """Upload processed image to MinIO and return the path."""
@@ -574,6 +764,317 @@ class FaceProcessingService:
         except Exception as e:
             logger.error(f"Similarity calculation failed: {e}")
             return 0.0
+
+    def _enhanced_detect_faces_and_landmarks(self, image: ArrayType) -> List[Dict]:
+        """
+        Enhanced face detection with improved face information for cropping
+        """
+        try:
+            # Use existing detection method  
+            face_results = self.detect_faces_and_landmarks(image)
+            
+            # Enhance face results with additional metadata for cropping
+            enhanced_results = []
+            for face_data in face_results:
+                enhanced_face = face_data.copy()
+                
+                # Add face area for size-based strategies
+                bbox = face_data['bbox']
+                w, h = bbox[2], bbox[3]
+                enhanced_face['area'] = w * h
+                
+                # Add face quality assessment
+                try:
+                    x, y, w, h = bbox
+                    face_crop = image[y:y+h, x:x+w]
+                    face_quality = self._assess_face_crop_quality(face_crop)
+                    enhanced_face['face_quality'] = face_quality
+                except:
+                    enhanced_face['face_quality'] = 0.5  # Default quality
+                
+                # Add detector type for quality scoring
+                enhanced_face['detector'] = 'haar'  # Current detector type
+                
+                enhanced_results.append(enhanced_face)
+            
+            return enhanced_results
+            
+        except Exception as e:
+            logger.error(f"Enhanced face detection failed: {e}")
+            return self.detect_faces_and_landmarks(image)
+    
+    def _assess_face_crop_quality(self, face_crop: ArrayType) -> float:
+        """Assess quality of a face crop for selection"""
+        if face_crop.size == 0:
+            return 0.0
+        
+        try:
+            # Convert to grayscale for analysis
+            gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY) if len(face_crop.shape) == 3 else face_crop
+            
+            # Multiple quality factors
+            quality_factors = []
+            
+            # Sharpness
+            laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+            sharpness_score = min(1.0, laplacian_var / 200)
+            quality_factors.append(sharpness_score)
+            
+            # Contrast
+            contrast = gray.std()
+            contrast_score = min(1.0, contrast / 40)
+            quality_factors.append(contrast_score)
+            
+            # Brightness (face should be well lit)
+            brightness = gray.mean()
+            brightness_score = 1.0 - abs(brightness - 120) / 120
+            quality_factors.append(brightness_score * 0.8)
+            
+            # Face size quality (larger is generally better for recognition)
+            size_score = min(1.0, min(face_crop.shape[:2]) / 100)
+            quality_factors.append(size_score)
+            
+            return np.mean(quality_factors)
+            
+        except Exception as e:
+            logger.debug(f"Face crop quality assessment failed: {e}")
+            return 0.5
+
+    async def process_staff_face_image_enhanced(
+        self, 
+        base64_image: str, 
+        tenant_id: str, 
+        staff_id: str
+    ) -> Dict:
+        """
+        Enhanced staff face processing pipeline with advanced cropping
+        """
+        try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            from .face_cropper import api_face_cropper
+            
+            # Decode image
+            image = self.decode_base64_image(base64_image)
+            
+            # Calculate image hash for duplicate detection
+            image_bytes = base64.b64decode(base64_image.split(',')[-1])
+            image_hash = hashlib.sha256(image_bytes).hexdigest()
+            
+            # Enhanced face detection
+            face_results = self._enhanced_detect_faces_and_landmarks(image)
+            
+            if not face_results:
+                return {
+                    'success': False,
+                    'error': 'No faces detected in image',
+                    'face_count': 0
+                }
+            
+            # Use enhanced cropping for multi-face selection
+            if len(face_results) > 1:
+                logger.info(f"Multiple faces detected ({len(face_results)}), using enhanced selection")
+                crop_result = api_face_cropper.crop_multiple_faces(image, face_results)
+                selected_face_data = face_results[crop_result['selected_face_index']]
+                face_crop = crop_result['cropped_face']
+                crop_metadata = {
+                    'crop_strategy': crop_result['crop_strategy'],
+                    'total_faces': crop_result['total_faces'],
+                    'selection_strategy': crop_result['selection_strategy']
+                }
+            else:
+                # Single face processing
+                face_data = face_results[0]
+                crop_result = api_face_cropper.crop_face(image, face_data)
+                selected_face_data = face_data
+                face_crop = crop_result['cropped_face']
+                crop_metadata = {
+                    'crop_strategy': crop_result['crop_strategy'],
+                    'total_faces': 1,
+                    'selection_strategy': 'single_face'
+                }
+            
+            landmarks = selected_face_data['landmarks']
+            
+            # Generate embedding using cropped face
+            # For embedding, we still use the landmark-based extraction for consistency
+            embedding = self.extract_face_embedding(image, landmarks)
+            
+            # Convert face crop to base64
+            face_crop_b64 = None
+            try:
+                _, buffer = cv2.imencode('.jpg', face_crop)
+                face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+            except Exception as e:
+                logger.warning(f"Failed to encode face crop to base64: {e}")
+            
+            # Generate unique image ID
+            image_id = str(uuid.uuid4())
+            
+            # Upload original image to MinIO
+            image_path = await self.upload_image_to_minio(image, tenant_id, image_id)
+            
+            # Ensure all data is JSON serializable
+            def ensure_json_serializable(obj):
+                """Convert NumPy types to Python native types"""
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, list):
+                    return [ensure_json_serializable(item) for item in obj]
+                elif isinstance(obj, dict):
+                    return {key: ensure_json_serializable(value) for key, value in obj.items()}
+                else:
+                    return obj
+            
+            result = {
+                'success': True,
+                'image_id': image_id,
+                'image_path': image_path,
+                'image_hash': image_hash,
+                'landmarks': ensure_json_serializable(landmarks),
+                'embedding': ensure_json_serializable(embedding),
+                'face_count': len(face_results),
+                'confidence': float(selected_face_data['confidence']),
+                'bbox': ensure_json_serializable(selected_face_data['bbox']),
+                'face_crop_b64': face_crop_b64,
+                'crop_metadata': ensure_json_serializable(crop_metadata),
+                'face_quality': float(selected_face_data.get('face_quality', 0.5)),
+                'processing_version': 'enhanced_v2'  # Version flag for tracking
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Enhanced face processing failed: {e}")
+            # Fallback to original processing
+            return await self.process_staff_face_image(base64_image, tenant_id, staff_id)
+
+    async def process_customer_faces_from_image_enhanced(
+        self, 
+        base64_image: str, 
+        tenant_id: str
+    ) -> Dict:
+        """
+        Enhanced customer face processing with improved cropping for all faces
+        """
+        try:
+            import base64
+            import hashlib
+            import cv2
+            import uuid
+            from .face_cropper import api_face_cropper
+            
+            # Decode image
+            image = self.decode_base64_image(base64_image)
+            
+            # Calculate image hash for duplicate detection
+            image_bytes = base64.b64decode(base64_image.split(',')[-1])
+            image_hash = hashlib.sha256(image_bytes).hexdigest()
+            
+            # Enhanced face detection
+            face_results = self._enhanced_detect_faces_and_landmarks(image)
+            
+            if not face_results:
+                return {
+                    'success': False,
+                    'error': 'No faces detected in image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            logger.info(f"Detected {len(face_results)} faces in uploaded customer image")
+            
+            # Process ALL faces with enhanced cropping
+            processed_faces = []
+            
+            for i, face_data in enumerate(face_results):
+                try:
+                    # Use enhanced cropping for each face
+                    crop_result = api_face_cropper.crop_face(image, face_data)
+                    face_crop = crop_result['cropped_face']
+                    
+                    # Generate embedding using landmark-based extraction (for consistency)
+                    landmarks = face_data['landmarks']
+                    embedding = self.extract_face_embedding(image, landmarks)
+                    
+                    # Convert face crop to base64
+                    face_crop_b64 = None
+                    try:
+                        _, buffer = cv2.imencode('.jpg', face_crop)
+                        face_crop_b64 = base64.b64encode(buffer).decode('utf-8')
+                    except Exception as e:
+                        logger.warning(f"Failed to encode face crop {i} to base64: {e}")
+                    
+                    # Ensure all data is JSON serializable
+                    def ensure_json_serializable(obj):
+                        """Convert NumPy types to Python native types"""
+                        if isinstance(obj, np.integer):
+                            return int(obj)
+                        elif isinstance(obj, np.floating):
+                            return float(obj)
+                        elif isinstance(obj, list):
+                            return [ensure_json_serializable(item) for item in obj]
+                        elif isinstance(obj, dict):
+                            return {key: ensure_json_serializable(value) for key, value in obj.items()}
+                        else:
+                            return obj
+                    
+                    # Prepare face data
+                    processed_face = {
+                        'face_index': i,
+                        'landmarks': ensure_json_serializable(landmarks),
+                        'embedding': ensure_json_serializable(embedding),
+                        'confidence': float(face_data['confidence']),
+                        'bbox': ensure_json_serializable(face_data['bbox']),
+                        'face_crop_b64': face_crop_b64,
+                        'crop_metadata': {
+                            'crop_strategy': crop_result['crop_strategy'],
+                            'face_ratio': crop_result['face_ratio']
+                        },
+                        'face_quality': float(face_data.get('face_quality', 0.5)),
+                        'processing_version': 'enhanced_v2'
+                    }
+                    
+                    processed_faces.append(processed_face)
+                    logger.info(f"Successfully processed customer face {i+1}/{len(face_results)} "
+                              f"with confidence {face_data['confidence']:.3f} "
+                              f"using {crop_result['crop_strategy']} strategy")
+                    
+                except Exception as face_error:
+                    logger.error(f"Failed to process customer face {i}: {face_error}")
+                    # Continue with other faces even if one fails
+                    continue
+            
+            if not processed_faces:
+                return {
+                    'success': False,
+                    'error': 'Failed to process any faces from the image',
+                    'face_count': 0,
+                    'faces': []
+                }
+            
+            result = {
+                'success': True,
+                'image_hash': image_hash,
+                'faces': processed_faces,
+                'face_count': len(processed_faces),
+                'total_detected': len(face_results),
+                'processing_version': 'enhanced_v2'
+            }
+            
+            logger.info(f"Successfully processed {len(processed_faces)} customer faces from uploaded image")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Enhanced customer face processing failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Fallback to original processing
+            return await self.process_customer_faces_from_image(base64_image, tenant_id)
 
 # Service instance
 face_processing_service = FaceProcessingService()

@@ -1,8 +1,9 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
-import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert } from 'antd';
+import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
+import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert, List, Tag } from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
+import { BulkCustomerMergeModal } from '../components/BulkCustomerMergeModal';
 import { AuthenticatedAvatar } from '../components/AuthenticatedAvatar';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { Customer, CustomerCreate } from '../types/api';
@@ -27,6 +28,19 @@ export const Customers: React.FC = () => {
   
   // Upload images modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  // Merge/similar modal
+  const [similarVisible, setSimilarVisible] = useState(false);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const [similarList, setSimilarList] = useState<Array<{ customer_id: number; name?: string; visit_count: number; max_similarity: number; }>>([]);
+  const [similarSourceId, setSimilarSourceId] = useState<number | null>(null);
+  
+  // Multi-select state
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  
+  // Bulk merge state
+  const [bulkMergeModalVisible, setBulkMergeModalVisible] = useState(false);
+  const [bulkMergeLoading, setBulkMergeLoading] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -86,6 +100,40 @@ export const Customers: React.FC = () => {
     setDetailsModalVisible(true);
   };
 
+  const openSimilar = async (customer: Customer) => {
+    setSimilarSourceId(customer.customer_id);
+    setSimilarVisible(true);
+    setSimilarLoading(true);
+    try {
+      const res = await apiClient.findSimilarCustomers(customer.customer_id, { threshold: 0.85, limit: 10 });
+      setSimilarList(res.similar_customers || []);
+    } catch (e) {
+      setSimilarList([]);
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
+
+  const doMerge = async (targetId: number) => {
+    if (!similarSourceId) return;
+    Modal.confirm({
+      title: `Merge Customer #${targetId} into #${similarSourceId}?`,
+      icon: null,
+      content: 'All visits and face images from the secondary will be moved to the primary.',
+      okText: 'Merge',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await apiClient.mergeCustomers(similarSourceId, targetId);
+          setSimilarVisible(false);
+          await loadCustomers();
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Failed to merge customers');
+        }
+      }
+    });
+  };
+
   const handleDetailsModalEdit = (customerId: number) => {
     // Find customer and open edit modal
     const customer = customers.find(c => c.customer_id === customerId);
@@ -93,6 +141,81 @@ export const Customers: React.FC = () => {
       setDetailsModalVisible(false);
       handleEditCustomer(customer);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRowKeys.length === 0) return;
+
+    Modal.confirm({
+      title: 'Delete Selected Customers',
+      icon: <DeleteOutlined className="text-red-500" />,
+      content: (
+        <div>
+          <p>Are you sure you want to delete <strong>{selectedRowKeys.length}</strong> selected customers?</p>
+          <p className="text-red-600 text-sm">
+            This will permanently remove their recognition data, face images, and visit history.
+          </p>
+        </div>
+      ),
+      okText: 'Delete All',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setBulkDeleteLoading(true);
+        try {
+          await apiClient.bulkDeleteCustomers(selectedRowKeys);
+          setSelectedRowKeys([]);
+          await loadCustomers();
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Failed to delete selected customers');
+        } finally {
+          setBulkDeleteLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleBulkMerge = async (mergeOperations: Array<{
+    primary_customer_id: number;
+    secondary_customer_ids: number[];
+  }>) => {
+    setBulkMergeLoading(true);
+    try {
+      const result = await apiClient.bulkMergeCustomers(mergeOperations);
+      
+      // Show success message with job information
+      Modal.success({
+        title: 'Bulk Merge Started',
+        content: (
+          <div>
+            <p>Bulk customer merge has been started in the background.</p>
+            <p><strong>Job ID:</strong> {result.job_id}</p>
+            <p><strong>Operations:</strong> {result.total_operations}</p>
+            <p><strong>Customers:</strong> {result.total_customers}</p>
+            <p className="text-gray-600 text-sm mt-2">
+              You can monitor the progress in the background jobs section or refresh the customer list after completion.
+            </p>
+          </div>
+        ),
+      });
+      
+      setSelectedRowKeys([]);
+      setBulkMergeModalVisible(false);
+      
+      // Optionally refresh customers after a delay
+      setTimeout(async () => {
+        await loadCustomers();
+      }, 5000);
+      
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to start bulk merge');
+    } finally {
+      setBulkMergeLoading(false);
+    }
+  };
+
+  const getSelectedCustomers = () => {
+    return customers.filter(customer => selectedRowKeys.includes(customer.customer_id));
   };
 
   const handleBackfillAvatar = async (customer: Customer) => {
@@ -218,6 +341,14 @@ export const Customers: React.FC = () => {
           <Button
             type="link"
             size="small"
+            icon={<TeamOutlined />}
+            onClick={() => openSimilar(customer)}
+            title="Find similar customers"
+            className="p-0"
+          />
+          <Button
+            type="link"
+            size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetails(customer)}
             title="View details"
@@ -269,6 +400,28 @@ export const Customers: React.FC = () => {
       <div className="flex items-center justify-between">
         <Title level={2} className="mb-0">Customers</Title>
         <Space>
+          {selectedRowKeys.length > 1 && (
+            <Button
+              type="default"
+              icon={<SwapOutlined />}
+              loading={bulkMergeLoading}
+              onClick={() => setBulkMergeModalVisible(true)}
+              className="border-blue-500 text-blue-600 hover:bg-blue-50"
+            >
+              Bulk Merge ({selectedRowKeys.length})
+            </Button>
+          )}
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              danger
+              icon={<DeleteOutlined />}
+              loading={bulkDeleteLoading}
+              onClick={handleBulkDelete}
+            >
+              Delete Selected ({selectedRowKeys.length})
+            </Button>
+          )}
           <Button
             type="default"
             icon={<UploadOutlined />}
@@ -306,6 +459,13 @@ export const Customers: React.FC = () => {
           dataSource={customers}
           rowKey="customer_id"
           loading={loading}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys) => setSelectedRowKeys(keys as number[]),
+            getCheckboxProps: (record: Customer) => ({
+              name: `customer-${record.customer_id}`,
+            }),
+          }}
           pagination={{
             total: customers.length,
             pageSize: 10,
@@ -384,6 +544,57 @@ export const Customers: React.FC = () => {
         visible={uploadModalVisible}
         onClose={() => setUploadModalVisible(false)}
         onCustomersChange={loadCustomers}
+      />
+
+      <Modal
+        title={
+          similarSourceId ? `Similar to Customer #${similarSourceId}` : 'Similar Customers'
+        }
+        open={similarVisible}
+        onCancel={() => setSimilarVisible(false)}
+        footer={null}
+      >
+        {similarLoading ? (
+          <div className="py-8 text-center">Loading…</div>
+        ) : similarList.length === 0 ? (
+          <div className="py-8 text-center text-gray-500">No similar customers found above threshold.</div>
+        ) : (
+          <List
+            dataSource={similarList}
+            renderItem={(item) => (
+              <List.Item
+                actions={[
+                  <Button
+                    key="merge"
+                    type="primary"
+                    icon={<MergeCellsOutlined />}
+                    className="bg-blue-600"
+                    onClick={() => doMerge(item.customer_id)}
+                  >
+                    Merge into Source
+                  </Button>
+                ]}
+              >
+                <List.Item.Meta
+                  title={<span>#{item.customer_id} {item.name ? `— ${item.name}` : ''}</span>}
+                  description={
+                    <Space>
+                      <Tag color="blue">visits: {item.visit_count}</Tag>
+                      <Tag color="green">similarity: {(item.max_similarity * 100).toFixed(1)}%</Tag>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        )}
+      </Modal>
+
+      <BulkCustomerMergeModal
+        visible={bulkMergeModalVisible}
+        selectedCustomers={getSelectedCustomers()}
+        onClose={() => setBulkMergeModalVisible(false)}
+        onMerge={handleBulkMerge}
       />
     </div>
   );

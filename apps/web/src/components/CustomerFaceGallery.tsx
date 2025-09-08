@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
+import { 
   Card,
   Row,
   Col,
@@ -11,7 +11,8 @@ import {
   Space,
   Tag,
   Tooltip,
-  App
+  App,
+
 } from 'antd';
 import {
   DeleteOutlined,
@@ -51,12 +52,13 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
 }) => {
   const [images, setImages] = useState<CustomerFaceImage[]>([]);
   const [loading, setLoading] = useState(false);
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
+
   
   // Ref to track if user is holding Shift/Ctrl/Cmd
   const isMultiSelectRef = useRef(false);
@@ -346,6 +348,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   }
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header with selection controls */}
       <div className="flex items-center justify-between">
@@ -396,6 +399,45 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
             </Button>
           </Popconfirm>
         )}
+        {selectedImages.size > 0 && (
+          <Button
+            size="small"
+            onClick={() => {
+              modal.confirm({
+                title: `Reassign ${selectedImages.size} image(s)`,
+                content: (
+                  <div className="space-y-2 mt-4">
+                    <div>New customer ID</div>
+                    <input
+                      id="reassign-input"
+                      className="w-full border rounded px-2 py-1"
+                      placeholder="Enter customer id"
+                    />
+                  </div>
+                ),
+                okText: 'Reassign',
+                onOk: async () => {
+                  const input = document.getElementById('reassign-input') as HTMLInputElement;
+                  const targetId = parseInt(input?.value || '', 10);
+                  if (!targetId || selectedImages.size === 0) return;
+                  try {
+                    for (const imgId of Array.from(selectedImages)) {
+                      await apiClient.reassignFaceImage(imgId, targetId);
+                    }
+                    message.success('Images reassigned');
+                    setSelectedImages(new Set());
+                    await loadImages();
+                    onImagesChange?.();
+                  } catch (e: any) {
+                    message.error(e.response?.data?.detail || 'Failed to reassign images');
+                  }
+                }
+              });
+            }}
+          >
+            Reassign Selected…
+          </Button>
+        )}
       </div>
 
       {/* Help text for multi-selection */}
@@ -426,5 +468,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
         </Row>
       )}
     </div>
+
+    </>
   );
 };

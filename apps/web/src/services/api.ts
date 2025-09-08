@@ -428,6 +428,20 @@ class ApiClient {
     await this.client.delete(`/customers/${customerId}`);
   }
 
+  async bulkDeleteCustomers(customerIds: number[]): Promise<{
+    message: string;
+    deleted_customers: number;
+    customer_ids: number[];
+    deleted_visits: number;
+    deleted_face_images: number;
+    failed_embedding_cleanups: number[];
+  }> {
+    const response = await this.client.post('/customers/bulk-delete', {
+      customer_ids: customerIds
+    });
+    return response.data;
+  }
+
   async getCustomerFaceImages(customerId: number): Promise<{
     customer_id: number;
     total_images: number;
@@ -467,6 +481,106 @@ class ApiClient {
     return response.data;
   }
 
+  // Customer Data Cleanup
+  async findSimilarCustomers(customerId: number, params?: {
+    threshold?: number;
+    limit?: number;
+  }): Promise<{
+    customer_id: number;
+    customer_name?: string;
+    similar_customers: Array<{
+      customer_id: number;
+      name?: string;
+      visit_count: number;
+      first_seen?: string;
+      last_seen?: string;
+      max_similarity: number;
+      gender?: string;
+      estimated_age_range?: string;
+    }>;
+    threshold_used: number;
+    total_found: number;
+  }> {
+    const response = await this.client.get(`/customers/${customerId}/similar`, { params });
+    return response.data;
+  }
+
+  async mergeCustomers(primaryCustomerId: number, secondaryCustomerId: number, notes?: string): Promise<{
+    message: string;
+    primary_customer_id: number;
+    secondary_customer_id: number;
+    merged_visits: number;
+    merged_face_images: number;
+    new_visit_count: number;
+    merge_notes?: string;
+  }> {
+    const response = await this.client.post('/customers/merge', {
+      primary_customer_id: primaryCustomerId,
+      secondary_customer_id: secondaryCustomerId,
+      notes
+    });
+    return response.data;
+  }
+
+  async bulkMergeCustomers(mergeOperations: Array<{
+    primary_customer_id: number;
+    secondary_customer_ids: number[];
+  }>): Promise<{
+    message: string;
+    job_id: string;
+    status: string;
+    total_operations: number;
+    total_customers: number;
+    check_status_url: string;
+  }> {
+    const response = await this.client.post('/customers/bulk-merge', {
+      merges: mergeOperations
+    });
+    return response.data;
+  }
+
+  async reassignVisit(visitId: string, newCustomerId: number, update_embeddings: boolean = true): Promise<{
+    message: string;
+    visit_id: string;
+    old_customer_id: number;
+    new_customer_id: number;
+    old_customer_remaining_visits: number;
+    new_customer_total_visits: number;
+    embedding_action: string;
+  }> {
+    const response = await this.client.post('/customers/reassign-visit', {
+      visit_id: visitId,
+      new_customer_id: newCustomerId,
+      update_embeddings,
+    });
+    return response.data;
+  }
+
+  async reassignFaceImage(imageId: number, newCustomerId: number): Promise<{
+    message: string;
+    image_id: number;
+    new_customer_id: number;
+  }> {
+    const response = await this.client.post('/customers/reassign-face-image', {
+      image_id: imageId,
+      new_customer_id: newCustomerId,
+    });
+    return response.data;
+  }
+
+  async cleanupLowConfidenceFaces(customerId: number, params?: {
+    min_confidence?: number;
+    max_to_remove?: number;
+  }): Promise<{
+    message: string;
+    customer_id: number;
+    removed_count: number;
+    min_confidence_threshold: number;
+  }> {
+    const response = await this.client.post(`/customers/${customerId}/cleanup-low-confidence-faces`, params || {});
+    return response.data;
+  }
+
   // Visits
   async getVisits(params?: {
     site_id?: string;
@@ -502,6 +616,38 @@ class ApiClient {
     }>('/visits/delete', {
       visit_ids: visitIds
     });
+    return response.data;
+  }
+
+  async mergeVisits(visitIds: string[], primaryVisitId?: string): Promise<{
+    message: string;
+    primary_visit_id: string;
+    merged_visit_ids: string[];
+    person_id: number;
+    person_type: 'customer' | 'staff';
+    site_id: number;
+    camera_ids: number[];
+    first_seen: string;
+    last_seen: string;
+    visit_duration_seconds: number;
+    detection_count: number;
+    highest_confidence: number;
+  }> {
+    const response = await this.client.post('/visits/merge', {
+      visit_ids: visitIds,
+      primary_visit_id: primaryVisitId,
+    });
+    return response.data;
+  }
+
+  async removeVisitFaceDetection(visitId: string): Promise<{
+    message: string;
+    visit_id: string;
+    customer_id?: number;
+    images_cleaned: number;
+    embedding_cleaned: boolean;
+  }> {
+    const response = await this.client.delete(`/visits/${visitId}/face`);
     return response.data;
   }
 
@@ -851,6 +997,52 @@ class ApiClient {
     return response.data;
   }
 
+  // Background Job Management
+  async getJobStatus(jobId: string): Promise<{
+    job_id: string;
+    job_type: string;
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    tenant_id: string;
+    created_at: string;
+    started_at?: string;
+    completed_at?: string;
+    progress: number;
+    message: string;
+    result?: any;
+    error?: string;
+  }> {
+    const response = await this.client.get(`/jobs/${jobId}`);
+    return response.data;
+  }
+
+  async listJobs(params?: {
+    status_filter?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    job_type_filter?: string;
+  }): Promise<{
+    jobs: Array<{
+      job_id: string;
+      job_type: string;
+      status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+      tenant_id: string;
+      created_at: string;
+      started_at?: string;
+      completed_at?: string;
+      progress: number;
+      message: string;
+      result?: any;
+      error?: string;
+    }>;
+    total: number;
+  }> {
+    const response = await this.client.get('/jobs', { params });
+    return response.data;
+  }
+
+  async cancelJob(jobId: string): Promise<{ message: string }> {
+    const response = await this.client.post(`/jobs/${jobId}/cancel`);
+    return response.data;
+  }
+
   // Generic HTTP methods for flexibility
   async get<T = any>(url: string, params?: any): Promise<T> {
     const response = await this.client.get(url, { params });
@@ -881,11 +1073,18 @@ class ApiClient {
         return imagePath;
       }
       
-      // If imagePath already starts with /v1/files/, use it directly
-      const url = imagePath.startsWith('/v1/files/') ? imagePath : `/v1/files/${imagePath}`;
-      
+      // Normalize to avoid duplicating baseURL path (/v1)
+      let filesPath: string;
+      if (imagePath.startsWith('/v1/files/')) {
+        filesPath = imagePath.replace(/^\/v1\//, '/'); // -> '/files/...'
+      } else if (imagePath.startsWith('/files/')) {
+        filesPath = imagePath;
+      } else {
+        filesPath = `/files/${imagePath.replace(/^\/+/, '')}`;
+      }
+
       // Make authenticated request to get the image
-      const response = await this.client.get(url, {
+      const response = await this.client.get(filesPath, {
         responseType: 'blob',
       });
       

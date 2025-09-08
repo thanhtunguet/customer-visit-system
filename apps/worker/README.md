@@ -34,6 +34,18 @@ Set these environment variables:
 - `CONFIDENCE_THRESHOLD`: Face detection confidence (default: 0.7)
 - `STAFF_MATCH_THRESHOLD`: Staff matching similarity (default: 0.8)
 
+### Enhanced Face Cropping Configuration
+- `MIN_FACE_SIZE`: Minimum face size in pixels for processing (default: 40)
+- `CROP_MARGIN_PCT`: Margin around face as percentage, e.g., 0.15 = 15% (default: 0.15)
+- `TARGET_SIZE`: Target output size for cropped faces in pixels (default: 224)
+- `PRIMARY_FACE_STRATEGY`: Strategy for selecting primary face when multiple detected (default: best_quality)
+  - `best_quality`: Balance of confidence, size, landmarks, and detector quality
+  - `largest`: Choose the largest face by area
+  - `most_centered`: Choose face closest to image center
+  - `highest_confidence`: Choose face with highest detection confidence
+- `MAX_FACE_RATIO`: Maximum face-to-frame ratio before special large-face handling (default: 0.6)
+- `PRESERVE_ASPECT`: Preserve aspect ratio with letterboxing, true/false (default: true)
+
 ### API Configuration
 - `API_URL`: Face recognition API endpoint (default: http://localhost:8080)
 - `MAX_API_RETRIES`: Max API call retries (default: 3)
@@ -95,13 +107,44 @@ docker run --privileged -v /dev:/dev --env-file .env face-recognition-worker
 
 ## Architecture
 
-### Face Detection Pipeline
+### Enhanced Face Detection Pipeline
 1. **Frame Capture**: Captures frames from camera at configured FPS
-2. **Face Detection**: Detects faces using YuNet or fallback detector
-3. **Face Alignment**: Aligns faces using 5-point landmarks when available
-4. **Embedding Generation**: Creates 512-dim embeddings using InsightFace ArcFace
-5. **Staff Filtering**: Checks against local staff embeddings first
-6. **API Submission**: Sends face events to API for customer matching and visit recording
+2. **Face Detection**: Multi-detector system with YuNet, MTCNN, RetinaFace, MediaPipe, OpenCV DNN, and Haar Cascade fallbacks
+3. **Face Cropping**: Enhanced cropping algorithm that adapts to face size and position:
+   - **Large faces** (>60% of frame): Conservative cropping to preserve all features
+   - **Small faces** (<min size): Expanded cropping with additional context
+   - **Normal faces**: Standard cropping with configurable margin
+   - **Edge handling**: Safe cropping for faces near frame boundaries
+   - **Multi-face selection**: Configurable strategies for choosing primary face
+4. **Face Alignment**: Aligns faces using 5-point landmarks when available
+5. **Canonical Sizing**: Resizes to target size (default 224x224) with aspect ratio preservation
+6. **Embedding Generation**: Creates 512-dim embeddings using InsightFace ArcFace
+7. **Staff Filtering**: Checks against local staff embeddings first
+8. **API Submission**: Sends face events to API for customer matching and visit recording
+
+### Face Cropping Strategies
+
+The enhanced face cropping system handles various real-world scenarios:
+
+#### Large Face Handling (Close to Camera)
+- **Scenario**: Face occupies >60% of frame (very close to camera)
+- **Strategy**: Uses conservative margin (≤5%) to avoid cutting off facial features
+- **Benefits**: Ensures complete face capture even when subject is very close
+
+#### Small Face Handling (Far from Camera) 
+- **Scenario**: Face smaller than minimum size threshold (far from camera)
+- **Strategy**: Uses expanded margin (≥25%) to capture sufficient context
+- **Benefits**: Provides enough detail for recognition even with distant subjects
+
+#### Multi-Face Selection Strategies
+- **best_quality**: Balances confidence, size, landmarks, and detector quality (default)
+- **largest**: Selects the largest face by area
+- **most_centered**: Selects face closest to image center  
+- **highest_confidence**: Selects face with highest detection confidence
+
+#### Aspect Ratio Preservation
+- **Enabled** (default): Maintains original face proportions with letterboxing
+- **Disabled**: Stretches face to fill target square, may cause distortion
 
 ### Error Handling
 - **Camera Failures**: Automatic reconnection with exponential backoff
@@ -135,7 +178,20 @@ pytest tests/ -v
 pytest tests/test_detectors.py -v
 pytest tests/test_embedder.py -v  
 pytest tests/test_face_recognition_pipeline.py -v
+pytest tests/test_face_cropping.py -v  # New enhanced cropping tests
 ```
+
+### Face Cropping Test Coverage
+
+The test suite includes comprehensive coverage for various face cropping scenarios:
+
+- **Huge faces**: >80% of frame (webcam very close)
+- **Tiny faces**: <5% of frame (webcam far away)
+- **Edge cases**: Faces near frame boundaries
+- **Multi-face scenarios**: Different selection strategies
+- **Aspect ratio preservation**: With and without letterboxing
+- **Configuration variations**: Different margins and target sizes
+- **Integration tests**: End-to-end cropping pipeline
 
 ## Monitoring
 
@@ -165,6 +221,17 @@ INFO - Face event processed successfully: person_id=c_abc123, match=new
 - **High CPU usage**: Reduce `WORKER_FPS` or use mock mode for testing
 - **Memory leaks**: Restart worker periodically in production
 - **Staff matching errors**: Verify staff embeddings are properly loaded
+
+### Face Cropping Issues
+- **Faces cut off**: Increase `CROP_MARGIN_PCT` (default: 0.15)
+- **Poor recognition on large faces**: Ensure `MAX_FACE_RATIO` is appropriate (default: 0.6)
+- **Small faces not detected**: Decrease `MIN_FACE_SIZE` threshold (default: 40)
+- **Wrong face selected**: Adjust `PRIMARY_FACE_STRATEGY` based on your scenario:
+  - Use `most_centered` for fixed camera positions
+  - Use `largest` for close-up scenarios
+  - Use `highest_confidence` for challenging lighting
+  - Use `best_quality` for balanced performance (default)
+- **Distorted faces**: Enable `PRESERVE_ASPECT=true` for better quality (default)
 
 ## Production Deployment
 

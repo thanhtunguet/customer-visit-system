@@ -21,17 +21,27 @@ logger = logging.getLogger(__name__)
 
 class FaceMatchingService:
     def __init__(self):
-        # Improved thresholds for better face recognition accuracy
-        self.similarity_threshold = 0.6  # Initial filtering
-        self.staff_similarity_threshold = 0.8  # Safer staff matching
-        self.max_search_results = 10  # Keep increased for better filtering
-        self.min_confidence_score = 0.6  # Minimum face detection confidence
-        # Higher threshold for customer matching to prevent false positives
-        # Raised to reduce erroneous merging when embeddings are approximate
-        self.customer_merge_threshold = 0.92
+        # Read thresholds and knobs from settings
+        self.max_search_results = 10
+        self.staff_similarity_threshold = 0.8
+        self.embedding_distance_thr = settings.embedding_distance_thr
+        self.merge_distance_thr = settings.merge_distance_thr
+        self.merge_margin = settings.merge_margin
+        self.min_cluster_samples = settings.min_cluster_samples
+        self.min_track_length = settings.min_track_length
+        self.temporal_hysteresis_secs = settings.temporal_hysteresis_secs
+        self.min_confidence_score = settings.quality_min_score
+
+        # In-memory caches for smoothing / clustering (best-effort, per-process)
+        # recent_assignments[(tenant_id, camera_id)] = (person_id, timestamp, similarity)
+        self.recent_assignments: dict[tuple[str, int], tuple[int, float, float]] = {}
+        # pending clusters keyed by coarse hash of embedding
+        # pending[(tenant_id, site_id, camera_id, key)] = [(ts, embedding)]
+        self.pending: dict[tuple[str, int, int, str], list[tuple[float, list[float]]]] = {}
+        # Align pending window with (extended) hysteresis for stability
+        self.pending_window_secs = max(self.temporal_hysteresis_secs, 5.0)
         
-        # Debug mode - extra logging
-        self.debug_mode = True  # Very high threshold for customer merging
+        self.debug_mode = True
 
     async def process_face_event(
         self, 
@@ -45,7 +55,6 @@ class FaceMatchingService:
         is_manual_upload = hasattr(event, '_manual_face_data')
         filename = getattr(event, '_manual_filename', 'camera_stream')
         logger.info(f"🔍 Processing face event from {filename}: confidence={event.confidence:.3f}, bbox={event.bbox}, manual_upload={is_manual_upload}")
-        logger.info(f"🔍 Thresholds: similarity={self.similarity_threshold}, customer_merge={self.customer_merge_threshold}, min_confidence={self.min_confidence_score}")
         
         # Skip if it's already identified as staff locally
         if event.is_staff_local:
@@ -55,6 +64,7 @@ class FaceMatchingService:
                 "person_id": event.staff_id,
                 "similarity": 1.0,
                 "visit_id": None,
+                "person_type": "staff",
                 "message": "Staff member identified locally"
             }
 
@@ -66,22 +76,45 @@ class FaceMatchingService:
                 "person_id": None,
                 "similarity": 0.0,
                 "visit_id": None,
+                "person_type": "customer",
                 "message": f"Detection quality too low: {event.confidence:.3f}"
             }
 
-        # Use a more conservative threshold for manual uploads to prevent different people from being merged
+        # Additional face size gating to reduce non-face false positives
+        try:
+            from ..core.config import settings as _settings
+            if event.bbox and len(event.bbox) >= 4:
+                w = float(event.bbox[2]); h = float(event.bbox[3])
+                if min(w, h) < float(_settings.api_min_face_size):
+                    logger.warning(f"Rejecting small face bbox {w}x{h} < min {_settings.api_min_face_size}")
+                    return {
+                        "match": "rejected",
+                        "person_id": None,
+                        "similarity": 0.0,
+                        "visit_id": None,
+                        "person_type": "customer",
+                        "message": "Face too small for reliable recognition"
+                    }
+        except Exception:
+            pass
+
+        # Determine search and decision thresholds
         is_manual_upload = hasattr(event, '_manual_face_data')
-        if is_manual_upload:
-            search_threshold = 0.95  # Very high threshold for manual uploads to avoid merging different people
-            logger.info(f"🔍 Manual upload detected - using very conservative threshold {search_threshold}")
+        # Use a slightly lower search threshold to retrieve near misses, but keep decision thresholds strict
+        if not is_manual_upload:
+            search_threshold = max(0.70, self.embedding_distance_thr - 0.05)
         else:
-            search_threshold = self.customer_merge_threshold
-        logger.info(f"🔍 Searching Milvus for similar faces with threshold {search_threshold}")
+            search_threshold = max(self.merge_distance_thr, 0.95)
+        logger.info(
+            f"🔍 Thresholds: search={search_threshold:.3f}, merge={self.merge_distance_thr:.3f}, "
+            f"margin={self.merge_margin:.3f}, min_conf={self.min_confidence_score:.2f}"
+        )
+        logger.info(f"🔍 Searching Milvus for similar faces (limit={self.max_search_results})")
         similar_faces = await milvus_client.search_similar_faces(
             tenant_id=tenant_id,
             embedding=event.embedding,
             limit=self.max_search_results,
-            threshold=search_threshold,  # Use higher threshold for better precision
+            threshold=search_threshold,
         )
         logger.info(f"🔍 Milvus returned {len(similar_faces)} similar faces")
         for i, face in enumerate(similar_faces):
@@ -93,35 +126,77 @@ class FaceMatchingService:
         match_type = "new"
 
         if similar_faces:
-            # Since we're using customer_merge_threshold in Milvus search,
-            # all returned results should be valid matches
-            best_match = similar_faces[0]  # Already sorted by similarity in Milvus
-            
-            logger.info(f"🔍 Best match found: {best_match['person_type']} {best_match['person_id']} with similarity {best_match['similarity']:.3f}")
-            
-            # Double-check the threshold (should always pass since we used it in search)
-            if best_match["person_type"] == "customer":
-                required_threshold = search_threshold  # Use the same threshold we used for search
-            else:
-                required_threshold = self.staff_similarity_threshold
-            logger.info(f"🔍 Required threshold for {best_match['person_type']}: {required_threshold}")
-            
-            if best_match["similarity"] >= required_threshold:
+            best_match = similar_faces[0]
+            best_sim = float(best_match.get("similarity", 0.0))
+            second_sim = float(similar_faces[1].get("similarity", 0.0)) if len(similar_faces) > 1 else 0.0
+            logger.info(
+                f"🔍 Best match: {best_match['person_type']} {best_match['person_id']} sim={best_sim:.3f} (second={second_sim:.3f})"
+            )
+
+            # Merge-on-recognition: strong match
+            if best_match["person_type"] == "customer" and best_sim >= self.merge_distance_thr:
                 person_id = best_match["person_id"]
-                person_type = best_match["person_type"]
-                similarity = best_match["similarity"]
+                person_type = "customer"
+                similarity = best_sim
                 match_type = "known"
-                
-                logger.info(f"High-confidence match found: {person_type} {person_id} with similarity {similarity:.3f}")
+                logger.info(f"🟢 Strong match >= merge threshold: customer {person_id}")
+            # Margin-based assignment: best above search threshold and clear margin over second best
+            elif best_match["person_type"] == "customer" and best_sim >= self.embedding_distance_thr and (best_sim - second_sim) >= self.merge_margin:
+                person_id = best_match["person_id"]
+                person_type = "customer"
+                similarity = best_sim
+                match_type = "known"
+                logger.info(f"🟢 Margin-based assignment to existing customer {person_id}")
             else:
-                logger.warning(f"Unexpected: match below threshold after Milvus filtering: {best_match['similarity']:.3f} < {required_threshold:.3f}")
+                # Temporal hysteresis: prefer last identity for this camera if close
+                cache_key = (str(tenant_id), int(event.camera_id))
+                now_ts = time.time()
+                last = self.recent_assignments.get(cache_key)
+                if last:
+                    last_person_id, last_ts, last_sim = last
+                    # Accept slightly-below-threshold matches within hysteresis window to avoid fragmenting identities
+                    soft_thr = max(0.70, self.embedding_distance_thr - self.merge_margin)
+                    if (now_ts - last_ts) <= self.temporal_hysteresis_secs and best_match["person_type"] == "customer" and best_sim >= soft_thr:
+                        person_id = best_match["person_id"]
+                        person_type = "customer"
+                        similarity = best_sim
+                        match_type = "known"
+                        logger.info(f"🟡 Hysteresis kept identity {person_id} within {self.temporal_hysteresis_secs}s")
 
         if not person_id:
-            # Create new customer only if no high-confidence match
-            logger.info(f"🆕 No high-confidence match found, creating new customer")
-            person_id = await self._create_new_customer(db_session, tenant_id)
-            person_type = "customer"
-            logger.info(f"🆕 Created new customer: {person_id}")
+            # Cluster gating: require min samples within small window before creating a new customer
+            def _coarse_key(vec: List[float]) -> str:
+                # Round first 16 dims to 2 decimals as coarse signature
+                return ",".join(f"{v:.2f}" for v in vec[:16])
+
+            pkey = (str(tenant_id), int(event.site_id), int(event.camera_id), _coarse_key(event.embedding))
+            now_ts = time.time()
+            window = self.pending_window_secs
+            lst = self.pending.get(pkey, [])
+            # prune old
+            lst = [(ts, emb) for ts, emb in lst if (now_ts - ts) <= window]
+            lst.append((now_ts, event.embedding))
+            self.pending[pkey] = lst
+
+            # Allow manual uploads to create a customer immediately (required_samples=1)
+            required_samples = 1 if is_manual_upload else self.min_cluster_samples
+            if len(lst) >= required_samples:
+                logger.info(f"🆕 Creating new customer after cluster min_samples={required_samples}")
+                person_id = await self._create_new_customer(db_session, tenant_id)
+                person_type = "customer"
+            else:
+                # Not enough evidence; treat as rejected to avoid over-segmentation
+                logger.info(
+                    f"⏳ Deferring new customer creation: {len(lst)}/{required_samples} samples in {window}s"
+                )
+                return {
+                    "match": "rejected",
+                    "person_id": None,
+                    "similarity": 0.0,
+                    "visit_id": None,
+                    "person_type": "customer",
+                    "message": "Insufficient samples for new identity"
+                }
 
         # Store the embedding in Milvus (with quality check)
         if event.confidence >= self.min_confidence_score:
@@ -148,6 +223,14 @@ class FaceMatchingService:
         # Update customer last_seen
         if person_type == "customer":
             await self._update_customer_last_seen(db_session, tenant_id, person_id)
+
+        # Update recent assignment cache for hysteresis
+        try:
+            self.recent_assignments[(str(tenant_id), int(event.camera_id))] = (
+                int(person_id), time.time(), float(similarity)
+            )
+        except Exception:
+            pass
 
         result = {
             "match": match_type,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, 
   Row, 
@@ -148,9 +148,15 @@ export const VisitsPage: React.FC = () => {
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [reassignOpen, setReassignOpen] = useState<boolean>(false);
+  const [reassignTarget, setReassignTarget] = useState<string>('');
+  const [reassigning, setReassigning] = useState<boolean>(false);
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
+  const [mergeOpen, setMergeOpen] = useState<boolean>(false);
+  const [merging, setMerging] = useState<boolean>(false);
+  const [primaryVisitId, setPrimaryVisitId] = useState<string | undefined>(undefined);
 
 
   // Load initial data from API
@@ -404,6 +410,49 @@ export const VisitsPage: React.FC = () => {
     }
   };
 
+  const selectedVisits = useMemo(() => {
+    const set = selectedVisitIds;
+    return visits.filter(v => set.has(v.visit_id));
+  }, [selectedVisitIds, visits]);
+
+  const bestPrimaryCandidateId = useMemo(() => {
+    if (selectedVisits.length === 0) return undefined;
+    const sorted = [...selectedVisits].sort((a, b) => {
+      const ah = (a.highest_confidence ?? a.confidence_score) || 0;
+      const bh = (b.highest_confidence ?? b.confidence_score) || 0;
+      if (bh !== ah) return bh - ah;
+      // tie-breaker: earliest first_seen
+      return new Date(a.first_seen).getTime() - new Date(b.first_seen).getTime();
+    });
+    return sorted[0]?.visit_id;
+  }, [selectedVisits]);
+
+  const openMergeModal = () => {
+    if (selectedVisitIds.size < 2) {
+      message.info('Select at least two visits to merge');
+      return;
+    }
+    setPrimaryVisitId(bestPrimaryCandidateId);
+    setMergeOpen(true);
+  };
+
+  const handleMerge = async () => {
+    if (selectedVisitIds.size < 2) return;
+    setMerging(true);
+    try {
+      const ids = Array.from(selectedVisitIds);
+      const res = await apiClient.mergeVisits(ids, primaryVisitId);
+      message.success(res.message || 'Merged visits');
+      setMergeOpen(false);
+      setSelectedVisitIds(new Set([res.primary_visit_id]));
+      await loadInitialData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Failed to merge visits');
+    } finally {
+      setMerging(false);
+    }
+  };
+
   // Keyboard shortcuts - moved after handleDeleteSelected is defined
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -544,6 +593,15 @@ export const VisitsPage: React.FC = () => {
                   </Button>
                 </Popconfirm>
               )}
+            </Col>
+            <Col>
+              <Button 
+                type="primary"
+                disabled={selectedVisitIds.size < 2}
+                onClick={openMergeModal}
+              >
+                Merge Selected ({selectedVisitIds.size || 0})
+              </Button>
             </Col>
           </Row>
         )}
@@ -801,6 +859,29 @@ export const VisitsPage: React.FC = () => {
             </div>            {/* Customer Face Gallery */}
             {selectedVisit.person_type === 'customer' && selectedVisit.person_id && (
               <div className="w-full mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <Space>
+                    <Button size="small" onClick={() => setReassignOpen(true)}>Reassign Visit…</Button>
+                    <Popconfirm
+                      title="Remove this visit?"
+                      description="Deletes the visit and associated images."
+                      okText="Remove"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={async () => {
+                        try {
+                          await apiClient.removeVisitFaceDetection(selectedVisit.visit_id);
+                          message.success('Visit removed');
+                          setIsModalVisible(false);
+                          await loadInitialData();
+                        } catch (e: any) {
+                          message.error(e.response?.data?.detail || 'Failed to remove');
+                        }
+                      }}
+                    >
+                      <Button size="small" danger>Remove Visit</Button>
+                    </Popconfirm>
+                  </Space>
+                </div>
                 <CustomerFaceGallery
                   customerId={selectedVisit.person_id}
                   customerName={`Customer #${selectedVisit.person_id}`}
@@ -809,6 +890,70 @@ export const VisitsPage: React.FC = () => {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={reassignOpen}
+        onCancel={() => setReassignOpen(false)}
+        title="Reassign Visit"
+        okText={reassigning ? 'Reassigning…' : 'Reassign'}
+        onOk={async () => {
+          const cid = parseInt(reassignTarget, 10);
+          if (!selectedVisit || !cid) return;
+          try {
+            setReassigning(true);
+            await apiClient.reassignVisit(selectedVisit.visit_id, cid, true);
+            message.success('Visit reassigned');
+            setReassignOpen(false);
+            setIsModalVisible(false);
+            setReassignTarget('');
+            await loadInitialData();
+          } catch (e: any) {
+            message.error(e.response?.data?.detail || 'Failed to reassign visit');
+          } finally {
+            setReassigning(false);
+          }
+        }}
+      >
+        <div className="space-y-2">
+          <div>New customer ID</div>
+          <input
+            value={reassignTarget}
+            onChange={(e) => setReassignTarget(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+            placeholder="Enter customer id"
+          />
+        </div>
+      </Modal>
+
+      {/* Merge Visits Modal */}
+      <Modal
+        open={mergeOpen}
+        onCancel={() => setMergeOpen(false)}
+        title={`Merge ${selectedVisitIds.size} visits`}
+        okText={merging ? 'Merging…' : 'Merge'}
+        onOk={handleMerge}
+        confirmLoading={merging}
+      >
+        <div className="space-y-3">
+          <div>
+            Choose primary visit (keeps best image/fields):
+          </div>
+          <Select
+            className="w-full"
+            value={primaryVisitId}
+            onChange={(v) => setPrimaryVisitId(v)}
+          >
+            {selectedVisits.map(v => (
+              <Select.Option key={v.visit_id} value={v.visit_id}>
+                {v.visit_id} • {new Date(v.first_seen).toLocaleString()} • conf {(100 * (v.highest_confidence ?? v.confidence_score)).toFixed(1)}%
+              </Select.Option>
+            ))}
+          </Select>
+          <div className="text-xs text-gray-500">
+            All visits must belong to the same person and site. The primary visit will absorb the others.
+          </div>
+        </div>
       </Modal>
     </div>
   );

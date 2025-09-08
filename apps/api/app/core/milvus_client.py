@@ -407,6 +407,25 @@ class MilvusClient:
             # Do not hard-fail embedding recalculation due to delete limitations
             logger.error(f"Failed to delete existing embeddings for tenant_id={tenant_id}, person_id={person_id}, person_type={person_type}: {e}")
 
+    async def delete_face_embedding(self, tenant_id: str, visit_id: str):
+        """Delete face embedding by visit_id (uses metadata approach)
+        
+        Since current Milvus schema doesn't include visit_id, 
+        this is a placeholder for future implementation.
+        In the current system, we rely on database cleanup to handle this.
+        """
+        if not self.collection:
+            raise RuntimeError("Not connected to Milvus")
+        
+        # Current limitation: Milvus schema doesn't include visit_id
+        # For now, we'll log this action but cannot delete specific visit embeddings
+        # In a future version, the schema should include visit_id as a field
+        logger.warning(f"delete_face_embedding called for visit_id={visit_id}, but current Milvus schema doesn't support visit_id filtering")
+        
+        # TODO: Enhance Milvus schema to include visit_id field for precise deletion
+        # For now, the database cleanup will handle visit removal, and orphaned embeddings
+        # will be cleaned up through periodic maintenance jobs
+
     async def delete_embedding_by_metadata(self, tenant_id: int, metadata_filter: Dict):
         """Delete embeddings by metadata filter - simplified to delete by person_id"""
         if not self.collection:
