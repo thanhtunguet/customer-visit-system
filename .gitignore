@@ -16,11 +16,6 @@ htmlcov/
 *.egg-info/
 .tox/
 
-# Node
-pnpm-lock.yaml
-yarn.lock
-package-lock.json
-
 # IDEs
 .idea/
 .vscode/
