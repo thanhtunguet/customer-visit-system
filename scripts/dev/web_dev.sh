@@ -5,12 +5,9 @@ cd "$ROOT_DIR/apps/web"
 
 if command -v pnpm >/dev/null 2>&1; then
   PKG=pnpm
-elif command -v yarn >/dev/null 2>&1; then
-  PKG=yarn
 else
   PKG=npm
 fi
 
 $PKG install
 exec $PKG run dev
-
