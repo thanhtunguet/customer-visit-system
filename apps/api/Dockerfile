@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for API service
-FROM python:3.11-slim AS base
+FROM python:3.13-slim AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
