@@ -9,7 +9,7 @@ from sqlalchemy import (JSON, TIMESTAMP, BigInteger, Boolean, Column, DateTime,
                         Enum, Float, ForeignKey, ForeignKeyConstraint, Index,
                         Integer, String, Text)
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 
