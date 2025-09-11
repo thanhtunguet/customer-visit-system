@@ -7,6 +7,7 @@ interface JWTPayload {
   sub: string;
   role: string;
   tenant_id?: string;
+  site_id?: number;
   exp: number;
   iat: number;
 }
@@ -56,4 +57,12 @@ export function getTenantIdFromToken(token: string): string | null {
 export function getRoleFromToken(token: string): string | null {
   const payload = decodeJWT(token);
   return payload?.role || null;
+}
+
+/**
+ * Get site ID from JWT token
+ */
+export function getSiteIdFromToken(token: string): number | null {
+  const payload = decodeJWT(token);
+  return payload?.site_id || null;
 }

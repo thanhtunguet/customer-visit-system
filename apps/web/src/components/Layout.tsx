@@ -194,9 +194,19 @@ export const AppLayout: React.FC = () => {
         // Global view: only show global management features
         return globalMenuItems;
       }
-    } else {
-      // Non-system admin users only see tenant-specific features
+    } else if (user.role === UserRole.TENANT_ADMIN) {
+      // Tenant admin can see all tenant-specific features but not global management
       return tenantSpecificMenuItems;
+    } else if (user.role === UserRole.SITE_MANAGER) {
+      // Site manager can only see site-specific features, no tenant/sites management
+      return tenantSpecificMenuItems.filter(item => 
+        !['/sites', '/tenants'].includes(item.key as string)
+      );
+    } else {
+      // Worker role - very limited access
+      return tenantSpecificMenuItems.filter(item => 
+        ['/dashboard', '/visits'].includes(item.key as string)
+      );
     }
   };
 

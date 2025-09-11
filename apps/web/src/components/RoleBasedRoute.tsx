@@ -111,3 +111,15 @@ export const SiteManagerRoute: React.FC<{ children: React.ReactNode }> = ({ chil
     {children}
   </RoleBasedRoute>
 );
+
+export const TenantManagementRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <RoleBasedRoute allowedRoles={['system_admin']}>
+    {children}
+  </RoleBasedRoute>
+);
+
+export const SiteManagementRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <RoleBasedRoute allowedRoles={['system_admin', 'tenant_admin']}>
+    {children}
+  </RoleBasedRoute>
+);

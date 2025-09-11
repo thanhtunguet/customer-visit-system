@@ -1,81 +1,27 @@
 # Project Structure
 
-## Repository Layout (Monorepo)
-```
-/
-├── apps/
-│   ├── api/                  # FastAPI backend service
-│   │   ├── app/             # Main application code
-│   │   │   ├── core/        # Core functionality (database, auth, etc.)
-│   │   │   ├── models/      # Database models
-│   │   │   ├── routers/     # API route handlers
-│   │   │   ├── services/    # Business logic services
-│   │   │   ├── enums/       # Enumeration definitions
-│   │   │   ├── main.py      # FastAPI app entry point
-│   │   │   └── schemas.py   # Pydantic models
-│   │   ├── tests/           # API service tests
-│   │   ├── alembic/         # Database migration files
-│   │   ├── db/              # Database utilities and scripts
-│   │   ├── tools/           # Development tools
-│   │   ├── requirements.txt # Python dependencies
-│   │   ├── .env.example     # Environment template
-│   │   └── Dockerfile       # Container definition
-│   ├── worker/              # Face recognition worker service
-│   │   ├── app/             # Worker application code
-│   │   ├── tests/           # Worker service tests
-│   │   ├── requirements.txt # Worker dependencies
-│   │   ├── .env.example     # Environment template
-│   │   └── Dockerfile       # Container definition
-│   └── web/                 # React frontend application
-│       ├── src/             # React source code
-│       ├── package.json     # Node.js dependencies
-│       ├── .env.example     # Environment template
-│       └── Dockerfile       # Container definition
-├── packages/
-│   ├── python/
-│   │   └── common/          # Shared Python utilities and models
-│   └── ts/
-│       └── common/          # Shared TypeScript types
-├── contracts/               # JSON Schema definitions
-├── infra/
-│   ├── compose/             # Docker Compose configurations
-│   └── k8s/                 # Kubernetes manifests
-│       ├── base/            # Base Kubernetes resources
-│       └── overlays/        # Environment-specific overlays
-├── scripts/
-│   ├── dev/                 # Development helper scripts
-│   ├── prod/                # Production deployment scripts
-│   └── e2e_demo.sh         # End-to-end test script
-├── docs/                    # Documentation files
-├── tasks/                   # Task management files
-├── Makefile                 # Build and development commands
-├── pyproject.toml          # Python project configuration
-├── CLAUDE.md               # Project instructions for Claude
-└── README.md               # Project documentation
-```
+The project is organized into a monorepo structure with distinct applications and shared packages.
 
-## Key File Purposes
-
-### API Service Structure
-- `app/main.py` - FastAPI application factory and configuration
-- `app/core/database.py` - Database connection and session management
-- `app/models/database.py` - SQLAlchemy ORM models
-- `app/schemas.py` - Pydantic request/response models
-- `app/routers/` - API endpoint implementations
-- `app/services/` - Business logic and external service integrations
-
-### Worker Service Structure
-- `app/main.py` - Worker entry point and configuration
-- `app/services/` - Face detection, embedding, and camera services
-- `app/models/` - Worker-specific data models
-
-### Infrastructure Files
-- `infra/compose/docker-compose.dev.yml` - Local development services
-- `infra/k8s/` - Production Kubernetes deployment manifests
-- `scripts/dev/` - Development server startup scripts
-
-### Configuration Files
-- `.env.example` files - Environment variable templates
-- `requirements.txt` - Python dependency specifications
-- `package.json` - Node.js dependency specifications
-- `alembic.ini` - Database migration configuration
+- `apps/`: Contains the main application services.
+  - `api/`: The FastAPI backend service.
+    - `app/`: Core application logic, including routers, services, and models.
+    - `alembic/`: Database migration scripts.
+    - `tests/`: Pytest tests for the API.
+    - `Dockerfile`: Containerization script for the API.
+  - `worker/`: The face recognition worker service.
+    - `app/`: Core worker logic.
+    - `tests/`: Pytest tests for the worker.
+    - `Dockerfile`: Containerization script for the worker.
+  - `web/`: The React-based frontend application.
+    - `src/`: Source code for the React app, including components, pages, and services.
+    - `vite.config.ts`: Vite configuration.
+    - `package.json`: Frontend dependencies and scripts.
+- `packages/`: Shared code used across different applications.
+  - `python/common/`: Common Python utilities and data structures.
+  - `ts/common/`: Common TypeScript types and functions.
+- `contracts/`: JSON schema definitions for data models, ensuring data consistency across services.
+- `infra/`: Infrastructure as Code.
+  - `compose/`: Docker Compose files for development environments.
+  - `k8s/`: Kubernetes manifests for production deployments.
+- `scripts/`: Utility and automation scripts for development and operations.
+- `Makefile`: Provides a convenient set of commands for common development tasks like running, testing, and formatting the code.

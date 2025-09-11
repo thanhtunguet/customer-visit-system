@@ -42,6 +42,7 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
     tenant_id = Column(String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=True)  # Null for system_admin
+    site_id = Column(BigInteger, ForeignKey("sites.site_id", ondelete="CASCADE"), nullable=True)  # For site_manager role
     is_active = Column(Boolean, default=True, nullable=False)
     is_email_verified = Column(Boolean, default=False, nullable=False)
     last_login = Column(DateTime, nullable=True)
@@ -52,6 +53,7 @@ class User(Base):
     
     # Relationships
     tenant = relationship("Tenant", backref="users")
+    site = relationship("Site", backref="site_managers")
     creator = relationship("User", remote_side=[user_id], backref="created_users")
     
     __table_args__ = (
@@ -59,6 +61,7 @@ class User(Base):
         Index('idx_users_email', 'email'),
         Index('idx_users_role', 'role'),
         Index('idx_users_tenant_id', 'tenant_id'),
+        Index('idx_users_site_id', 'site_id'),
     )
     
     def set_password(self, password: str) -> None:
@@ -80,6 +83,16 @@ class User(Base):
         if self.role == UserRole.SYSTEM_ADMIN:
             return True
         return self.tenant_id == tenant_id
+    
+    def can_access_site(self, site_id: int) -> bool:
+        """Check if user can access a specific site"""
+        if self.role == UserRole.SYSTEM_ADMIN:
+            return True
+        if self.role == UserRole.TENANT_ADMIN:
+            return True  # Tenant admins can access all sites in their tenant
+        if self.role == UserRole.SITE_MANAGER:
+            return self.site_id == site_id
+        return False
 
 
 class Tenant(Base):

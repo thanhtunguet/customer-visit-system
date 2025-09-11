@@ -16,7 +16,7 @@ from .database import get_db, get_db_session
 from ..models.database import User, UserRole
 
 
-def mint_jwt(sub: str, role: str, tenant_id: str, ttl_sec: int = 3600) -> str:
+def mint_jwt(sub: str, role: str, tenant_id: str, site_id: int = None, ttl_sec: int = 3600) -> str:
     """Create a JWT token with the given claims"""
     now = int(time.time())
     payload = {
@@ -28,6 +28,8 @@ def mint_jwt(sub: str, role: str, tenant_id: str, ttl_sec: int = 3600) -> str:
         "role": role,
         "tenant_id": tenant_id,
     }
+    if site_id:
+        payload["site_id"] = site_id
     if not settings.jwt_private_key:
         # Dev fallback: unsigned for local testing only
         return jwt.encode(payload, "dev-key", algorithm="HS256")
@@ -68,6 +70,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> Dict:
         "sub": payload.get("sub"),
         "role": payload.get("role"),
         "tenant_id": payload.get("tenant_id"),
+        "site_id": payload.get("site_id"),
     }
 
 

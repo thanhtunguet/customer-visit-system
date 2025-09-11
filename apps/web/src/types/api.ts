@@ -234,6 +234,7 @@ export interface User {
   full_name: string;
   role: UserRole;
   tenant_id?: string;
+  site_id?: number;
   is_active: boolean;
   is_email_verified: boolean;
   last_login?: string;
@@ -251,6 +252,7 @@ export interface UserCreate {
   password: string;
   role: UserRole;
   tenant_id?: string;
+  site_id?: number;
   is_active?: boolean;
 }
 
@@ -261,6 +263,7 @@ export interface UserUpdate {
   last_name?: string;
   role?: UserRole;
   tenant_id?: string;
+  site_id?: number;
   is_active?: boolean;
 }
 

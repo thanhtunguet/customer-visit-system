@@ -1,28 +1,12 @@
 # Project Overview
 
-## Purpose
-Customer Visits System - A multi-tenant face recognition system with real-time monitoring, visitor analytics, and secure data management.
+This project is a multi-tenant face recognition system designed for real-time monitoring, visitor analytics, and secure data management.
 
 ## Key Features
-- Real-time face detection from RTSP/USB camera feeds
-- Multi-tenant architecture with Row Level Security (RLS)
-- Staff identification and visitor tracking
-- Visitor analytics and reporting
-- Secure JWT-based authentication
-- Enhanced worker architecture with HTTP endpoints and proxy
-- Staff face management with multiple images per staff
 
-## System Components
-- **API Service** (`/apps/api`): FastAPI backend with tenant-aware REST endpoints
-- **Worker Service** (`/apps/worker`): Real-time face detection and processing from camera feeds
-- **Web Interface** (`/apps/web`): React dashboard for monitoring and analytics
-- **Shared Libraries** (`/packages`): Common code and type definitions
-- **Contracts** (`/contracts`): JSON Schema definitions for data models
-- **Infrastructure** (`/infra`): Docker Compose and Kubernetes configurations
-
-## Architecture
-- **Database**: PostgreSQL with Row Level Security (RLS)
-- **Vector Database**: Milvus for face embeddings storage and similarity search
-- **Object Storage**: MinIO for image storage with lifecycle management
-- **Authentication**: JWT (RS256) with role-based access control
-- **Face Processing**: YuNet detection, InsightFace embeddings, OpenCV capture
+- **Real-time Face Detection**: Captures and processes video streams from RTSP or USB cameras in real-time.
+- **Multi-tenancy**: Supports multiple tenants with data isolation using Row Level Security (RLS) in PostgreSQL.
+- **Staff and Visitor Management**: Identifies staff members and tracks visitor entries and exits.
+- **Analytics Dashboard**: Provides a web-based interface for monitoring live events, viewing visitor history, and analyzing traffic data.
+- **Secure Authentication**: Uses JWT-based authentication for API access.
+- **Scalable Architecture**: Built with a microservices-oriented architecture using FastAPI, a separate worker service, and a React-based frontend. It leverages PostgreSQL for metadata, Milvus for vector-based face similarity search, and MinIO for object storage.
