@@ -6,6 +6,6 @@ sys.path.append(
     os.path.join(os.path.dirname(__file__), "../../../../packages/python/common")
 )
 
-from enums.worker import WorkerStatus
+from common.enums.worker import WorkerStatus
 
 __all__ = ["WorkerStatus"]

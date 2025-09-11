@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .config import settings
 
@@ -148,7 +148,7 @@ class MilvusClient:
             logger.warning(f"Error disconnecting from Milvus: {e}")
             self.is_connected = False
 
-    async def health_check(self) -> Dict[str, any]:
+    async def health_check(self) -> Dict[str, Any]:
         """Check Milvus connection health"""
         try:
             if not MILVUS_AVAILABLE:
@@ -406,7 +406,7 @@ class MilvusClient:
         return final_matches
 
     async def delete_person_embeddings(
-        self, tenant_id: int, person_id: int, person_type: str = None
+        self, tenant_id: int, person_id: int, person_type: Optional[str] = None
     ):
         """Delete all embeddings for a person.
 

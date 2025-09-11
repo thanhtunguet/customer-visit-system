@@ -6,7 +6,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from common.enums.commands import CommandPriority, WorkerCommand
 
@@ -22,7 +22,7 @@ class WorkerCommandMessage:
     command: WorkerCommand
     parameters: Optional[Dict[str, Any]] = None
     priority: CommandPriority = CommandPriority.NORMAL
-    created_at: datetime = None
+    created_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
     max_retries: int = 3
     retry_count: int = 0
@@ -103,7 +103,7 @@ class WorkerCommandService:
             self.cleanup_task = None
             logger.info("Worker command service stopped")
 
-    def add_command_callback(self, callback: callable):
+    def add_command_callback(self, callback: Callable):
         """Add callback for command events"""
         self.command_callbacks.append(callback)
 
@@ -397,7 +397,7 @@ class WorkerCommandService:
         total_history = sum(len(history) for history in self.command_history.values())
 
         # Status breakdown
-        status_counts = {}
+        status_counts: Dict[str, int] = {}
         for command in self.active_commands.values():
             status_counts[command.status] = status_counts.get(command.status, 0) + 1
 
