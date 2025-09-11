@@ -22,9 +22,7 @@ async def test_toggle_tenant_status_activate(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -59,9 +57,7 @@ async def test_toggle_tenant_status_deactivate(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -92,7 +88,7 @@ async def test_toggle_tenant_status_forbidden_tenant_admin(
     await db_session.commit()
 
     # Create tenant admin token (not system admin)
-    token = create_access_token(
+    token = mint_jwt(
         data={
             "sub": "tenant_admin",
             "role": "tenant_admin",
@@ -118,9 +114,7 @@ async def test_toggle_tenant_status_forbidden_tenant_admin(
 async def test_toggle_tenant_status_not_found(async_client: AsyncClient):
     """Test toggling status for non-existent tenant"""
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -140,9 +134,7 @@ async def test_toggle_tenant_status_not_found(async_client: AsyncClient):
 async def test_create_tenant_with_description(async_client: AsyncClient):
     """Test creating a tenant with description"""
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -177,9 +169,7 @@ async def test_update_tenant(async_client: AsyncClient, db_session: AsyncSession
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -212,9 +202,7 @@ async def test_get_single_tenant(async_client: AsyncClient, db_session: AsyncSes
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -239,9 +227,7 @@ async def test_delete_tenant(async_client: AsyncClient, db_session: AsyncSession
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -274,9 +260,7 @@ async def test_create_duplicate_tenant_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -325,9 +309,7 @@ async def test_delete_tenant_with_sites_having_cameras_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -364,9 +346,7 @@ async def test_delete_tenant_with_staff_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -406,9 +386,7 @@ async def test_delete_tenant_with_customers_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -448,9 +426,7 @@ async def test_delete_tenant_with_api_keys_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -493,9 +469,7 @@ async def test_delete_tenant_with_visits_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -536,9 +510,7 @@ async def test_delete_tenant_with_staff_face_images_fails(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -578,9 +550,7 @@ async def test_delete_empty_tenant_with_empty_sites_succeeds(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -615,9 +585,7 @@ async def test_delete_completely_empty_tenant_succeeds(
     await db_session.commit()
 
     # Create system admin token
-    token = create_access_token(
-        data={"sub": "admin", "role": "system_admin", "tenant_id": "system"}
-    )
+    token = mint_jwt(sub="admin", role="system_admin", tenant_id="system")
 
     headers = {"Authorization": f"Bearer {token}"}
 
