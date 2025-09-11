@@ -6,7 +6,7 @@ on:
       - main
       - develop
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
@@ -73,7 +73,7 @@ jobs:
       - name: Build and push API Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: apps/api
           file: apps/api/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
@@ -118,7 +118,7 @@ jobs:
       - name: Build and push Web Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: apps/web
           file: apps/web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
@@ -140,27 +140,27 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ github.sha }}
-          format: 'sarif'
-          output: 'api-trivy-results.sarif'
+          format: "sarif"
+          output: "api-trivy-results.sarif"
 
       - name: Upload Trivy scan results for API
         if: needs.build-api.result == 'success'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'api-trivy-results.sarif'
-          category: 'api-image'
+          sarif_file: "api-trivy-results.sarif"
+          category: "api-image"
 
       - name: Run Trivy vulnerability scanner for Web
         if: needs.build-web.result == 'success'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web:${{ github.sha }}
-          format: 'sarif'
-          output: 'web-trivy-results.sarif'
+          format: "sarif"
+          output: "web-trivy-results.sarif"
 
       - name: Upload Trivy scan results for Web
         if: needs.build-web.result == 'success'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'web-trivy-results.sarif'
-          category: 'web-image'
+          sarif_file: "web-trivy-results.sarif"
+          category: "web-image"
