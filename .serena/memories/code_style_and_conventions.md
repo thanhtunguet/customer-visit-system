@@ -1,53 +1,21 @@
 # Code Style and Conventions
 
-## Python Code Style
-- **Type Hints**: Extensive use of typing annotations (from `__future__ import annotations`)
-- **Pydantic Models**: Used for request/response validation and serialization
-- **SQLAlchemy**: Declarative base models with proper relationships
-- **Async/Await**: Async patterns throughout FastAPI application
-- **Enums**: Python enums for constants (CameraType, UserRole, etc.)
-- **Password Hashing**: Passlib with bcrypt context
-- **UUID Generation**: String-based UUIDs for primary keys
-- **Timestamps**: UTC datetime with auto-update patterns
+## Python (Backend)
 
-## Python Naming Conventions
-- **Variables/Functions**: snake_case
-- **Classes**: PascalCase
-- **Constants**: UPPER_SNAKE_CASE
-- **Files/Modules**: snake_case
-- **Database Tables**: snake_case with descriptive names
+- **Formatting**: The Python codebase is formatted using `black`. To format the code, run:
+  ```bash
+  make fmt
+  ```
+- **Linting**: There is currently no linter configured. It is recommended to set up a linter like `ruff` or `flake8` to ensure code quality. A placeholder `lint` command exists in the `Makefile`.
+- **Type Hinting**: The codebase uses Python's type hints, and they should be used for all new code.
+- **Docstrings**: (Not specified, but it is good practice to add docstrings to public modules, classes, and functions).
 
-## Database Conventions
-- **Primary Keys**: String-based UUIDs (64 chars)
-- **Foreign Keys**: Proper CASCADE relationships
-- **Timestamps**: created_at, updated_at with auto-management
-- **Enums**: PostgreSQL enums for constrained values
-- **Indexes**: Proper indexing for performance
-- **RLS**: Row Level Security for multi-tenancy
+## TypeScript/JavaScript (Frontend)
 
-## TypeScript/React Conventions
-- **Components**: PascalCase functional components
-- **Props**: Interface definitions with proper typing
-- **Hooks**: React hooks pattern with proper dependency arrays
-- **Styling**: Tailwind CSS classes with Ant Design components
-- **File Structure**: Feature-based organization
+- **Formatting**: The frontend codebase formatting is managed by Prettier, which is often integrated into IDEs and run on save. Configuration for Prettier might be in `package.json` or a dedicated configuration file.
+- **Linting**: ESLint is typically used in React projects, but a configuration file is not immediately visible. It's recommended to add a linting step to the `package.json` scripts.
 
-## API Conventions
-- **REST Endpoints**: Proper HTTP verbs and status codes
-- **Request/Response**: Pydantic models for validation
-- **Error Handling**: Structured error responses
-- **Authentication**: JWT Bearer tokens with role-based access
-- **Versioning**: /v1 prefix for API endpoints
+## Naming Conventions
 
-## Docker Conventions
-- **Multi-stage Builds**: Separate build and runtime stages
-- **Multi-arch**: arm64 and amd64 support
-- **Health Checks**: Proper health check endpoints
-- **Security**: Non-root users in containers
-
-## Testing Conventions
-- **File Names**: test_*.py pattern
-- **Fixtures**: pytest fixtures for setup/teardown
-- **Async Tests**: pytest-asyncio for async test functions
-- **Mocking**: pytest-mock for dependency mocking
-- **Coverage**: Aim for 80%+ test coverage
+- **Python**: Follows PEP 8 conventions (e.g., `snake_case` for variables and functions, `PascalCase` for classes).
+- **TypeScript**: Follows standard TypeScript conventions (e.g., `camelCase` for variables and functions, `PascalCase` for components and types).

@@ -119,7 +119,8 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
         token = mint_jwt(
             sub=user.username,
             role=user.role.value,
-            tenant_id=effective_tenant_id
+            tenant_id=effective_tenant_id,
+            site_id=user.site_id
         )
         return TokenResponse(access_token=token)
 
@@ -140,7 +141,8 @@ async def switch_view(
     token = mint_jwt(
         sub=user.username,
         role=user.role.value,
-        tenant_id=payload.target_tenant_id
+        tenant_id=payload.target_tenant_id,
+        site_id=user.site_id
     )
     return TokenResponse(access_token=token)
 
@@ -207,6 +209,19 @@ async def create_user(
             detail="System admin users cannot be assigned to a tenant"
         )
     
+    # Validate site_id for site managers
+    if user_data.role == UserRole.SITE_MANAGER and not user_data.site_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="site_id is required for site manager users"
+        )
+    
+    if user_data.role != UserRole.SITE_MANAGER and user_data.site_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="site_id can only be assigned to site manager users"
+        )
+    
     # Check if username or email already exists
     existing_user = db.query(User).filter(
         (User.username == user_data.username) | (User.email == user_data.email)
@@ -223,6 +238,7 @@ async def create_user(
         last_name=user_data.last_name,
         role=user_data.role,
         tenant_id=user_data.tenant_id,
+        site_id=user_data.site_id,
         is_active=user_data.is_active,
         created_by=admin.user_id
     )
@@ -271,6 +287,17 @@ async def update_user(
         
         if user_data.role == UserRole.SYSTEM_ADMIN and (user_data.tenant_id or user.tenant_id):
             user_data.tenant_id = None  # Clear tenant_id for system admin
+            user_data.site_id = None  # Clear site_id for system admin
+        
+        # Validate site_id for site managers
+        if user_data.role == UserRole.SITE_MANAGER and not (user_data.site_id or user.site_id):
+            raise HTTPException(
+                status_code=400, 
+                detail="site_id is required for site manager users"
+            )
+        
+        if user_data.role != UserRole.SITE_MANAGER and (user_data.site_id or user.site_id):
+            user_data.site_id = None  # Clear site_id for non-site-manager roles
     
     # Check for unique constraints if username or email is being changed
     if user_data.username and user_data.username != user.username:

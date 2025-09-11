@@ -87,6 +87,7 @@ class UserCreate(BaseModel):
     password: str
     role: UserRole
     tenant_id: Optional[str] = None  # Required for non-system_admin roles
+    site_id: Optional[int] = None  # Required for site_manager role
     is_active: bool = True
 
 
@@ -97,6 +98,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     role: Optional[UserRole] = None
     tenant_id: Optional[str] = None
+    site_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -114,6 +116,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: UserRole
     tenant_id: Optional[str]
+    site_id: Optional[int]
     is_active: bool
     is_email_verified: bool
     last_login: Optional[datetime]

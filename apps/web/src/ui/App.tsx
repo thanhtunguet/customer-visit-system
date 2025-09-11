@@ -4,7 +4,7 @@ import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
 import { TenantProvider } from '../contexts/TenantContext';
-import { SystemAdminRoute } from '../components/RoleBasedRoute';
+import { SystemAdminRoute, TenantManagementRoute, SiteManagementRoute, TenantAdminRoute } from '../components/RoleBasedRoute';
 import { Dashboard } from '../pages/Dashboard';
 import { Sites } from '../pages/Sites';
 import { Cameras } from '../pages/Cameras';
@@ -65,23 +65,65 @@ export function App() {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="sites" element={<Sites />} />
+              <Route 
+                path="sites" 
+                element={
+                  <SiteManagementRoute>
+                    <Sites />
+                  </SiteManagementRoute>
+                } 
+              />
               
               {/* Implemented pages */}
-              <Route path="cameras" element={<Cameras />} />
-              <Route path="workers" element={<Workers />} />
-              <Route path="staff" element={<StaffPage />} />
-              <Route path="customers" element={<Customers />} />
+              <Route 
+                path="cameras" 
+                element={
+                  <TenantAdminRoute>
+                    <Cameras />
+                  </TenantAdminRoute>
+                } 
+              />
+              <Route 
+                path="workers" 
+                element={
+                  <TenantAdminRoute>
+                    <Workers />
+                  </TenantAdminRoute>
+                } 
+              />
+              <Route 
+                path="staff" 
+                element={
+                  <TenantAdminRoute>
+                    <StaffPage />
+                  </TenantAdminRoute>
+                } 
+              />
+              <Route 
+                path="customers" 
+                element={
+                  <TenantAdminRoute>
+                    <Customers />
+                  </TenantAdminRoute>
+                } 
+              />
               <Route path="visits" element={<VisitsPage />} />
               
               {/* Placeholder routes for other pages */}
-              <Route path="reports" element={<Reports />} />
+              <Route 
+                path="reports" 
+                element={
+                  <TenantAdminRoute>
+                    <Reports />
+                  </TenantAdminRoute>
+                } 
+              />
               <Route 
                 path="tenants" 
                 element={
-                  <SystemAdminRoute>
+                  <TenantManagementRoute>
                     <TenantsPage />
-                  </SystemAdminRoute>
+                  </TenantManagementRoute>
                 } 
               />
               <Route 
@@ -92,7 +134,14 @@ export function App() {
                   </SystemAdminRoute>
                 } 
               />
-              <Route path="api-keys" element={<ApiKeys />} />
+              <Route 
+                path="api-keys" 
+                element={
+                  <TenantAdminRoute>
+                    <ApiKeys />
+                  </TenantAdminRoute>
+                } 
+              />
             </Route>
 
             {/* Catch all route */}
