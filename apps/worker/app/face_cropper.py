@@ -12,7 +12,7 @@ Provides robust face cropping with:
 import logging
 import os
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -36,12 +36,12 @@ class FaceCropper:
 
     def __init__(
         self,
-        min_face_size: int = None,
-        crop_margin_pct: float = None,
-        target_size: int = None,
-        primary_face_strategy: str = None,
-        max_face_ratio: float = None,
-        preserve_aspect: bool = None,
+        min_face_size: Optional[int] = None,
+        crop_margin_pct: Optional[float] = None,
+        target_size: Optional[int] = None,
+        primary_face_strategy: Optional[str] = None,
+        max_face_ratio: Optional[float] = None,
+        preserve_aspect: Optional[bool] = None,
     ):
         """
         Initialize face cropper with configurable parameters

@@ -11,7 +11,7 @@ try:
 except ImportError:
     MINIO_AVAILABLE = False
 
-    class Minio:
+    class MockMinio:
         def __init__(self, *args, **kwargs):
             pass
 
@@ -24,21 +24,28 @@ except ImportError:
         def set_bucket_lifecycle(self, bucket, config):
             pass
 
-    class LifecycleConfig:
+    class MockLifecycleConfig:
         def __init__(self, *args):
             pass
 
-    class Rule:
+    class MockRule:
         def __init__(self, *args, **kwargs):
             pass
 
-    class Expiration:
+    class MockExpiration:
         def __init__(self, *args):
             pass
 
-    class Filter:
+    class MockFilter:
         def __init__(self, *args, **kwargs):
             pass
+
+    # Assign mock classes to original names
+    Minio = MockMinio  # type: ignore[misc,assignment]
+    LifecycleConfig = MockLifecycleConfig  # type: ignore[misc,assignment]
+    Rule = MockRule  # type: ignore[misc,assignment]
+    Expiration = MockExpiration  # type: ignore[misc,assignment]
+    Filter = MockFilter  # type: ignore[misc,assignment]
 
 
 from .config import settings

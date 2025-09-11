@@ -23,7 +23,7 @@ except Exception as e:
     MILVUS_AVAILABLE = False
 
     # Mock classes for development
-    class Collection:
+    class MockCollection:
         def __init__(self, *args, **kwargs):
             pass
 
@@ -45,20 +45,20 @@ except Exception as e:
         def flush(self):
             pass
 
-    class DataType:
+    class MockDataType:
         INT64 = "INT64"
         VARCHAR = "VARCHAR"
         FLOAT_VECTOR = "FLOAT_VECTOR"
 
-    class FieldSchema:
+    class MockFieldSchema:
         def __init__(self, *args, **kwargs):
             pass
 
-    class CollectionSchema:
+    class MockCollectionSchema:
         def __init__(self, *args, **kwargs):
             pass
 
-    class connections:
+    class MockConnections:
         @staticmethod
         def connect(*args, **kwargs):
             pass
@@ -67,10 +67,18 @@ except Exception as e:
         def disconnect(*args, **kwargs):
             pass
 
-    class utility:
+    class MockUtility:
         @staticmethod
         def has_collection(*args, **kwargs):
             return False
+
+    # Assign mock classes to original names
+    Collection = MockCollection  # type: ignore[misc,assignment]
+    DataType = MockDataType  # type: ignore[misc,assignment]
+    FieldSchema = MockFieldSchema  # type: ignore[misc,assignment]
+    CollectionSchema = MockCollectionSchema  # type: ignore[misc,assignment]
+    connections = MockConnections  # type: ignore[misc,assignment]
+    utility = MockUtility  # type: ignore[misc,assignment]
 
 
 logger = logging.getLogger(__name__)

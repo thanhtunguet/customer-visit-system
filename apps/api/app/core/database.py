@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -113,7 +113,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-def get_db() -> Session:
+def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency for synchronous database sessions (for auth endpoints)"""
     session = db.sync_session_maker()
     try:

@@ -34,13 +34,15 @@ class WorkerCommandMessage:
     def __post_init__(self):
         if self.created_at is None:
             self.created_at = datetime.utcnow()
-        if self.expires_at is None:
+        if self.expires_at is None and self.created_at is not None:
             # Default expiry: 5 minutes for normal commands, 1 minute for urgent
             minutes = 1 if self.priority == CommandPriority.URGENT else 5
             self.expires_at = self.created_at + timedelta(minutes=minutes)
 
     def is_expired(self) -> bool:
         """Check if command has expired"""
+        if self.expires_at is None:
+            return False
         return datetime.utcnow() > self.expires_at
 
     def can_retry(self) -> bool:
@@ -55,7 +57,7 @@ class WorkerCommandMessage:
             "command": self.command.value,
             "parameters": self.parameters or {},
             "priority": self.priority.value,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "status": self.status,
             "requested_by": self.requested_by,
@@ -84,7 +86,7 @@ class WorkerCommandService:
         self.cleanup_interval = 60  # seconds
 
         # Callbacks for command events
-        self.command_callbacks: List[callable] = []
+        self.command_callbacks: List[Callable] = []
 
     async def start(self):
         """Start the command service"""
@@ -139,7 +141,7 @@ class WorkerCommandService:
         )
 
         # Set custom timeout if provided
-        if timeout_minutes:
+        if timeout_minutes and command_msg.created_at:
             command_msg.expires_at = command_msg.created_at + timedelta(
                 minutes=timeout_minutes
             )
@@ -301,7 +303,7 @@ class WorkerCommandService:
             commands.extend(list(self.command_history[worker_id]))
 
         # Sort by creation time (newest first)
-        commands.sort(key=lambda x: x.created_at, reverse=True)
+        commands.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
         return commands
 
     def cancel_command(
