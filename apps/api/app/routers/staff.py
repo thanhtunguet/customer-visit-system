@@ -14,10 +14,16 @@ from ..core.milvus_client import milvus_client
 from ..core.minio_client import minio_client
 from ..core.security import get_current_user
 from ..models.database import Staff, StaffFaceImage
-from ..schemas import (FaceRecognitionTestRequest, FaceRecognitionTestResponse,
-                       StaffCreate, StaffFaceImageBulkCreate,
-                       StaffFaceImageCreate, StaffFaceImageResponse,
-                       StaffResponse, StaffWithFacesResponse)
+from ..schemas import (
+    FaceRecognitionTestRequest,
+    FaceRecognitionTestResponse,
+    StaffCreate,
+    StaffFaceImageBulkCreate,
+    StaffFaceImageCreate,
+    StaffFaceImageResponse,
+    StaffResponse,
+    StaffWithFacesResponse,
+)
 from ..services.face_processing_service import face_processing_service
 from ..services.face_service import staff_service
 

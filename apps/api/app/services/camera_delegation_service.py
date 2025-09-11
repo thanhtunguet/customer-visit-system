@@ -36,8 +36,10 @@ class CameraDelegationService:
         Only one camera per worker, and one worker per camera.
         """
         # Import structured logging
-        from ..core.correlation import (get_or_create_correlation_id,
-                                        get_structured_logger)
+        from ..core.correlation import (
+            get_or_create_correlation_id,
+            get_structured_logger,
+        )
 
         struct_logger = get_structured_logger(__name__)
         correlation_id = get_or_create_correlation_id()
@@ -183,8 +185,7 @@ class CameraDelegationService:
 
                 # Send ASSIGN_CAMERA command to worker to start processing
                 try:
-                    from common.enums.commands import (CommandPriority,
-                                                       WorkerCommand)
+                    from common.enums.commands import CommandPriority, WorkerCommand
 
                     from .worker_command_service import worker_command_service
 
@@ -223,8 +224,7 @@ class CameraDelegationService:
                     try:
                         from datetime import datetime
 
-                        from .camera_status_broadcaster import \
-                            camera_status_broadcaster
+                        from .camera_status_broadcaster import camera_status_broadcaster
 
                         status_data = {
                             "camera_id": camera.camera_id,

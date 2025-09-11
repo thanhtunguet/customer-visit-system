@@ -200,8 +200,7 @@ class WorkerShutdownService:
                 # Broadcast worker update with task manager
                 try:
                     from ..core.task_manager import create_broadcast_task
-                    from ..routers.workers import \
-                        broadcast_worker_status_update
+                    from ..routers.workers import broadcast_worker_status_update
 
                     create_broadcast_task(
                         broadcast_worker_status_update(worker, worker.tenant_id),
@@ -250,8 +249,7 @@ class WorkerShutdownService:
                 # Broadcast worker update for timeout with task manager
                 try:
                     from ..core.task_manager import create_broadcast_task
-                    from ..routers.workers import \
-                        broadcast_worker_status_update
+                    from ..routers.workers import broadcast_worker_status_update
 
                     create_broadcast_task(
                         broadcast_worker_status_update(worker, worker.tenant_id),

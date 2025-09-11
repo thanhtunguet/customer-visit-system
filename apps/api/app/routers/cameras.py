@@ -8,8 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import db, get_db_session
 from ..core.security import get_current_user, get_current_user_for_stream
 from ..models.database import Camera
-from ..schemas import (CameraCreate, CameraResponse, WebcamInfo,
-                       WebcamListResponse)
+from ..schemas import CameraCreate, CameraResponse, WebcamInfo, WebcamListResponse
 from ..services.camera_diagnostics import camera_diagnostics
 from ..services.camera_proxy_service import camera_proxy_service
 
@@ -358,8 +357,7 @@ async def start_camera_processing(
         raise HTTPException(status_code=400, detail="Camera is not active")
 
     # Find worker assigned to this camera
-    from app.services.camera_delegation_service import \
-        camera_delegation_service
+    from app.services.camera_delegation_service import camera_delegation_service
     from app.services.worker_command_service import worker_command_service
     from common.enums.commands import CommandPriority, WorkerCommand
 
@@ -418,8 +416,7 @@ async def stop_camera_processing(
         raise HTTPException(status_code=404, detail="Camera not found")
 
     # Find worker assigned to this camera
-    from app.services.camera_delegation_service import \
-        camera_delegation_service
+    from app.services.camera_delegation_service import camera_delegation_service
     from app.services.worker_command_service import worker_command_service
     from common.enums.commands import CommandPriority, WorkerCommand
 

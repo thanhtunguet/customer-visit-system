@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..core.security import get_current_user
-from ..services.background_jobs import (BackgroundJob, JobStatus,
-                                        background_job_service)
+from ..services.background_jobs import BackgroundJob, JobStatus, background_job_service
 
 router = APIRouter(prefix="/v1", tags=["Background Jobs"])
 logger = logging.getLogger(__name__)

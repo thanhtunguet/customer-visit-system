@@ -18,8 +18,11 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 import pytest
-from apps.api.app.services.face_cropper import (FaceCropper, PrimaryFaceStrategy,
-                                       api_face_cropper)
+from apps.api.app.services.face_cropper import (
+    FaceCropper,
+    PrimaryFaceStrategy,
+    api_face_cropper,
+)
 from apps.api.app.services.face_processing_service import FaceProcessingService
 
 

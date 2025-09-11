@@ -23,6 +23,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("fastapi"):
             logger.info("✓ FastAPI available")
         else:
@@ -34,6 +35,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("sqlalchemy"):
             logger.info("✓ SQLAlchemy available")
         else:
@@ -56,6 +58,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("common.models"):
             logger.info("✓ pkg_common.models available")
         else:

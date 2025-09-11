@@ -23,8 +23,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from common.enums.worker import WorkerStatus
-from fastapi import (APIRouter, Depends, HTTPException, Request, WebSocket,
-                     WebSocketDisconnect)
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession

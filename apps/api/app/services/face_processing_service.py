@@ -231,7 +231,9 @@ class FaceProcessingService:
                 )
 
                 # Face proportions
-                face_width = max(landmark[0] for landmark in landmarks) - min(landmark[0] for landmark in landmarks)
+                face_width = max(landmark[0] for landmark in landmarks) - min(
+                    landmark[0] for landmark in landmarks
+                )
                 face_height = max(landmark[1] for landmark in landmarks) - min(
                     landmark[1] for landmark in landmarks
                 )

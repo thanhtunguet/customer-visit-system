@@ -27,8 +27,12 @@ import cv2
 import httpx
 import numpy as np
 import websockets
-from aiortc import (RTCIceCandidate, RTCPeerConnection, RTCSessionDescription,
-                    VideoStreamTrack)
+from aiortc import (
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
+    VideoStreamTrack,
+)
 from websockets.exceptions import ConnectionClosed
 
 from .camera_manager import CameraManager

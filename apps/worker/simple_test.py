@@ -13,6 +13,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("cv2"):
             print("✅ OpenCV imported successfully")
     except ImportError as e:
@@ -21,6 +22,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("numpy"):
             print("✅ NumPy imported successfully")
     except ImportError as e:
@@ -29,6 +31,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("httpx"):
             print("✅ httpx imported successfully")
     except ImportError as e:
@@ -37,6 +40,7 @@ def test_imports():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("pydantic"):
             print("✅ Pydantic imported successfully")
     except ImportError as e:
@@ -46,6 +50,7 @@ def test_imports():
     # Test optional InsightFace
     try:
         import importlib.util
+
         if importlib.util.find_spec("insightface"):
             print("✅ InsightFace imported successfully")
     except ImportError as e:
@@ -63,12 +68,14 @@ def test_worker_modules():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("app.detectors"):
             print("✅ Detectors module imported")
 
         # Test detector creation
         try:
             from app.detectors import create_detector
+
             mock_detector = create_detector("mock")
             print(f"✅ Mock detector created: {type(mock_detector).__name__}")
 
@@ -83,17 +90,21 @@ def test_worker_modules():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("app.embedder"):
             print("✅ Embedder module imported")
 
         # Test embedder creation
         try:
             from app.embedder import create_embedder
+
             mock_embedder = create_embedder("mock")
             print(f"✅ Mock embedder created: {type(mock_embedder).__name__}")
 
             insightface_embedder = create_embedder("insightface")
-            print(f"✅ InsightFace embedder created: {type(insightface_embedder).__name__}")
+            print(
+                f"✅ InsightFace embedder created: {type(insightface_embedder).__name__}"
+            )
         except ImportError:
             print("⚠️ Could not import create_embedder")
 
@@ -103,12 +114,14 @@ def test_worker_modules():
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("app.main"):
             print("✅ Main module imported")
-            
+
             # Test configuration if module available
             try:
                 from app.main import WorkerConfig
+
                 config = WorkerConfig()
                 print(f"✅ Worker config created: mock_mode={config.mock_mode}")
             except ImportError:

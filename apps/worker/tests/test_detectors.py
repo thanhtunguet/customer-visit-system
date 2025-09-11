@@ -1,7 +1,6 @@
 import numpy as np
 
-from apps.worker.app.detectors import (MockDetector, YuNetDetector,
-                                       create_detector)
+from apps.worker.app.detectors import MockDetector, YuNetDetector, create_detector
 
 
 def test_mock_detector():

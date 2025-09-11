@@ -11,15 +11,27 @@ from uuid import uuid4
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from ..core.correlation import (get_or_create_correlation_id,
-                                get_structured_logger, set_correlation_id)
+from ..core.correlation import (
+    get_or_create_correlation_id,
+    get_structured_logger,
+    set_correlation_id,
+)
 from ..core.database import get_db
 from ..services.assignment_service import assignment_service
 from ..services.worker_registry import WorkerStatus, worker_registry
-from .ws_protocol import (AckMessage, CameraSource, EventMessage,
-                          HeartbeatMessage, IntentStatus, MessageType,
-                          RegisterMessage, SourceType, create_start_message,
-                          parse_message, serialize_message)
+from .ws_protocol import (
+    AckMessage,
+    CameraSource,
+    EventMessage,
+    HeartbeatMessage,
+    IntentStatus,
+    MessageType,
+    RegisterMessage,
+    SourceType,
+    create_start_message,
+    parse_message,
+    serialize_message,
+)
 
 logger = get_structured_logger(__name__)
 

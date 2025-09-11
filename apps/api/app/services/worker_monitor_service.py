@@ -151,9 +151,11 @@ class WorkerMonitorService:
             # Import here to avoid circular imports
             import json
 
-            from ..routers.workers import (calculate_uptime_minutes,
-                                           connection_manager,
-                                           is_worker_healthy)
+            from ..routers.workers import (
+                calculate_uptime_minutes,
+                connection_manager,
+                is_worker_healthy,
+            )
 
             for tenant_id, worker_ids in workers_by_tenant.items():
                 # Get updated worker data

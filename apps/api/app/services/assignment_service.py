@@ -11,8 +11,7 @@ from uuid import uuid4
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.correlation import (get_or_create_correlation_id,
-                                get_structured_logger)
+from ..core.correlation import get_or_create_correlation_id, get_structured_logger
 from ..models.database import Camera, CameraSession
 from .worker_registry import WorkerStatus, worker_registry
 

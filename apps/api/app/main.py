@@ -13,9 +13,21 @@ from .core.middleware import tenant_context_middleware
 from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .core.task_manager import task_manager
-from .routers import (auth, cameras, customers, events, files, health, jobs,
-                      lease_management, sites, staff, tenants, webrtc_signaling,
-                      workers_consolidated)
+from .routers import (
+    auth,
+    cameras,
+    customers,
+    events,
+    files,
+    health,
+    jobs,
+    lease_management,
+    sites,
+    staff,
+    tenants,
+    webrtc_signaling,
+    workers_consolidated,
+)
 from .services.camera_delegation_service import camera_delegation_service
 from .services.camera_proxy_service import camera_proxy_service
 from .services.worker_command_service import worker_command_service

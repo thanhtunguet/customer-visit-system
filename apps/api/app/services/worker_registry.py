@@ -298,8 +298,7 @@ class WorkerRegistry:
                 )
 
                 # Import here to avoid circular import
-                from .camera_delegation_service import \
-                    camera_delegation_service
+                from .camera_delegation_service import camera_delegation_service
 
                 camera = await camera_delegation_service.assign_camera_to_worker(
                     db=db_session,
@@ -624,8 +623,7 @@ class WorkerRegistry:
         if worker.camera_id:
             try:
                 # Import here to avoid circular import
-                from .camera_delegation_service import \
-                    camera_delegation_service
+                from .camera_delegation_service import camera_delegation_service
 
                 camera_id = camera_delegation_service.release_camera_from_worker(
                     worker_id

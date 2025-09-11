@@ -8,13 +8,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db, get_db_session
-from ..core.security import (get_current_active_user, get_tenant_context,
-                             mint_jwt, require_system_admin)
+from ..core.security import (
+    get_current_active_user,
+    get_tenant_context,
+    mint_jwt,
+    require_system_admin,
+)
 from ..models.database import ApiKey, User, UserRole
-from ..schemas import (ApiKeyCreate, ApiKeyCreateResponse, ApiKeyResponse,
-                       ApiKeyUpdate, TokenRequest, TokenResponse, UserCreate,
-                       UserPasswordUpdate, UserResponse, UserUpdate,
-                       ViewSwitchRequest)
+from ..schemas import (
+    ApiKeyCreate,
+    ApiKeyCreateResponse,
+    ApiKeyResponse,
+    ApiKeyUpdate,
+    TokenRequest,
+    TokenResponse,
+    UserCreate,
+    UserPasswordUpdate,
+    UserResponse,
+    UserUpdate,
+    ViewSwitchRequest,
+)
 
 router = APIRouter(prefix="/v1", tags=["Authentication"])
 

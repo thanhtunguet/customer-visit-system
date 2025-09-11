@@ -21,16 +21,18 @@ class Database:
                 True if getattr(settings, "log_level", "INFO") == "DEBUG" else False
             ),
         }
-        
+
         # PostgreSQL-specific settings (not supported by SQLite)
         if not settings.database_url.startswith("sqlite"):
-            engine_kwargs.update({
-                "pool_recycle": 300,
-                "pool_size": 10,  # Limit concurrent connections
-                "max_overflow": 20,  # Allow temporary overflow
-                "pool_timeout": 30,  # Timeout for getting connections
-            })
-        
+            engine_kwargs.update(
+                {
+                    "pool_recycle": 300,
+                    "pool_size": 10,  # Limit concurrent connections
+                    "max_overflow": 20,  # Allow temporary overflow
+                    "pool_timeout": 30,  # Timeout for getting connections
+                }
+            )
+
         self.engine = create_async_engine(
             settings.database_url,
             **engine_kwargs,
@@ -45,7 +47,7 @@ class Database:
         sync_url = settings.database_url.replace(
             "postgresql+asyncpg://", "postgresql+psycopg2://"
         )
-        
+
         # Configure sync engine based on database type
         sync_engine_kwargs = {
             "pool_pre_ping": True,
@@ -53,16 +55,18 @@ class Database:
                 True if getattr(settings, "log_level", "INFO") == "DEBUG" else False
             ),
         }
-        
+
         # PostgreSQL-specific settings (not supported by SQLite)
         if not sync_url.startswith("sqlite"):
-            sync_engine_kwargs.update({
-                "pool_recycle": 300,
-                "pool_size": 5,  # Smaller pool for sync operations
-                "max_overflow": 10,
-                "pool_timeout": 30,
-            })
-        
+            sync_engine_kwargs.update(
+                {
+                    "pool_recycle": 300,
+                    "pool_size": 5,  # Smaller pool for sync operations
+                    "max_overflow": 10,
+                    "pool_timeout": 30,
+                }
+            )
+
         self.sync_engine = create_engine(
             sync_url,
             **sync_engine_kwargs,

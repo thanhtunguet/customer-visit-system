@@ -15,8 +15,14 @@ try:
         warnings.filterwarnings(
             "ignore", category=UserWarning, message="pkg_resources is deprecated.*"
         )
-        from pymilvus import (Collection, CollectionSchema, DataType,
-                              FieldSchema, connections, utility)
+        from pymilvus import (
+            Collection,
+            CollectionSchema,
+            DataType,
+            FieldSchema,
+            connections,
+            utility,
+        )
     MILVUS_AVAILABLE = True
 except Exception as e:
     logger.warning(f"Milvus not available: {e}. Using mock implementation.")
