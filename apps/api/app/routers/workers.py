@@ -6,14 +6,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Request,
-    WebSocket,
-    WebSocketDisconnect,
-)
+from fastapi import (APIRouter, Depends, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +16,8 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db, get_db_session
 from ..core.security import get_current_user
 from ..models.database import Camera, Worker
-from ..services.worker_shutdown_service import ShutdownSignal, worker_shutdown_service
+from ..services.worker_shutdown_service import (ShutdownSignal,
+                                                worker_shutdown_service)
 
 logger = logging.getLogger(__name__)
 
@@ -1063,7 +1058,8 @@ async def receive_worker_stop_signal(
 
         # Also trigger cleanup in camera delegation service
         try:
-            from ..services.camera_delegation_service import camera_delegation_service
+            from ..services.camera_delegation_service import \
+                camera_delegation_service
 
             camera_delegation_service.release_camera_from_worker(worker_id)
             logger.info(

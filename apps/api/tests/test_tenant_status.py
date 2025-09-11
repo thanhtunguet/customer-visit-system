@@ -1,17 +1,10 @@
 import pytest
-from apps.api.app.core.security import mint_jwt
-from apps.api.app.models.database import (
-    ApiKey,
-    Camera,
-    Customer,
-    Site,
-    Staff,
-    StaffFaceImage,
-    Tenant,
-    Visit,
-)
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from apps.api.app.core.security import mint_jwt
+from apps.api.app.models.database import (ApiKey, Camera, Customer, Site,
+                                          Staff, StaffFaceImage, Tenant, Visit)
 
 
 @pytest.mark.asyncio

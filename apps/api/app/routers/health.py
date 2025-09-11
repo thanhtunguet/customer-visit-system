@@ -28,7 +28,8 @@ async def health_milvus():
 async def health_face_processing():
     """Check if face processing dependencies are available."""
     try:
-        from ..services.face_processing_service import FACE_PROCESSING_AVAILABLE
+        from ..services.face_processing_service import \
+            FACE_PROCESSING_AVAILABLE
 
         return {
             "face_processing_available": FACE_PROCESSING_AVAILABLE,

@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from common.models import FaceDetectedEvent
 
-from apps.api.app.services.face_service import FaceMatchingService, StaffService
+from apps.api.app.services.face_service import (FaceMatchingService,
+                                                StaffService)
 
 
 @pytest.fixture

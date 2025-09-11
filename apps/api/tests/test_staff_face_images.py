@@ -7,7 +7,8 @@ import pytest
 from httpx import AsyncClient
 
 from apps.api.app.models.database import Staff, StaffFaceImage
-from apps.api.app.services.face_processing_service import face_processing_service
+from apps.api.app.services.face_processing_service import \
+    face_processing_service
 
 
 @pytest.mark.asyncio

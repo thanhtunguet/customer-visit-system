@@ -5,16 +5,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from common.models import FaceDetectedEvent
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
+                     UploadFile, status)
 from pydantic import BaseModel
 from sqlalchemy import and_, case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -170,7 +162,8 @@ async def process_uploaded_images(
             # Convert to base64 for the face processing service
             import base64
 
-            from ..services.face_processing_service import face_processing_service
+            from ..services.face_processing_service import \
+                face_processing_service
 
             base64_image = base64.b64encode(image_data).decode("utf-8")
             base64_image = f"data:image/jpeg;base64,{base64_image}"

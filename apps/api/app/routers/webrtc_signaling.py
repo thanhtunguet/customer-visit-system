@@ -26,7 +26,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from common.enums.worker import WorkerStatus
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (APIRouter, Depends, HTTPException, WebSocket,
+                     WebSocketDisconnect)
 from pydantic import BaseModel, Field
 
 from ..core.security import get_current_user, verify_jwt

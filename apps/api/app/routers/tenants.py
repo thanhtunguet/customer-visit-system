@@ -6,18 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import db, get_db_session
 from ..core.security import get_current_user
-from ..models.database import (
-    ApiKey,
-    Camera,
-    Customer,
-    Site,
-    Staff,
-    StaffFaceImage,
-    Tenant,
-    UserRole,
-    Visit,
-)
-from ..schemas import TenantCreate, TenantResponse, TenantStatusUpdate, TenantUpdate
+from ..models.database import (ApiKey, Camera, Customer, Site, Staff,
+                               StaffFaceImage, Tenant, UserRole, Visit)
+from ..schemas import (TenantCreate, TenantResponse, TenantStatusUpdate,
+                       TenantUpdate)
 
 router = APIRouter(prefix="/v1", tags=["Tenant Management"])
 

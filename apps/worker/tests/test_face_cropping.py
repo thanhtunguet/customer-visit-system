@@ -17,6 +17,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 import pytest
+
 from apps.worker.app.face_cropper import FaceCropper, PrimaryFaceStrategy
 
 

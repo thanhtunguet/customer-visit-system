@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import cv2
 import logging
 import os
 import signal
@@ -9,6 +8,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import cv2
 import httpx
 import numpy as np
 from common.models import FaceDetectedEvent

@@ -6,7 +6,8 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from ..core.config import settings
-from ..models.database import Base, Camera, CameraType, Site, Tenant, User, UserRole
+from ..models.database import (Base, Camera, CameraType, Site, Tenant, User,
+                               UserRole)
 
 logger = logging.getLogger(__name__)
 

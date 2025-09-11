@@ -10,7 +10,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.correlation import get_or_create_correlation_id, get_structured_logger
+from ..core.correlation import (get_or_create_correlation_id,
+                                get_structured_logger)
 from ..core.database import get_db
 from ..models.database import CameraSession
 from ..services.assignment_service import assignment_service

@@ -10,7 +10,8 @@ import httpx
 import numpy as np
 import pytest
 
-from apps.worker.app.main import FaceDetectedEvent, FaceRecognitionWorker, WorkerConfig
+from apps.worker.app.main import (FaceDetectedEvent, FaceRecognitionWorker,
+                                  WorkerConfig)
 
 
 @pytest.fixture
