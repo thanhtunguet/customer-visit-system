@@ -1,8 +1,7 @@
-from .models import FaceDetectedEvent, VisitRecord, CustomerProfile
+from .models import CustomerProfile, FaceDetectedEvent, VisitRecord
 
 __all__ = [
     "FaceDetectedEvent",
     "VisitRecord",
     "CustomerProfile",
 ]
-

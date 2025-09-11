@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import sys
-import os
-sys.path.insert(0, '.')
+
+sys.path.insert(0, ".")
+
+import uuid
 
 from passlib.context import CryptContext
-import uuid
 
 # Initialize password context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

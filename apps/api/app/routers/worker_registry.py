@@ -3,17 +3,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from common.enums.worker import WorkerStatus
+from fastapi import (APIRouter, Depends, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.database import get_db_session
 from ..core.security import get_current_user, verify_jwt
-from ..core.database import get_db, get_db_session
-from ..services.worker_registry import worker_registry, WorkerInfo
-from common.enums.worker import WorkerStatus
+from ..services.worker_registry import WorkerInfo, worker_registry
 
 logger = logging.getLogger(__name__)
 
@@ -25,28 +25,54 @@ class UserInfo(BaseModel):
 
 
 class WorkerRegistrationRequest(BaseModel):
-    worker_id: Optional[str] = Field(None, description="Persistent worker ID for reconnection")
+    worker_id: Optional[str] = Field(
+        None, description="Persistent worker ID for reconnection"
+    )
     worker_name: str = Field(..., description="Human-readable worker name")
     hostname: str = Field(..., description="Worker hostname")
     worker_version: Optional[str] = Field(None, description="Worker version")
-    capabilities: Optional[Dict[str, Any]] = Field(None, description="Worker capabilities")
+    capabilities: Optional[Dict[str, Any]] = Field(
+        None, description="Worker capabilities"
+    )
     site_id: Optional[int] = Field(None, description="Optional site assignment")
     camera_id: Optional[int] = Field(None, description="Optional camera assignment")
-    is_reconnection: Optional[bool] = Field(False, description="Flag indicating this is a reconnection")
+    is_reconnection: Optional[bool] = Field(
+        False, description="Flag indicating this is a reconnection"
+    )
 
 
 class WorkerHeartbeatRequest(BaseModel):
-    status: str = Field(..., description="Worker status: idle, processing, offline, error, maintenance")
-    faces_processed_count: Optional[int] = Field(0, description="Number of faces processed since last heartbeat")
-    error_message: Optional[str] = Field(None, description="Error message if status is error")
-    capabilities: Optional[Dict[str, Any]] = Field(None, description="Updated worker capabilities")
-    current_camera_id: Optional[int] = Field(None, description="Camera currently being processed by worker")
-    assigned_camera_id: Optional[int] = Field(None, description="Camera assigned to worker")
-    active_camera_streams: Optional[List[str]] = Field(None, description="List of actively streaming camera IDs")
-    total_active_streams: Optional[int] = Field(None, description="Total number of active camera streams")
-    active_camera_processing: Optional[List[str]] = Field(None, description="List of cameras currently processing faces")
-    total_active_processing: Optional[int] = Field(None, description="Total number of cameras processing faces")
-    
+    status: str = Field(
+        ..., description="Worker status: idle, processing, offline, error, maintenance"
+    )
+    faces_processed_count: Optional[int] = Field(
+        0, description="Number of faces processed since last heartbeat"
+    )
+    error_message: Optional[str] = Field(
+        None, description="Error message if status is error"
+    )
+    capabilities: Optional[Dict[str, Any]] = Field(
+        None, description="Updated worker capabilities"
+    )
+    current_camera_id: Optional[int] = Field(
+        None, description="Camera currently being processed by worker"
+    )
+    assigned_camera_id: Optional[int] = Field(
+        None, description="Camera assigned to worker"
+    )
+    active_camera_streams: Optional[List[str]] = Field(
+        None, description="List of actively streaming camera IDs"
+    )
+    total_active_streams: Optional[int] = Field(
+        None, description="Total number of active camera streams"
+    )
+    active_camera_processing: Optional[List[str]] = Field(
+        None, description="List of cameras currently processing faces"
+    )
+    total_active_processing: Optional[int] = Field(
+        None, description="Total number of cameras processing faces"
+    )
+
     def get_status_enum(self) -> WorkerStatus:
         """Convert string status to WorkerStatus enum"""
         return WorkerStatus.from_string(self.status)
@@ -88,28 +114,32 @@ router = APIRouter(prefix="/v1/registry", tags=["worker-registry"])
 class WorkerConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, set] = {}
-    
+
     async def connect(self, websocket: WebSocket, tenant_id: str):
         try:
-            logger.info(f"Attempting to accept WebSocket connection for tenant {tenant_id}")
+            logger.info(
+                f"Attempting to accept WebSocket connection for tenant {tenant_id}"
+            )
             await websocket.accept()
             logger.info(f"WebSocket accepted for tenant {tenant_id}")
-            
+
             if tenant_id not in self.active_connections:
                 self.active_connections[tenant_id] = set()
             self.active_connections[tenant_id].add(websocket)
-            logger.info(f"WebSocket added to connection pool for tenant {tenant_id}. Total connections: {len(self.active_connections[tenant_id])}")
-            
+            logger.info(
+                f"WebSocket added to connection pool for tenant {tenant_id}. Total connections: {len(self.active_connections[tenant_id])}"
+            )
+
         except Exception as e:
             logger.error(f"Failed to connect WebSocket for tenant {tenant_id}: {e}")
             raise
-    
+
     def disconnect(self, websocket: WebSocket, tenant_id: str):
         if tenant_id in self.active_connections:
             self.active_connections[tenant_id].discard(websocket)
             if not self.active_connections[tenant_id]:
                 del self.active_connections[tenant_id]
-    
+
     async def broadcast_to_tenant(self, tenant_id: str, message: dict):
         if tenant_id in self.active_connections:
             disconnected = []
@@ -118,16 +148,16 @@ class WorkerConnectionManager:
                     await websocket.send_json(message)
                 except:
                     disconnected.append(websocket)
-            
+
             # Remove disconnected websockets
             for ws in disconnected:
                 self.active_connections[tenant_id].discard(ws)
-    
+
     async def broadcast_worker_update(self, event_type: str, worker_info: WorkerInfo):
         message = {
             "type": event_type,
             "data": worker_info.to_dict(),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
         await self.broadcast_to_tenant(worker_info.tenant_id, message)
 
@@ -141,11 +171,11 @@ def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    
+
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip
-    
+
     return request.client.host if request.client else "unknown"
 
 
@@ -171,27 +201,28 @@ async def register_worker(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Register a new worker in the in-memory registry"""
-    
+
     # Only workers can register themselves
     current_user = UserInfo(**current_user_dict)
     if current_user.role not in ["worker", "system_admin", "tenant_admin"]:
         raise HTTPException(
-            status_code=403,
-            detail="Only workers or admins can register workers"
+            status_code=403, detail="Only workers or admins can register workers"
         )
-    
+
     client_ip = get_client_ip(request)
-    
+
     # Handle persistent worker ID for reconnections
     use_persistent_id = registration.worker_id and registration.is_reconnection
-    
+
     if use_persistent_id:
         logger.info(f"Worker reconnection attempt with ID: {registration.worker_id}")
-        
+
         # Check if worker with this ID already exists and update it
         existing_worker = worker_registry.get_worker(registration.worker_id)
         if existing_worker:
-            logger.info(f"Updating existing worker {registration.worker_id} for reconnection")
+            logger.info(
+                f"Updating existing worker {registration.worker_id} for reconnection"
+            )
             # Update existing worker info
             existing_worker.hostname = registration.hostname
             existing_worker.ip_address = client_ip
@@ -201,7 +232,7 @@ async def register_worker(
             existing_worker.site_id = registration.site_id
             existing_worker.status = WorkerStatus.ONLINE
             existing_worker.last_heartbeat = datetime.utcnow()
-            
+
             return {
                 "worker_id": existing_worker.worker_id,
                 "message": f"Worker reconnected successfully as {existing_worker.worker_name}",
@@ -209,7 +240,7 @@ async def register_worker(
                 "assigned_camera_id": existing_worker.camera_id,
                 "site_id": existing_worker.site_id,
             }
-    
+
     # Register new worker or worker with persistent ID
     worker = await worker_registry.register_worker(
         tenant_id=current_user.tenant_id,
@@ -223,7 +254,7 @@ async def register_worker(
         db_session=db,
         preferred_worker_id=registration.worker_id if use_persistent_id else None,
     )
-    
+
     status = "reconnected" if use_persistent_id else "registered"
     return {
         "worker_id": worker.worker_id,
@@ -241,21 +272,20 @@ async def send_heartbeat(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Send worker heartbeat to update status"""
-    
+
     # Only workers can send heartbeats
     current_user = UserInfo(**current_user_dict)
     if current_user.role not in ["worker", "system_admin"]:
         raise HTTPException(
-            status_code=403,
-            detail="Only workers or system admins can send heartbeats"
+            status_code=403, detail="Only workers or system admins can send heartbeats"
         )
-    
+
     # Update heartbeat
     try:
         status_enum = heartbeat.get_status_enum()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     worker = await worker_registry.update_worker_heartbeat(
         worker_id=worker_id,
         status=status_enum,
@@ -268,14 +298,16 @@ async def send_heartbeat(
         active_camera_processing=heartbeat.active_camera_processing,
         total_active_processing=heartbeat.total_active_processing,
     )
-    
+
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    
+
     # Verify worker belongs to current tenant
     if worker.tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=403, detail="Worker belongs to different tenant")
-    
+        raise HTTPException(
+            status_code=403, detail="Worker belongs to different tenant"
+        )
+
     return {
         "message": "Heartbeat received successfully",
         "status": worker.status,
@@ -292,9 +324,9 @@ async def list_workers(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """List all workers with their status"""
-    
+
     current_user = UserInfo(**current_user_dict)
-    
+
     # Convert status string to enum if provided
     status_enum = None
     if status:
@@ -302,7 +334,7 @@ async def list_workers(
             status_enum = WorkerStatus.from_string(status)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-    
+
     # Get workers from registry
     workers = worker_registry.list_workers(
         tenant_id=current_user.tenant_id,
@@ -310,33 +342,35 @@ async def list_workers(
         site_id=site_id,
         include_offline=include_offline,
     )
-    
+
     # Convert to response format
     worker_responses = []
     for worker in workers:
-        worker_responses.append(WorkerStatusResponse(
-            worker_id=worker.worker_id,
-            tenant_id=worker.tenant_id,
-            hostname=worker.hostname,
-            ip_address=worker.ip_address,
-            worker_name=worker.worker_name,
-            worker_version=worker.worker_version,
-            capabilities=worker.capabilities,
-            status=worker.status,
-            site_id=worker.site_id,
-            camera_id=worker.camera_id,
-            last_heartbeat=worker.last_heartbeat.isoformat(),
-            last_error=worker.last_error,
-            error_count=worker.error_count,
-            total_faces_processed=worker.total_faces_processed,
-            uptime_minutes=worker.uptime_minutes,
-            registration_time=worker.registration_time.isoformat(),
-            is_healthy=worker.is_healthy,
-        ))
-    
+        worker_responses.append(
+            WorkerStatusResponse(
+                worker_id=worker.worker_id,
+                tenant_id=worker.tenant_id,
+                hostname=worker.hostname,
+                ip_address=worker.ip_address,
+                worker_name=worker.worker_name,
+                worker_version=worker.worker_version,
+                capabilities=worker.capabilities,
+                status=worker.status,
+                site_id=worker.site_id,
+                camera_id=worker.camera_id,
+                last_heartbeat=worker.last_heartbeat.isoformat(),
+                last_error=worker.last_error,
+                error_count=worker.error_count,
+                total_faces_processed=worker.total_faces_processed,
+                uptime_minutes=worker.uptime_minutes,
+                registration_time=worker.registration_time.isoformat(),
+                is_healthy=worker.is_healthy,
+            )
+        )
+
     # Get statistics
     stats = worker_registry.get_stats(tenant_id=current_user.tenant_id)
-    
+
     return WorkersListResponse(
         workers=worker_responses,
         total_count=stats["total_count"],
@@ -353,18 +387,20 @@ async def get_worker_status(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Get specific worker status"""
-    
+
     current_user = UserInfo(**current_user_dict)
-    
+
     worker = worker_registry.get_worker(worker_id)
-    
+
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    
+
     # Verify worker belongs to current tenant
     if worker.tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=403, detail="Worker belongs to different tenant")
-    
+        raise HTTPException(
+            status_code=403, detail="Worker belongs to different tenant"
+        )
+
     return WorkerStatusResponse(
         worker_id=worker.worker_id,
         tenant_id=worker.tenant_id,
@@ -392,28 +428,29 @@ async def deregister_worker(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Remove worker from registry"""
-    
+
     current_user = UserInfo(**current_user_dict)
-    
+
     # Only admins or workers themselves can deregister
     if current_user.role not in ["system_admin", "tenant_admin", "worker"]:
         raise HTTPException(
-            status_code=403,
-            detail="Only admins or workers can deregister workers"
+            status_code=403, detail="Only admins or workers can deregister workers"
         )
-    
+
     worker = worker_registry.get_worker(worker_id)
-    
+
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    
+
     # Verify worker belongs to current tenant
     if worker.tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=403, detail="Worker belongs to different tenant")
-    
+        raise HTTPException(
+            status_code=403, detail="Worker belongs to different tenant"
+        )
+
     # Remove worker
     success = await worker_registry.remove_worker(worker_id)
-    
+
     if success:
         return {
             "message": f"Worker {worker.worker_name} deregistered successfully",
@@ -429,18 +466,17 @@ async def cleanup_stale_workers(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Cleanup workers that haven't sent heartbeat for specified seconds"""
-    
+
     current_user = UserInfo(**current_user_dict)
-    
+
     # Only admins can cleanup stale workers
     if current_user.role not in ["system_admin", "tenant_admin"]:
         raise HTTPException(
-            status_code=403,
-            detail="Only admins can cleanup stale workers"
+            status_code=403, detail="Only admins can cleanup stale workers"
         )
-    
+
     removed_count = await worker_registry.cleanup_stale_workers(ttl_seconds=ttl_seconds)
-    
+
     return {
         "message": f"Cleaned up {removed_count} stale workers",
         "ttl_seconds": ttl_seconds,
@@ -453,10 +489,10 @@ async def get_worker_stats(
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Get worker registry statistics"""
-    
+
     current_user = UserInfo(**current_user_dict)
     stats = worker_registry.get_stats(tenant_id=current_user.tenant_id)
-    
+
     return {
         "tenant_id": current_user.tenant_id,
         "statistics": stats,
@@ -466,26 +502,30 @@ async def get_worker_stats(
 
 @router.websocket("/workers/ws/{tenant_id}")
 async def websocket_endpoint(
-    websocket: WebSocket,
-    tenant_id: str,
-    token: Optional[str] = None
+    websocket: WebSocket, tenant_id: str, token: Optional[str] = None
 ):
     """WebSocket endpoint for real-time worker status updates"""
-    logger.info(f"WebSocket connection attempt for tenant: {tenant_id}, token provided: {token is not None}")
-    
+    logger.info(
+        f"WebSocket connection attempt for tenant: {tenant_id}, token provided: {token is not None}"
+    )
+
     try:
         # Validate token if provided
         if token:
             try:
                 payload = verify_jwt(token)
                 user_tenant_id = payload.get("tenant_id")
-                
+
                 if user_tenant_id != tenant_id:
-                    logger.warning(f"WebSocket connection denied: token tenant_id {user_tenant_id} != requested tenant_id {tenant_id}")
+                    logger.warning(
+                        f"WebSocket connection denied: token tenant_id {user_tenant_id} != requested tenant_id {tenant_id}"
+                    )
                     await websocket.close(code=1008, reason="Invalid tenant")
                     return
-                    
-                logger.info(f"WebSocket authentication successful for tenant {tenant_id}")
+
+                logger.info(
+                    f"WebSocket authentication successful for tenant {tenant_id}"
+                )
             except Exception as auth_error:
                 logger.warning(f"WebSocket authentication failed: {auth_error}")
                 await websocket.close(code=1008, reason="Authentication failed")
@@ -493,29 +533,39 @@ async def websocket_endpoint(
         else:
             logger.warning(f"WebSocket connection without token for tenant {tenant_id}")
             # For now, allow connections without tokens for debugging
-        
+
         logger.info(f"Accepting WebSocket connection for tenant {tenant_id}")
         await connection_manager.connect(websocket, tenant_id)
-        
+
         # Send initial worker status
         try:
-            workers = worker_registry.list_workers(tenant_id=tenant_id, include_offline=True)
+            workers = worker_registry.list_workers(
+                tenant_id=tenant_id, include_offline=True
+            )
             initial_data = [worker.to_dict() for worker in workers]
-            
-            logger.info(f"Sending initial data to WebSocket for tenant {tenant_id}: {len(initial_data)} workers")
-            
-            await websocket.send_json({
-                "type": "initial_data",
-                "data": initial_data,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-            
-            logger.info(f"Successfully sent initial data to WebSocket for tenant {tenant_id}")
-            
+
+            logger.info(
+                f"Sending initial data to WebSocket for tenant {tenant_id}: {len(initial_data)} workers"
+            )
+
+            await websocket.send_json(
+                {
+                    "type": "initial_data",
+                    "data": initial_data,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+
+            logger.info(
+                f"Successfully sent initial data to WebSocket for tenant {tenant_id}"
+            )
+
         except Exception as e:
-            logger.error(f"Error sending initial data to WebSocket for tenant {tenant_id}: {e}")
+            logger.error(
+                f"Error sending initial data to WebSocket for tenant {tenant_id}: {e}"
+            )
             raise
-        
+
         # Keep connection alive
         while True:
             try:
@@ -528,14 +578,16 @@ async def websocket_endpoint(
                 try:
                     await websocket.send_json({"type": "ping"})
                 except Exception as ping_error:
-                    logger.error(f"Failed to send ping to tenant {tenant_id}: {ping_error}")
+                    logger.error(
+                        f"Failed to send ping to tenant {tenant_id}: {ping_error}"
+                    )
                     break
             except WebSocketDisconnect:
                 break
             except Exception as e:
                 logger.error(f"WebSocket receive error for tenant {tenant_id}: {e}")
                 break
-                
+
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for tenant {tenant_id}")
     except Exception as e:

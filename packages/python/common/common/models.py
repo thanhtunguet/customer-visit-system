@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class FaceDetectedEvent(BaseModel):
@@ -13,7 +13,9 @@ class FaceDetectedEvent(BaseModel):
     timestamp: datetime
     embedding: List[float] = Field(min_length=512, max_length=512)
     bbox: List[float] = Field(min_length=4, max_length=4)
-    confidence: float = Field(ge=0.0, le=1.0, description="Face detection confidence score")
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="Face detection confidence score"
+    )
     snapshot_url: Optional[str] = None
     is_staff_local: bool = False
     staff_id: Optional[str] = None
@@ -37,4 +39,3 @@ class CustomerProfile(BaseModel):
     email: Optional[str] | None = None
     first_seen: datetime
     last_seen: Optional[datetime] | None = None
-

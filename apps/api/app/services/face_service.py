@@ -5,16 +5,16 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional
 
-from sqlalchemy import select, update, and_
+from common.models import FaceDetectedEvent
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.milvus_client import milvus_client
 from ..core.config import settings
+from ..core.milvus_client import milvus_client
 from ..models.database import Customer, Staff, Visit
-from common.models import FaceDetectedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -37,25 +37,26 @@ class FaceMatchingService:
         self.recent_assignments: dict[tuple[str, int], tuple[int, float, float]] = {}
         # pending clusters keyed by coarse hash of embedding
         # pending[(tenant_id, site_id, camera_id, key)] = [(ts, embedding)]
-        self.pending: dict[tuple[str, int, int, str], list[tuple[float, list[float]]]] = {}
+        self.pending: dict[
+            tuple[str, int, int, str], list[tuple[float, list[float]]]
+        ] = {}
         # Align pending window with (extended) hysteresis for stability
         self.pending_window_secs = max(self.temporal_hysteresis_secs, 5.0)
-        
+
         self.debug_mode = True
 
     async def process_face_event(
-        self, 
-        event: FaceDetectedEvent, 
-        db_session: AsyncSession,
-        tenant_id: int
+        self, event: FaceDetectedEvent, db_session: AsyncSession, tenant_id: int
     ) -> Dict:
         """Process a face detection event and return matching results"""
-        
+
         # Enhanced logging for debugging
-        is_manual_upload = hasattr(event, '_manual_face_data')
-        filename = getattr(event, '_manual_filename', 'camera_stream')
-        logger.info(f"🔍 Processing face event from {filename}: confidence={event.confidence:.3f}, bbox={event.bbox}, manual_upload={is_manual_upload}")
-        
+        is_manual_upload = hasattr(event, "_manual_face_data")
+        filename = getattr(event, "_manual_filename", "camera_stream")
+        logger.info(
+            f"🔍 Processing face event from {filename}: confidence={event.confidence:.3f}, bbox={event.bbox}, manual_upload={is_manual_upload}"
+        )
+
         # Skip if it's already identified as staff locally
         if event.is_staff_local:
             logger.info(f"Staff member identified locally: {event.staff_id}")
@@ -65,41 +66,47 @@ class FaceMatchingService:
                 "similarity": 1.0,
                 "visit_id": None,
                 "person_type": "staff",
-                "message": "Staff member identified locally"
+                "message": "Staff member identified locally",
             }
 
         # Quality check - reject low confidence detections
         if event.confidence < self.min_confidence_score:
-            logger.warning(f"Rejecting low confidence detection: {event.confidence:.3f} < {self.min_confidence_score}")
+            logger.warning(
+                f"Rejecting low confidence detection: {event.confidence:.3f} < {self.min_confidence_score}"
+            )
             return {
                 "match": "rejected",
                 "person_id": None,
                 "similarity": 0.0,
                 "visit_id": None,
                 "person_type": "customer",
-                "message": f"Detection quality too low: {event.confidence:.3f}"
+                "message": f"Detection quality too low: {event.confidence:.3f}",
             }
 
         # Additional face size gating to reduce non-face false positives
         try:
             from ..core.config import settings as _settings
+
             if event.bbox and len(event.bbox) >= 4:
-                w = float(event.bbox[2]); h = float(event.bbox[3])
+                w = float(event.bbox[2])
+                h = float(event.bbox[3])
                 if min(w, h) < float(_settings.api_min_face_size):
-                    logger.warning(f"Rejecting small face bbox {w}x{h} < min {_settings.api_min_face_size}")
+                    logger.warning(
+                        f"Rejecting small face bbox {w}x{h} < min {_settings.api_min_face_size}"
+                    )
                     return {
                         "match": "rejected",
                         "person_id": None,
                         "similarity": 0.0,
                         "visit_id": None,
                         "person_type": "customer",
-                        "message": "Face too small for reliable recognition"
+                        "message": "Face too small for reliable recognition",
                     }
         except Exception:
             pass
 
         # Determine search and decision thresholds
-        is_manual_upload = hasattr(event, '_manual_face_data')
+        is_manual_upload = hasattr(event, "_manual_face_data")
         # Use a slightly lower search threshold to retrieve near misses, but keep decision thresholds strict
         if not is_manual_upload:
             search_threshold = max(0.70, self.embedding_distance_thr - 0.05)
@@ -109,7 +116,9 @@ class FaceMatchingService:
             f"🔍 Thresholds: search={search_threshold:.3f}, merge={self.merge_distance_thr:.3f}, "
             f"margin={self.merge_margin:.3f}, min_conf={self.min_confidence_score:.2f}"
         )
-        logger.info(f"🔍 Searching Milvus for similar faces (limit={self.max_search_results})")
+        logger.info(
+            f"🔍 Searching Milvus for similar faces (limit={self.max_search_results})"
+        )
         similar_faces = await milvus_client.search_similar_faces(
             tenant_id=tenant_id,
             embedding=event.embedding,
@@ -118,7 +127,9 @@ class FaceMatchingService:
         )
         logger.info(f"🔍 Milvus returned {len(similar_faces)} similar faces")
         for i, face in enumerate(similar_faces):
-            logger.info(f"🔍   - Match {i+1}: Person {face['person_id']} (similarity: {face['similarity']:.3f})")
+            logger.info(
+                f"🔍   - Match {i+1}: Person {face['person_id']} (similarity: {face['similarity']:.3f})"
+            )
 
         person_id = None
         person_type = "customer"
@@ -128,25 +139,38 @@ class FaceMatchingService:
         if similar_faces:
             best_match = similar_faces[0]
             best_sim = float(best_match.get("similarity", 0.0))
-            second_sim = float(similar_faces[1].get("similarity", 0.0)) if len(similar_faces) > 1 else 0.0
+            second_sim = (
+                float(similar_faces[1].get("similarity", 0.0))
+                if len(similar_faces) > 1
+                else 0.0
+            )
             logger.info(
                 f"🔍 Best match: {best_match['person_type']} {best_match['person_id']} sim={best_sim:.3f} (second={second_sim:.3f})"
             )
 
             # Merge-on-recognition: strong match
-            if best_match["person_type"] == "customer" and best_sim >= self.merge_distance_thr:
+            if (
+                best_match["person_type"] == "customer"
+                and best_sim >= self.merge_distance_thr
+            ):
                 person_id = best_match["person_id"]
                 person_type = "customer"
                 similarity = best_sim
                 match_type = "known"
                 logger.info(f"🟢 Strong match >= merge threshold: customer {person_id}")
             # Margin-based assignment: best above search threshold and clear margin over second best
-            elif best_match["person_type"] == "customer" and best_sim >= self.embedding_distance_thr and (best_sim - second_sim) >= self.merge_margin:
+            elif (
+                best_match["person_type"] == "customer"
+                and best_sim >= self.embedding_distance_thr
+                and (best_sim - second_sim) >= self.merge_margin
+            ):
                 person_id = best_match["person_id"]
                 person_type = "customer"
                 similarity = best_sim
                 match_type = "known"
-                logger.info(f"🟢 Margin-based assignment to existing customer {person_id}")
+                logger.info(
+                    f"🟢 Margin-based assignment to existing customer {person_id}"
+                )
             else:
                 # Temporal hysteresis: prefer last identity for this camera if close
                 cache_key = (str(tenant_id), int(event.camera_id))
@@ -155,13 +179,21 @@ class FaceMatchingService:
                 if last:
                     last_person_id, last_ts, last_sim = last
                     # Accept slightly-below-threshold matches within hysteresis window to avoid fragmenting identities
-                    soft_thr = max(0.70, self.embedding_distance_thr - self.merge_margin)
-                    if (now_ts - last_ts) <= self.temporal_hysteresis_secs and best_match["person_type"] == "customer" and best_sim >= soft_thr:
+                    soft_thr = max(
+                        0.70, self.embedding_distance_thr - self.merge_margin
+                    )
+                    if (
+                        (now_ts - last_ts) <= self.temporal_hysteresis_secs
+                        and best_match["person_type"] == "customer"
+                        and best_sim >= soft_thr
+                    ):
                         person_id = best_match["person_id"]
                         person_type = "customer"
                         similarity = best_sim
                         match_type = "known"
-                        logger.info(f"🟡 Hysteresis kept identity {person_id} within {self.temporal_hysteresis_secs}s")
+                        logger.info(
+                            f"🟡 Hysteresis kept identity {person_id} within {self.temporal_hysteresis_secs}s"
+                        )
 
         if not person_id:
             # Cluster gating: require min samples within small window before creating a new customer
@@ -169,7 +201,12 @@ class FaceMatchingService:
                 # Round first 16 dims to 2 decimals as coarse signature
                 return ",".join(f"{v:.2f}" for v in vec[:16])
 
-            pkey = (str(tenant_id), int(event.site_id), int(event.camera_id), _coarse_key(event.embedding))
+            pkey = (
+                str(tenant_id),
+                int(event.site_id),
+                int(event.camera_id),
+                _coarse_key(event.embedding),
+            )
             now_ts = time.time()
             window = self.pending_window_secs
             lst = self.pending.get(pkey, [])
@@ -181,7 +218,9 @@ class FaceMatchingService:
             # Allow manual uploads to create a customer immediately (required_samples=1)
             required_samples = 1 if is_manual_upload else self.min_cluster_samples
             if len(lst) >= required_samples:
-                logger.info(f"🆕 Creating new customer after cluster min_samples={required_samples}")
+                logger.info(
+                    f"🆕 Creating new customer after cluster min_samples={required_samples}"
+                )
                 person_id = await self._create_new_customer(db_session, tenant_id)
                 person_type = "customer"
             else:
@@ -195,7 +234,7 @@ class FaceMatchingService:
                     "similarity": 0.0,
                     "visit_id": None,
                     "person_type": "customer",
-                    "message": "Insufficient samples for new identity"
+                    "message": "Insufficient samples for new identity",
                 }
 
         # Store the embedding in Milvus (with quality check)
@@ -208,7 +247,9 @@ class FaceMatchingService:
                 embedding=event.embedding,
                 created_at=current_time,
             )
-            logger.info(f"Stored embedding for {person_type} {person_id} with confidence {event.confidence:.3f}")
+            logger.info(
+                f"Stored embedding for {person_type} {person_id} with confidence {event.confidence:.3f}"
+            )
 
         # Create visit record (this will commit the customer and visit together)
         visit_id = await self._create_visit_record(
@@ -227,7 +268,9 @@ class FaceMatchingService:
         # Update recent assignment cache for hysteresis
         try:
             self.recent_assignments[(str(tenant_id), int(event.camera_id))] = (
-                int(person_id), time.time(), float(similarity)
+                int(person_id),
+                time.time(),
+                float(similarity),
             )
         except Exception:
             pass
@@ -237,43 +280,41 @@ class FaceMatchingService:
             "person_id": person_id,
             "similarity": similarity,
             "visit_id": visit_id,
-            "person_type": person_type
+            "person_type": person_type,
         }
-        
+
         logger.info(f"Face processing complete: {result}")
         return result
 
     async def process_face_event_with_image(
-        self, 
-        event: FaceDetectedEvent, 
+        self,
+        event: FaceDetectedEvent,
         face_image_data: bytes,
         face_image_filename: str,
         db_session: AsyncSession,
-        tenant_id: int
+        tenant_id: int,
     ) -> Dict:
         """Process a face detection event with uploaded face image and return matching results"""
-        
+
         # Store the face image data directly on the event for later use
         # This avoids unnecessary upload/download cycles
         event._manual_face_data = face_image_data
-        
+
         # Add filename for tracking
         event._manual_filename = face_image_filename
-        
+
         # Process the event normally (this will handle face matching and visit creation)
         result = await self.process_face_event(event, db_session, tenant_id)
-        
+
         # Clean up the temporary data
-        delattr(event, '_manual_face_data')
-        if hasattr(event, '_manual_filename'):
-            delattr(event, '_manual_filename')
-        
+        delattr(event, "_manual_face_data")
+        if hasattr(event, "_manual_filename"):
+            delattr(event, "_manual_filename")
+
         return result
 
     async def _create_new_customer(
-        self, 
-        db_session: AsyncSession, 
-        tenant_id: int
+        self, db_session: AsyncSession, tenant_id: int
     ) -> int:
         """Create a new customer record and return the auto-generated customer_id"""
         customer = Customer(
@@ -283,7 +324,9 @@ class FaceMatchingService:
         )
         db_session.add(customer)
         await db_session.flush()  # This will populate the customer_id but not commit
-        logger.info(f"Created new customer record (not yet committed): {customer.customer_id}")
+        logger.info(
+            f"Created new customer record (not yet committed): {customer.customer_id}"
+        )
         return customer.customer_id
 
     async def _create_visit_record(
@@ -297,10 +340,14 @@ class FaceMatchingService:
     ) -> str:
         """Create or update a visit record with session-based deduplication"""
         from datetime import timedelta
-        
+
         visit_merge_window = timedelta(minutes=30)  # 30-minute merge window
-        current_time = event.timestamp.replace(tzinfo=None) if event.timestamp.tzinfo else event.timestamp
-        
+        current_time = (
+            event.timestamp.replace(tzinfo=None)
+            if event.timestamp.tzinfo
+            else event.timestamp
+        )
+
         # Convert snapshot_url to string if present
         image_path = str(event.snapshot_url) if event.snapshot_url else None
 
@@ -308,16 +355,23 @@ class FaceMatchingService:
         face_image_bytes = None
 
         # Prefer manual uploaded crop when available (manual import flow)
-        if hasattr(event, '_manual_face_data') and person_type == "customer":
+        if hasattr(event, "_manual_face_data") and person_type == "customer":
             face_image_bytes = event._manual_face_data
-            logger.debug(f"Using manual upload face data: {len(face_image_bytes)} bytes")
+            logger.debug(
+                f"Using manual upload face data: {len(face_image_bytes)} bytes"
+            )
         elif event.snapshot_url and person_type == "customer":
             # Try to download actual face crop from worker-provided snapshot
             try:
                 from ..core.minio_client import minio_client
-                if event.snapshot_url.startswith('worker-faces/'):
-                    face_image_bytes = await minio_client.download_file("faces-raw", event.snapshot_url)
-                    logger.debug(f"Downloaded face image: {len(face_image_bytes)} bytes")
+
+                if event.snapshot_url.startswith("worker-faces/"):
+                    face_image_bytes = await minio_client.download_file(
+                        "faces-raw", event.snapshot_url
+                    )
+                    logger.debug(
+                        f"Downloaded face image: {len(face_image_bytes)} bytes"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to download face image: {e}")
 
@@ -325,6 +379,7 @@ class FaceMatchingService:
         if not image_path and face_image_bytes:
             try:
                 from ..core.minio_client import minio_client
+
                 # Store visit snapshots in faces-derived bucket and reference with visits-faces/ prefix
                 object_name = f"visits/{tenant_id}/{uuid.uuid4().hex[:8]}.jpg"
 
@@ -342,15 +397,19 @@ class FaceMatchingService:
                 image_path = f"visits-faces/{object_name}"
                 logger.info(f"✅ Uploaded visit face snapshot: {image_path}")
             except Exception as e:
-                logger.warning(f"Failed to upload visit face snapshot, will try fallback: {e}")
+                logger.warning(
+                    f"Failed to upload visit face snapshot, will try fallback: {e}"
+                )
 
         # If still no snapshot URL, try to generate a fallback cropped face image from bbox
-        logger.info(f"Processing event: snapshot_url={'Present' if event.snapshot_url else 'None'}, bbox={event.bbox}")
+        logger.info(
+            f"Processing event: snapshot_url={'Present' if event.snapshot_url else 'None'}, bbox={event.bbox}"
+        )
         if not image_path and event.bbox and len(event.bbox) >= 4:
             logger.info("Attempting to generate fallback face crop from bbox")
             try:
-                from .image_processing import image_processor
                 from ..core.minio_client import minio_client
+                from .image_processing import image_processor
 
                 face_crop_bytes = await image_processor.generate_face_crop_from_bbox(
                     bbox=event.bbox,
@@ -367,50 +426,66 @@ class FaceMatchingService:
                     )
 
                     if image_path:
-                        logger.info(f"✅ Generated fallback face crop for visit: {image_path}")
-                        face_image_bytes = face_crop_bytes  # Use for customer gallery too
+                        logger.info(
+                            f"✅ Generated fallback face crop for visit: {image_path}"
+                        )
+                        face_image_bytes = (
+                            face_crop_bytes  # Use for customer gallery too
+                        )
                     else:
                         logger.warning("❌ Failed to upload generated face crop")
 
             except Exception as e:
                 logger.error(f"❌ Failed to generate fallback face image: {e}")
                 import traceback
+
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 # Continue without image - not critical
-        
+
         # Look for existing visit session within the merge window
         cutoff_time = current_time - visit_merge_window
-        
-        existing_visit_query = select(Visit).where(
-            Visit.tenant_id == tenant_id,
-            Visit.person_id == person_id,
-            Visit.person_type == person_type,
-            Visit.site_id == event.site_id,
-            Visit.last_seen >= cutoff_time
-        ).order_by(Visit.last_seen.desc()).limit(1)
-        
+
+        existing_visit_query = (
+            select(Visit)
+            .where(
+                Visit.tenant_id == tenant_id,
+                Visit.person_id == person_id,
+                Visit.person_type == person_type,
+                Visit.site_id == event.site_id,
+                Visit.last_seen >= cutoff_time,
+            )
+            .order_by(Visit.last_seen.desc())
+            .limit(1)
+        )
+
         result = await db_session.execute(existing_visit_query)
         existing_visit = result.scalar_one_or_none()
-        
+
         if existing_visit:
             # Update existing visit session
-            duration_seconds = int((current_time - existing_visit.first_seen).total_seconds())
-            
+            duration_seconds = int(
+                (current_time - existing_visit.first_seen).total_seconds()
+            )
+
             # Update fields
             existing_visit.last_seen = current_time
             existing_visit.visit_duration_seconds = duration_seconds
             existing_visit.detection_count += 1
-            
+
             # Store the original confidence for comparison
             original_confidence = existing_visit.confidence_score
-            
+
             # Update confidence score if this detection is better
             if confidence_score > (existing_visit.highest_confidence or 0):
                 existing_visit.highest_confidence = confidence_score
-                existing_visit.confidence_score = confidence_score  # Update main confidence too
-                
+                existing_visit.confidence_score = (
+                    confidence_score  # Update main confidence too
+                )
+
             # Update image path if this detection has an image and previous didn't, or if confidence is higher
-            if image_path and (not existing_visit.image_path or confidence_score > original_confidence):
+            if image_path and (
+                not existing_visit.image_path or confidence_score > original_confidence
+            ):
                 existing_visit.image_path = image_path
                 # Update bounding box info for the best detection
                 existing_visit.bbox_x = event.bbox[0] if len(event.bbox) >= 4 else None
@@ -418,32 +493,42 @@ class FaceMatchingService:
                 existing_visit.bbox_w = event.bbox[2] if len(event.bbox) >= 4 else None
                 existing_visit.bbox_h = event.bbox[3] if len(event.bbox) >= 4 else None
                 existing_visit.face_embedding = json.dumps(event.embedding)
-            
+
             await db_session.commit()
-            
+
             # Save face image to customer gallery if we have image data
             # Use original detection confidence; allow manual uploads at lower threshold via service policy
             if person_type == "customer" and face_image_bytes:
                 try:
                     await self._save_customer_face_image(
-                        db_session, tenant_id, person_id, face_image_bytes, 
-                        event.confidence, event.bbox, event.embedding, existing_visit.visit_id,
-                        manual_upload=hasattr(event, '_manual_face_data')
+                        db_session,
+                        tenant_id,
+                        person_id,
+                        face_image_bytes,
+                        event.confidence,
+                        event.bbox,
+                        event.embedding,
+                        existing_visit.visit_id,
+                        manual_upload=hasattr(event, "_manual_face_data"),
                     )
                 except Exception as e:
                     # Don't let face gallery errors break the main transaction
-                    logger.warning(f"Failed to save customer face image, continuing: {e}")
-            
-            logger.info(f"Updated existing visit session {existing_visit.visit_session_id}: "
-                       f"duration={duration_seconds}s, detections={existing_visit.detection_count}, "
-                       f"confidence={existing_visit.highest_confidence:.3f}, image_path={'Yes' if existing_visit.image_path else 'No'}")
-            
+                    logger.warning(
+                        f"Failed to save customer face image, continuing: {e}"
+                    )
+
+            logger.info(
+                f"Updated existing visit session {existing_visit.visit_session_id}: "
+                f"duration={duration_seconds}s, detections={existing_visit.detection_count}, "
+                f"confidence={existing_visit.highest_confidence:.3f}, image_path={'Yes' if existing_visit.image_path else 'No'}"
+            )
+
             return existing_visit.visit_id
         else:
             # Create new visit session
             visit_id = f"v_{uuid.uuid4().hex[:8]}"
             session_id = f"session_{uuid.uuid4().hex[:8]}"
-            
+
             visit = Visit(
                 tenant_id=tenant_id,
                 visit_id=visit_id,
@@ -466,32 +551,39 @@ class FaceMatchingService:
                 bbox_w=event.bbox[2] if len(event.bbox) >= 4 else None,
                 bbox_h=event.bbox[3] if len(event.bbox) >= 4 else None,
             )
-            
+
             db_session.add(visit)
             await db_session.commit()
-            
+
             # Save face image to customer gallery if we have image data
             # Use original detection confidence; allow manual uploads at lower threshold via service policy
             if person_type == "customer" and face_image_bytes:
                 try:
                     await self._save_customer_face_image(
-                        db_session, tenant_id, person_id, face_image_bytes, 
-                        event.confidence, event.bbox, event.embedding, visit_id,
-                        manual_upload=hasattr(event, '_manual_face_data')
+                        db_session,
+                        tenant_id,
+                        person_id,
+                        face_image_bytes,
+                        event.confidence,
+                        event.bbox,
+                        event.embedding,
+                        visit_id,
+                        manual_upload=hasattr(event, "_manual_face_data"),
                     )
                 except Exception as e:
                     # Don't let face gallery errors break the main transaction
-                    logger.warning(f"Failed to save customer face image, continuing: {e}")
-            
-            logger.info(f"Created new visit session {session_id} for person {person_id}, image_path={'Yes' if image_path else 'No'}")
-            
+                    logger.warning(
+                        f"Failed to save customer face image, continuing: {e}"
+                    )
+
+            logger.info(
+                f"Created new visit session {session_id} for person {person_id}, image_path={'Yes' if image_path else 'No'}"
+            )
+
             return visit_id
 
     async def _update_customer_last_seen(
-        self, 
-        db_session: AsyncSession, 
-        tenant_id: int, 
-        customer_id: int
+        self, db_session: AsyncSession, tenant_id: int, customer_id: int
     ):
         """Update customer's last seen timestamp and visit count"""
         stmt = (
@@ -520,32 +612,36 @@ class FaceMatchingService:
         """Save face image to customer gallery using a fresh database session"""
         fresh_session = None
         try:
-            from .customer_face_service import customer_face_service
-            from ..core.database import get_db_session
             import asyncio
-            
+
+            from ..core.database import get_db_session
+            from .customer_face_service import customer_face_service
+
             # Add a small delay to ensure the main transaction is fully committed
             # This helps avoid race conditions with fresh database sessions
             await asyncio.sleep(0.1)
-            
+
             # Get a fresh database session to avoid rollback issues
             # The customer should already be committed at this point
             fresh_session_generator = get_db_session()
             fresh_session = await fresh_session_generator.__anext__()
-            
+
             # Set tenant context for the fresh session
             from ..core.database import db
+
             await db.set_tenant_context(fresh_session, tenant_id)
-            
+
             # Extract metadata for quality assessment
             metadata = {
-                'source': 'manual_upload' if manual_upload else 'worker_detection',
-                'visit_id': visit_id,
-                'bbox': bbox,
+                "source": "manual_upload" if manual_upload else "worker_detection",
+                "visit_id": visit_id,
+                "bbox": bbox,
             }
-            
-            logger.info(f"🖼️ Attempting to save face image to customer {customer_id} gallery: confidence={confidence_score:.3f}, manual_upload={manual_upload}, bytes={len(face_image_bytes)}")
-            
+
+            logger.info(
+                f"🖼️ Attempting to save face image to customer {customer_id} gallery: confidence={confidence_score:.3f}, manual_upload={manual_upload}, bytes={len(face_image_bytes)}"
+            )
+
             result = await customer_face_service.add_face_image(
                 db=fresh_session,
                 tenant_id=tenant_id,
@@ -555,19 +651,24 @@ class FaceMatchingService:
                 face_bbox=bbox,
                 embedding=embedding,
                 visit_id=visit_id,
-                metadata=metadata
+                metadata=metadata,
             )
-            
+
             if result:
                 # Commit the fresh session
                 await fresh_session.commit()
-                logger.info(f"✅ Saved face image to customer {customer_id} gallery with confidence {confidence_score:.3f} (manual_upload={manual_upload})")
+                logger.info(
+                    f"✅ Saved face image to customer {customer_id} gallery with confidence {confidence_score:.3f} (manual_upload={manual_upload})"
+                )
             else:
-                logger.debug(f"⚠️ Face image not saved to customer {customer_id} gallery (quality/duplicate/below_threshold)")
-                
+                logger.debug(
+                    f"⚠️ Face image not saved to customer {customer_id} gallery (quality/duplicate/below_threshold)"
+                )
+
         except Exception as e:
             logger.error(f"❌ Error saving face image to customer gallery: {e}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Don't re-raise - this is a non-critical operation
         finally:
@@ -580,27 +681,31 @@ class FaceMatchingService:
             # Don't re-raise - this is a non-critical operation
             # Don't re-raise - this is a non-critical operation
 
-    async def cleanup_duplicate_embeddings(self, db_session: AsyncSession, tenant_id: int) -> Dict[str, int]:
+    async def cleanup_duplicate_embeddings(
+        self, db_session: AsyncSession, tenant_id: int
+    ) -> Dict[str, int]:
         """
         Clean up duplicate embeddings for customers to improve accuracy
         This method identifies and removes embeddings that are too similar for the same customer
         """
         logger.info(f"Starting embedding cleanup for tenant {tenant_id}")
-        
+
         cleanup_stats = {
             "customers_processed": 0,
             "embeddings_removed": 0,
-            "customers_merged": 0
+            "customers_merged": 0,
         }
-        
+
         try:
             # Get all customer IDs for this tenant
-            customer_query = select(Customer.customer_id).where(Customer.tenant_id == tenant_id)
+            customer_query = select(Customer.customer_id).where(
+                Customer.tenant_id == tenant_id
+            )
             result = await db_session.execute(customer_query)
             customer_ids = [row[0] for row in result.scalars().all()]
-            
+
             logger.info(f"Found {len(customer_ids)} customers to process")
-            
+
             for customer_id in customer_ids:
                 # This is a placeholder for the cleanup logic
                 # In production, you'd implement logic to:
@@ -609,10 +714,10 @@ class FaceMatchingService:
                 # 3. Remove duplicates that are too similar (>0.95 similarity)
                 # 4. Keep the highest quality embedding
                 cleanup_stats["customers_processed"] += 1
-                
+
             logger.info(f"Cleanup complete: {cleanup_stats}")
             return cleanup_stats
-            
+
         except Exception as e:
             logger.error(f"Embedding cleanup failed: {e}")
             return cleanup_stats
@@ -627,15 +732,15 @@ class FaceMatchingService:
                 "customer_id": customer_id,
                 "tenant_id": tenant_id,
                 "embedding_count": 0,
-                "similarity_analysis": []
+                "similarity_analysis": [],
             }
-            
+
             # Use Milvus to get embeddings for this specific customer
             # This would require extending MilvusClient with a query by person_id method
             logger.info(f"Debug analysis for customer {customer_id}: {debug_info}")
-            
+
             return debug_info
-            
+
         except Exception as e:
             logger.error(f"Debug analysis failed for customer {customer_id}: {e}")
             return {"error": str(e)}
@@ -653,14 +758,14 @@ class StaffService:
         update_existing: bool = False,
     ) -> Staff:
         """Enroll a new staff member with face embedding"""
-        
+
         # If updating, delete existing embeddings first
         if update_existing:
             try:
                 await milvus_client.delete_person_embeddings(tenant_id, staff_id)
             except Exception as e:
                 logger.warning(f"Failed to delete existing staff embeddings: {e}")
-        
+
         # Store embedding in Milvus
         current_time = int(time.time())
         await milvus_client.insert_embedding(
@@ -690,7 +795,7 @@ class StaffService:
                 face_embedding=json.dumps(face_embedding),
             )
             db_session.add(staff)
-        
+
         await db_session.commit()
         return staff
 
@@ -704,16 +809,18 @@ class StaffService:
         stmt = select(Staff).where(
             Staff.tenant_id == tenant_id,
             Staff.site_id == site_id,
-            Staff.is_active == True,
+            Staff.is_active,
         )
         result = await db_session.execute(stmt)
         staff_members = result.scalars().all()
-        
+
         return [
             {
                 "staff_id": staff.staff_id,
                 "name": staff.name,
-                "embedding": json.loads(staff.face_embedding) if staff.face_embedding else [],
+                "embedding": (
+                    json.loads(staff.face_embedding) if staff.face_embedding else []
+                ),
             }
             for staff in staff_members
             if staff.face_embedding

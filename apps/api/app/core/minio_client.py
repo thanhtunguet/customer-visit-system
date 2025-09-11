@@ -1,41 +1,45 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import timedelta
 
 try:
     from minio import Minio
-    from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration, Filter
+    from minio.lifecycleconfig import Expiration, Filter, LifecycleConfig, Rule
+
     MINIO_AVAILABLE = True
 except ImportError:
     MINIO_AVAILABLE = False
-    
+
     class Minio:
         def __init__(self, *args, **kwargs):
             pass
+
         def bucket_exists(self, bucket):
             return True
+
         def make_bucket(self, bucket):
             pass
+
         def set_bucket_lifecycle(self, bucket, config):
             pass
-    
+
     class LifecycleConfig:
         def __init__(self, *args):
             pass
-    
+
     class Rule:
         def __init__(self, *args, **kwargs):
             pass
-    
+
     class Expiration:
         def __init__(self, *args):
             pass
-    
+
     class Filter:
         def __init__(self, *args, **kwargs):
             pass
+
 
 from .config import settings
 
@@ -61,7 +65,7 @@ class MinIOClient:
         if not MINIO_AVAILABLE:
             logger.info("Using mock MinIO implementation for development")
             return
-            
+
         try:
             # Create buckets if they don't exist
             for bucket in [self.bucket_raw, self.bucket_derived]:
@@ -88,16 +92,16 @@ class MinIOClient:
             # Don't raise the exception, just log and continue with mock
 
     def upload_image(
-        self, 
-        bucket: str, 
-        object_name: str, 
-        data: bytes, 
-        content_type: str = "image/jpeg"
+        self,
+        bucket: str,
+        object_name: str,
+        data: bytes,
+        content_type: str = "image/jpeg",
     ) -> str:
         """Upload image data to MinIO bucket"""
         try:
             from io import BytesIO
-            
+
             self.client.put_object(
                 bucket,
                 object_name,
@@ -111,10 +115,7 @@ class MinIOClient:
             raise
 
     def get_presigned_url(
-        self, 
-        bucket: str, 
-        object_name: str, 
-        expiry: timedelta = timedelta(hours=1)
+        self, bucket: str, object_name: str, expiry: timedelta = timedelta(hours=1)
     ) -> str:
         """Generate presigned URL for object access"""
         try:
@@ -124,10 +125,7 @@ class MinIOClient:
             raise
 
     def get_presigned_put_url(
-        self, 
-        bucket: str, 
-        object_name: str, 
-        expiry: timedelta = timedelta(hours=1)
+        self, bucket: str, object_name: str, expiry: timedelta = timedelta(hours=1)
     ) -> str:
         """Generate presigned URL for uploading objects"""
         try:

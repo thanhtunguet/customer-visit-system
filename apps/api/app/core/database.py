@@ -5,9 +5,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy import text, create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
 
@@ -21,16 +21,20 @@ class Database:
             pool_size=10,  # Limit concurrent connections
             max_overflow=20,  # Allow temporary overflow
             pool_timeout=30,  # Timeout for getting connections
-            echo_pool=True if getattr(settings, 'log_level', 'INFO') == "DEBUG" else False,
+            echo_pool=(
+                True if getattr(settings, "log_level", "INFO") == "DEBUG" else False
+            ),
         )
         self.session_maker = sessionmaker(
             self.engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
-        
-        # Synchronous engine for auth endpoints  
-        sync_url = settings.database_url.replace('postgresql+asyncpg://', 'postgresql+psycopg2://')
+
+        # Synchronous engine for auth endpoints
+        sync_url = settings.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"
+        )
         self.sync_engine = create_engine(
             sync_url,
             pool_pre_ping=True,
@@ -38,7 +42,9 @@ class Database:
             pool_size=5,  # Smaller pool for sync operations
             max_overflow=10,
             pool_timeout=30,
-            echo_pool=True if getattr(settings, 'log_level', 'INFO') == "DEBUG" else False,
+            echo_pool=(
+                True if getattr(settings, "log_level", "INFO") == "DEBUG" else False
+            ),
         )
         self.sync_session_maker = sessionmaker(
             self.sync_engine,
@@ -80,6 +86,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database sessions"""
     async with db.get_session() as session:
         yield session
+
 
 def get_db() -> Session:
     """FastAPI dependency for synchronous database sessions (for auth endpoints)"""

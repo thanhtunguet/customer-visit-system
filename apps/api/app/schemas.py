@@ -7,10 +7,10 @@ from pydantic import BaseModel, EmailStr
 
 from .models.database import CameraType, UserRole
 
-
 # ===============================
 # Auth & Token Models
 # ===============================
+
 
 class TokenRequest(BaseModel):
     grant_type: str = "password"
@@ -22,7 +22,9 @@ class TokenRequest(BaseModel):
 
 
 class ViewSwitchRequest(BaseModel):
-    target_tenant_id: Optional[str] = None  # None for global view, string for tenant view
+    target_tenant_id: Optional[str] = (
+        None  # None for global view, string for tenant view
+    )
 
 
 class TokenResponse(BaseModel):
@@ -33,6 +35,7 @@ class TokenResponse(BaseModel):
 # ===============================
 # API Key Management Models
 # ===============================
+
 
 class ApiKeyCreate(BaseModel):
     name: str
@@ -49,13 +52,14 @@ class ApiKeyResponse(BaseModel):
     last_used: Optional[datetime]
     expires_at: Optional[datetime]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class ApiKeyCreateResponse(BaseModel):
     """Response when creating API key - includes the plain text key"""
+
     key_id: str
     tenant_id: str
     name: str
@@ -64,7 +68,7 @@ class ApiKeyCreateResponse(BaseModel):
     is_active: bool
     expires_at: Optional[datetime]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -78,6 +82,7 @@ class ApiKeyUpdate(BaseModel):
 # ===============================
 # User Management Models
 # ===============================
+
 
 class UserCreate(BaseModel):
     username: str
@@ -132,6 +137,7 @@ class UserResponse(BaseModel):
 # ===============================
 # Entity Models
 # ===============================
+
 
 class TenantCreate(BaseModel):
     tenant_id: str
@@ -192,6 +198,7 @@ class CameraResponse(BaseModel):
 # Diagnostics & Device Models
 # ===============================
 
+
 class WebcamInfo(BaseModel):
     device_index: int
     width: Optional[int] = None
@@ -231,13 +238,14 @@ class StaffFaceImageCreate(BaseModel):
     image_data: str  # Base64 encoded image
     is_primary: bool = False
 
+
 class StaffFaceImageBulkCreate(BaseModel):
     images: List[StaffFaceImageCreate]
 
 
 class StaffFaceImageResponse(BaseModel):
     tenant_id: str
-    image_id: str  
+    image_id: str
     staff_id: int
     image_path: str
     face_landmarks: Optional[List[List[float]]] = None  # 5-point landmarks

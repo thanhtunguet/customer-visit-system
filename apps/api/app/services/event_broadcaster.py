@@ -8,7 +8,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Set, Any
+from typing import Any, Dict, Set
+
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
@@ -68,14 +69,14 @@ class TenantEventBroadcaster:
                 self.remove_client(tenant_id, queue)
 
         return StreamingResponse(
-            event_stream(), media_type="text/event-stream",
+            event_stream(),
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Access-Control-Allow-Origin": "*",
-            }
+            },
         )
 
 
 tenant_event_broadcaster = TenantEventBroadcaster()
-
