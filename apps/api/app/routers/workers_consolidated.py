@@ -174,7 +174,7 @@ class WorkerConnectionManager:
             for websocket in self.active_connections[tenant_id]:
                 try:
                     await websocket.send_json(message)
-                except:
+                except Exception:
                     disconnected.append(websocket)
 
             for ws in disconnected:
@@ -734,7 +734,7 @@ async def websocket_endpoint(
                 logger.debug(f"WebSocket timeout, sending ping to tenant {tenant_id}")
                 try:
                     await websocket.send_json({"type": "ping"})
-                except:
+                except Exception:
                     # Connection might be closed
                     break
             except WebSocketDisconnect:

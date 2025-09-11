@@ -197,7 +197,7 @@ class ImageProcessingService:
             text_y = height - text_height - 5
 
             draw.text((text_x, text_y), text, fill="#c0c0c0", font=font)
-        except:
+        except Exception:
             # If font loading fails, skip the text
             pass
 

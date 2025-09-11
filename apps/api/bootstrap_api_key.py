@@ -8,8 +8,8 @@ from datetime import datetime
 os.chdir("/Users/tungpt/Development/thanhtunguet/face-recognition/apps/api")
 
 # Import after changing directory
-from app.core.database import SessionLocal
-from app.models.database import ApiKey, Tenant
+from app.core.database import SessionLocal  # noqa: E402
+from app.models.database import ApiKey, Tenant  # noqa: E402
 
 
 def main():

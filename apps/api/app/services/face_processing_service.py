@@ -302,7 +302,7 @@ class FaceProcessingService:
                             )
                             response = np.mean(np.abs(filtered))
                             gabor_responses.append(response)
-                        except:
+                        except Exception:
                             gabor_responses.append(0.0)
 
                 # Pad to 96 dimensions
@@ -825,7 +825,7 @@ class FaceProcessingService:
                     face_crop = image[y : y + h, x : x + w]
                     face_quality = self._assess_face_crop_quality(face_crop)
                     enhanced_face["face_quality"] = face_quality
-                except:
+                except Exception:
                     enhanced_face["face_quality"] = 0.5  # Default quality
 
                 # Add detector type for quality scoring

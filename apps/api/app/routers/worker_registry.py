@@ -146,7 +146,7 @@ class WorkerConnectionManager:
             for websocket in self.active_connections[tenant_id]:
                 try:
                     await websocket.send_json(message)
-                except:
+                except Exception:
                     disconnected.append(websocket)
 
             # Remove disconnected websockets

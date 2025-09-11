@@ -10,7 +10,7 @@ script_dir = Path(__file__).parent
 api_root = script_dir.parent
 sys.path.insert(0, str(api_root))
 
-from app.core.db_init import init_database, reset_database
+from app.core.db_init import init_database, reset_database  # noqa: E402
 
 
 async def main():

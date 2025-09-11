@@ -178,7 +178,7 @@ class WorkerClient:
                 # Force close without waiting
                 try:
                     self.http_client._client.close()
-                except:
+                except Exception:
                     pass
             except Exception as e:
                 logger.warning(f"Error closing HTTP client: {e}")

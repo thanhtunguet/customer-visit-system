@@ -568,7 +568,7 @@ class ImprovedFaceEmbedder:
                         name="arcface_r100_v1", providers=["CPUExecutionProvider"]
                     )
                     self.model.prepare(ctx_id=-1, det_size=(640, 640))
-                except:
+                except Exception:
                     # Fallback to default model
                     self.model = insightface.app.FaceAnalysis(
                         providers=["CPUExecutionProvider"]
@@ -653,7 +653,7 @@ class ImprovedFaceEmbedder:
                     flags=cv2.INTER_CUBIC,
                 )
                 return aligned
-        except:
+        except Exception:
             pass
 
         # Method 2: Full affine transformation
@@ -671,7 +671,7 @@ class ImprovedFaceEmbedder:
                 flags=cv2.INTER_CUBIC,
             )
             return aligned
-        except:
+        except Exception:
             pass
 
         # Method 3: Simple alignment based on eye positions
@@ -701,7 +701,7 @@ class ImprovedFaceEmbedder:
                     flags=cv2.INTER_CUBIC,
                 )
                 return aligned
-        except:
+        except Exception:
             pass
 
         # Fallback: simple resize

@@ -18,9 +18,9 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 import pytest
-from app.services.face_cropper import (FaceCropper, PrimaryFaceStrategy,
+from apps.api.app.services.face_cropper import (FaceCropper, PrimaryFaceStrategy,
                                        api_face_cropper)
-from app.services.face_processing_service import FaceProcessingService
+from apps.api.app.services.face_processing_service import FaceProcessingService
 
 
 class TestApiFaceCropper:
@@ -53,7 +53,7 @@ class TestApiFaceCropper:
         """Test API FaceCropper initialization with default values"""
         cropper = FaceCropper()
 
-        assert cropper.min_face_size == 40
+        assert cropper.min_face_size == 60
         assert cropper.crop_margin_pct == 0.15
         assert cropper.target_size == 224
         assert cropper.primary_face_strategy == PrimaryFaceStrategy.BEST_QUALITY

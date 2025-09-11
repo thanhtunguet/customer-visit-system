@@ -7,9 +7,9 @@ import asyncio
 from datetime import datetime, timedelta
 
 import pytest
-from app.core.database import get_async_session
-from app.models.database import Camera, CameraSession, Site, Tenant
-from app.services.assignment_service import SessionState, assignment_service
+from apps.api.app.core.database import get_db_session
+from apps.api.app.models.database import Camera, CameraSession, Site, Tenant
+from apps.api.app.services.assignment_service import SessionState, assignment_service
 
 
 @pytest.mark.asyncio

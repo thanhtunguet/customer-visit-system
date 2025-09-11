@@ -22,19 +22,25 @@ def test_imports():
     logger.info("Testing imports...")
 
     try:
-        import fastapi
-
-        logger.info("✓ FastAPI available")
+        import importlib.util
+        if importlib.util.find_spec("fastapi"):
+            logger.info("✓ FastAPI available")
+        else:
+            logger.error("✗ FastAPI not available")
+            return False
     except ImportError as e:
-        logger.error(f"✗ FastAPI import failed: {e}")
+        logger.error(f"✗ FastAPI import check failed: {e}")
         return False
 
     try:
-        import sqlalchemy
-
-        logger.info("✓ SQLAlchemy available")
+        import importlib.util
+        if importlib.util.find_spec("sqlalchemy"):
+            logger.info("✓ SQLAlchemy available")
+        else:
+            logger.error("✗ SQLAlchemy not available")
+            return False
     except ImportError as e:
-        logger.error(f"✗ SQLAlchemy import failed: {e}")
+        logger.error(f"✗ SQLAlchemy import check failed: {e}")
         return False
 
     try:
@@ -49,9 +55,11 @@ def test_imports():
         return False
 
     try:
-        from common.models import FaceDetectedEvent
-
-        logger.info("✓ pkg_common.models available")
+        import importlib.util
+        if importlib.util.find_spec("common.models"):
+            logger.info("✓ pkg_common.models available")
+        else:
+            logger.error("✗ pkg_common.models not available")
     except ImportError as e:
         logger.error(f"✗ pkg_common.models import failed: {e}")
         logger.error(

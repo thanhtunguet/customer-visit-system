@@ -1,8 +1,8 @@
 import pytest
-from app.core.database import get_db
-from app.core.security import mint_jwt
-from app.main import app
-from app.models.database import Base, Tenant, User, UserRole
+from apps.api.app.core.database import get_db
+from apps.api.app.core.security import mint_jwt
+from apps.api.app.main import app
+from apps.api.app.models.database import Base, Tenant, User, UserRole
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

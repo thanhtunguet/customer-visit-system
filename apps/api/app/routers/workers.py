@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from fastapi import (APIRouter, Depends, HTTPException, Request, WebSocket,
                      WebSocketDisconnect)
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -19,8 +20,6 @@ from ..services.worker_shutdown_service import (ShutdownSignal,
                                                 worker_shutdown_service)
 
 logger = logging.getLogger(__name__)
-
-from pydantic import BaseModel, Field
 
 
 class UserInfo(BaseModel):
@@ -129,7 +128,7 @@ class WorkerConnectionManager:
             for websocket in self.active_connections[tenant_id]:
                 try:
                     await websocket.send_json(message)
-                except:
+                except Exception:
                     disconnected.append(websocket)
 
             # Remove disconnected websockets

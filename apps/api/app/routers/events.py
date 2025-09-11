@@ -153,7 +153,7 @@ async def process_uploaded_images(
                                 f"Extracted timestamp from image: {image_timestamp}"
                             )
                             break
-                        except:
+                        except Exception:
                             continue
             except Exception as e:
                 logger.debug(f"Could not extract EXIF timestamp: {e}")

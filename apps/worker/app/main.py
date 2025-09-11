@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import cv2
+import logging
 import os
+import signal
+import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 import numpy as np
 from common.models import FaceDetectedEvent
+
+from .camera_manager import CameraManager
+from .detectors import FaceDetector, create_detector
+from .embedder import FaceEmbedder, create_embedder
+from .webrtc_streamer import WebRTCStreamer
+from .worker_client import WorkerClient
 
 # Load .env file if it exists
 try:
@@ -179,19 +189,6 @@ async def simulate_event_with_image(token: str, client: httpx.AsyncClient) -> No
     print("📊 Image upload via API multipart form: ✅")
     print("─" * 60)
 
-
-import logging
-import signal
-import time
-from typing import List
-
-import cv2
-
-from .camera_manager import CameraManager
-from .detectors import FaceDetector, create_detector
-from .embedder import FaceEmbedder, create_embedder
-from .webrtc_streamer import WebRTCStreamer
-from .worker_client import WorkerClient
 
 # Configure logging
 logging.basicConfig(

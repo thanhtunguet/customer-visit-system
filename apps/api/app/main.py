@@ -14,7 +14,7 @@ from .core.milvus_client import milvus_client
 from .core.minio_client import minio_client
 from .core.task_manager import task_manager
 from .routers import (auth, cameras, customers, events, files, health, jobs,
-                      lease_management, sites, staff, tenants,
+                      lease_management, sites, staff, tenants, webrtc_signaling,
                       workers_consolidated)
 from .services.camera_delegation_service import camera_delegation_service
 from .services.camera_proxy_service import camera_proxy_service
@@ -182,9 +182,6 @@ app.include_router(files.router)
 
 # NEW: Consolidated Worker API - replaces fragmented worker endpoints
 app.include_router(workers_consolidated.router)
-
-# WebRTC Signaling Server for P2P Camera Streaming
-from .routers import webrtc_signaling
 
 app.include_router(webrtc_signaling.router)
 

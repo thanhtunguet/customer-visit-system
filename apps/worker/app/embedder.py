@@ -122,7 +122,7 @@ class InsightFaceEmbedder(FaceEmbedder):
                     embedding = faces[0].embedding
                     embedding = embedding / np.linalg.norm(embedding)
                     return embedding.tolist()
-            except:
+            except Exception:
                 pass
 
             # Fallback: use direct model inference if available

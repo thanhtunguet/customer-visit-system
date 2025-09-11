@@ -243,7 +243,7 @@ class MilvusClient:
                     utility.drop_collection(
                         self.collection_name, using=self.connection_alias
                     )
-                except:
+                except Exception:
                     pass  # Collection might not exist or be accessible
 
         # Create new collection

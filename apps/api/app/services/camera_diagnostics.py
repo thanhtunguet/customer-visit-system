@@ -166,7 +166,7 @@ class CameraDiagnostics:
             for cap in captures.values():
                 try:
                     cap.release()
-                except:
+                except Exception:
                     pass
 
         return results

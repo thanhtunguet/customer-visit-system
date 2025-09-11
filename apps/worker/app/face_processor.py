@@ -293,7 +293,7 @@ class FaceProcessor:
                     face_crop = image[y : y + h, x : x + w]
                     face_quality = self._assess_face_crop_quality(face_crop)
                     face["face_quality"] = face_quality
-                except:
+                except Exception:
                     face["face_quality"] = 0.5  # Default quality
 
                 filtered_faces.append(face)
