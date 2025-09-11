@@ -1,0 +1,123 @@
+version: 2
+updates:
+  # Python dependencies for API and Worker
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+  # Node.js dependencies for Web app
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "javascript"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+  # TypeScript shared packages
+  - package-ecosystem: "npm"
+    directory: "/packages/ts/common"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "typescript"
+    open-pull-requests-limit: 3
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "docker"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+    open-pull-requests-limit: 2
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    reviewers:
+      - "thanhtunguet"
+    assignees:
+      - "thanhtunguet"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 3

@@ -191,16 +191,7 @@ export const LoginForm: React.FC = () => {
           </Form.Item>
         </Form>
 
-        <div className="mt-6 text-center">
-          <Space direction="vertical" size="small">
-            <Text type="secondary" className="text-sm">
-              Demo Credentials:
-            </Text>
-            <Text code className="text-xs">
-              admin / password / t-dev / tenant_admin
-            </Text>
-          </Space>
-        </div>
+        
       </Card>
     </div>
   );
