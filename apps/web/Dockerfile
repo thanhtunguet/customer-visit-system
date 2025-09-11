@@ -1,15 +1,11 @@
 # Multi-stage Dockerfile for Web frontend
-FROM node:24-alpine AS base
-
-# Install yarn globally
-RUN npm install -g yarn
+FROM node:20-alpine AS base
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY yarn.lock* ./
-RUN yarn install --frozen-lockfile || yarn install
+RUN npm install --frozen-lockfile || npm install
 
 # Copy source code
 COPY . .
