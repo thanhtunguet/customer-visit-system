@@ -32,7 +32,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 Base = declarative_base()
 
 
-class User(Base):
+class User(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "users"
 
     user_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -41,7 +41,7 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     password_hash = Column(Text, nullable=False)
-    role: Mapped[UserRole] = Column(Enum(UserRole), nullable=False)
+    role = Column(Enum(UserRole), nullable=False)  # type: ignore[assignment,var-annotated]
     tenant_id = Column(
         String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=True
     )  # Null for system_admin
@@ -74,7 +74,7 @@ class User(Base):
     def set_password(self, password: str) -> None:
         """Hash and set user password"""
         self.password_hash = pwd_context.hash(password)
-        self.password_changed_at = datetime.utcnow()
+        self.password_changed_at = datetime.utcnow()  # type: ignore[assignment]
 
     def verify_password(self, password: str) -> bool:
         """Verify user password"""
@@ -89,7 +89,7 @@ class User(Base):
         """Check if user can access a specific tenant"""
         if self.role == UserRole.SYSTEM_ADMIN:
             return True
-        return self.tenant_id == tenant_id
+        return self.tenant_id == tenant_id  # type: ignore[return-value]
 
     def can_access_site(self, site_id: int) -> bool:
         """Check if user can access a specific site"""
@@ -98,11 +98,11 @@ class User(Base):
         if self.role == UserRole.TENANT_ADMIN:
             return True  # Tenant admins can access all sites in their tenant
         if self.role == UserRole.SITE_MANAGER:
-            return self.site_id == site_id
+            return self.site_id == site_id  # type: ignore[return-value]
         return False
 
 
-class Tenant(Base):
+class Tenant(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "tenants"
 
     tenant_id = Column(String(64), primary_key=True)
@@ -125,7 +125,7 @@ class Tenant(Base):
     )
 
 
-class Site(Base):
+class Site(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "sites"
 
     site_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -146,14 +146,14 @@ class Site(Base):
     )
 
 
-class Camera(Base):
+class Camera(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "cameras"
 
     camera_id = Column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id = Column(String(64), nullable=False)
     site_id = Column(BigInteger, nullable=False)
     name = Column(String(255), nullable=False)
-    camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)
+    camera_type = Column(Enum(CameraType), default=CameraType.RTSP, nullable=False)  # type: ignore[var-annotated]
     rtsp_url = Column(Text)  # For RTSP cameras
     device_index = Column(Integer)  # For webcam cameras (e.g., 0, 1, 2)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -180,7 +180,7 @@ class Camera(Base):
     session = relationship("CameraSession", back_populates="camera", uselist=False)
 
 
-class CameraSession(Base):
+class CameraSession(Base):  # type: ignore[valid-type,misc]
     """
     Camera session model for tracking camera assignments with lease-based delegation
 
@@ -237,7 +237,7 @@ class CameraSession(Base):
         }
 
 
-class Staff(Base):
+class Staff(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "staff"
 
     staff_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -258,7 +258,7 @@ class Staff(Base):
     face_images = relationship("StaffFaceImage", cascade="all, delete-orphan")
 
 
-class StaffFaceImage(Base):
+class StaffFaceImage(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "staff_face_images"
 
     tenant_id = Column(
@@ -298,7 +298,7 @@ class StaffFaceImage(Base):
     )
 
 
-class Customer(Base):
+class Customer(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "customers"
 
     customer_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -320,7 +320,7 @@ class Customer(Base):
     __table_args__ = (Index("idx_customers_last_seen", "tenant_id", "last_seen"),)
 
 
-class CustomerFaceImage(Base):
+class CustomerFaceImage(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "customer_face_images"
 
     image_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -361,7 +361,7 @@ class CustomerFaceImage(Base):
     )
 
 
-class Visit(Base):
+class Visit(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "visits"
 
     tenant_id = Column(String(64), primary_key=True)
@@ -398,7 +398,7 @@ class Visit(Base):
     )
 
 
-class Worker(Base):
+class Worker(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "workers"
 
     worker_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -435,7 +435,7 @@ class Worker(Base):
     )
 
 
-class ApiKey(Base):
+class ApiKey(Base):  # type: ignore[valid-type,misc]
     __tablename__ = "api_keys"
 
     key_id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
