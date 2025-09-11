@@ -9,7 +9,7 @@ from sqlalchemy import (JSON, TIMESTAMP, BigInteger, Boolean, Column, DateTime,
                         Enum, Float, ForeignKey, ForeignKeyConstraint, Index,
                         Integer, String, Text)
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.sql import func
 
 
@@ -41,7 +41,7 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     password_hash = Column(Text, nullable=False)
-    role = Column(Enum(UserRole), nullable=False)
+    role: Mapped[UserRole] = Column(Enum(UserRole), nullable=False)
     tenant_id = Column(
         String(64), ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=True
     )  # Null for system_admin

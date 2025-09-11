@@ -87,7 +87,9 @@ class EnhancedFaceProcessorService:
                     _, buffer = cv2.imencode(
                         ".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 95]
                     )
-                    result["face_crop_b64"] = base64.b64encode(buffer).decode("utf-8")
+                    result["face_crop_b64"] = base64.b64encode(buffer.tobytes()).decode(
+                        "utf-8"
+                    )
                     del result["face_crop"]  # Remove numpy array from result
 
             return result
@@ -280,7 +282,7 @@ class EnhancedFaceProcessorService:
         except Exception as e:
             logger.error(f"Failed to get processing recommendations: {e}")
             return {
-                "error": f"Unable to get recommendations: {str(e)}",
+                "error": [f"Unable to get recommendations: {str(e)}"],
                 "basic_requirements": [
                     "Use clear, well-lit face images",
                     "Ensure face is clearly visible",

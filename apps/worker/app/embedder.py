@@ -88,7 +88,7 @@ class InsightFaceEmbedder(FaceEmbedder):
 
         # Apply alignment transformation
         aligned = cv2.warpAffine(
-            image, tform, (112, 112), borderMode=cv2.BORDER_CONSTANT, borderValue=0
+            image, tform, (112, 112), borderMode=cv2.BORDER_CONSTANT, borderValue=0.0
         )
         return aligned
 

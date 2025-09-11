@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import cv2
 
@@ -86,9 +86,9 @@ class CameraDiagnostics:
         return available_cameras
 
     @staticmethod
-    def test_simultaneous_access(device_indices: List[int]) -> Dict[str, any]:
+    def test_simultaneous_access(device_indices: List[int]) -> Dict[str, Any]:
         """Test if multiple cameras can be accessed simultaneously"""
-        results = {
+        results: Dict[str, Any] = {
             "can_access_simultaneously": False,
             "successful_devices": [],
             "failed_devices": [],
