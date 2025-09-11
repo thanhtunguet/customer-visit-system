@@ -10,8 +10,11 @@ RUN apk add --no-cache dumb-init
 WORKDIR /app
 
 # Copy package files first for better caching
-COPY apps/web/package*.json ./
+COPY apps/web/package*.json ./apps/web/
 COPY packages/ts/common/package*.json ./packages/ts/common/
+
+# Set working directory to web app
+WORKDIR /app/apps/web
 
 # Install dependencies with clean cache
 RUN npm ci --only=production && npm cache clean --force
@@ -19,17 +22,21 @@ RUN npm ci --only=production && npm cache clean --force
 # Development stage
 FROM base AS development
 RUN npm ci
-COPY apps/web/ .
+WORKDIR /app
+COPY apps/web/ ./apps/web/
 COPY packages/ts/ ./packages/ts/
+WORKDIR /app/apps/web
 EXPOSE 5173
 CMD ["dumb-init", "npm", "run", "dev", "--", "--host"]
 
 # Build stage  
 FROM base AS build
 RUN npm ci
-COPY apps/web/ .
+WORKDIR /app
+COPY apps/web/ ./apps/web/
 COPY packages/ts/ ./packages/ts/
 COPY contracts/ ./contracts/
+WORKDIR /app/apps/web
 RUN npm run build
 
 # Production stage
@@ -42,7 +49,7 @@ RUN apk update && apk upgrade && apk add --no-cache dumb-init
 RUN addgroup -g 101 -S nginx && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
 
 # Copy built assets
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
