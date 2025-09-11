@@ -11,12 +11,62 @@ requires-python = ">=3.11"
 authors = [
     {name = "Face Recognition Team"}
 ]
-dependencies = []
+dependencies = [
+    # Core API dependencies
+    "fastapi==0.111.0",
+    "uvicorn==0.30.0",
+    "pydantic==2.7.1",
+    "pydantic[email]==2.7.1", 
+    "python-multipart==0.0.9",
+    "python-dotenv==1.0.1",
+    "httpx==0.27.0",
+    
+    # Authentication & Security
+    "PyJWT==2.8.0",
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.0.1",
+    
+    # Database
+    "sqlalchemy==2.0.30",
+    "asyncpg==0.29.0",
+    "alembic==1.13.2",
+    "pgvector==0.3.2",
+    
+    # Vector DB & Storage
+    "pymilvus==2.4.5",
+    "minio==7.2.7",
+    
+    # Background Jobs
+    "APScheduler==3.10.4",
+    
+    # Utilities
+    "marshmallow==3.21.3",
+    "structlog==24.4.0",
+    
+    # Face processing
+    "Pillow==10.4.0",
+    "opencv-python==4.10.0.84",
+    "numpy==1.26.4",
+    
+    # Worker dependencies
+    "onnxruntime==1.16.3; platform_machine == 'aarch64'",
+    "insightface==0.7.3",
+    "onnx==1.16.0", 
+    "scikit-image==0.22.0",
+    "aiortc==1.6.0",
+    "websockets==12.0",
+]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
+    "pytest==8.2.2",
+    "pytest-asyncio==0.23.7",
+    "pytest-mock==3.14.0",
+    "pytest-cov",
+    "ruff",
+    "black",
+    "isort",
+    "mypy",
 ]
 
 [tool.setuptools.packages.find]
