@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload Trivy scan results for API
         if: needs.build-api.result == 'success'
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'api-trivy-results.sarif'
           category: 'api-image'
@@ -160,7 +160,7 @@ jobs:
 
       - name: Upload Trivy scan results for Web
         if: needs.build-web.result == 'success'
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'web-trivy-results.sarif'
           category: 'web-image'
