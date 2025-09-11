@@ -28,4 +28,3 @@ export type CustomerProfile = {
   first_seen: string;
   last_seen?: string | null;
 };
-

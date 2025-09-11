@@ -118,7 +118,7 @@ jobs:
       - name: Build and push Web Docker image
         uses: docker/build-push-action@v5
         with:
-          context: apps/web
+          context: .
           file: apps/web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
