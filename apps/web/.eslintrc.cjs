@@ -31,5 +31,13 @@ module.exports = {
         'plugin:@typescript-eslint/recommended',
       ],
     },
+    {
+      files: ['**/*.test.ts', '**/*.test.tsx', 'src/test/**/*'],
+      env: { jest: true, node: true },
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      },
+    },
   ],
 }

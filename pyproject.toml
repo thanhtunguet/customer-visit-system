@@ -81,3 +81,44 @@ testpaths = ["apps/api/tests", "apps/worker/tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+
+# Code quality tool configuration
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = "\.(py)$"
+exclude = [
+    ".venv",
+    "apps/web/node_modules",
+    "apps/web/dist",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["apps", "packages", "common"]
+skip = [
+    ".venv",
+    "apps/web/node_modules",
+    "apps/web/dist",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+    ".venv",
+    "apps/web/node_modules",
+    "apps/web/dist",
+    "apps/api/alembic/versions",
+]
+# Keep rules pragmatic for monorepo; tighten later
+extend-ignore = [
+    "E501",  # line length handled by black
+    "E402",  # module level import position (tests/scripts)
+]
+
+[tool.ruff.per-file-ignores]
+"**/__init__.py" = ["F401"]  # allow re-exports
+"apps/api/scripts/*.py" = ["T201"]  # allow print in scripts
+"apps/api/*.py" = ["T201"]         # allow print in bootstrap helpers
