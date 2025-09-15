@@ -27,6 +27,15 @@ import {
   DeleteOutlined
 } from '@ant-design/icons';
 import type { RangePickerProps } from 'antd/es/date-picker';
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
 import type { Visit, Site } from '../types/api';
 import { apiClient } from '../services/api';
 import { CustomerFaceGallery } from '../components/CustomerFaceGallery';
@@ -348,7 +357,7 @@ export const VisitsPage: React.FC = () => {
     }
   };
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       setSelectedVisitIds(new Set(visits.map(v => v.visit_id)));
       setLastSelectedIndex(visits.length - 1);
@@ -356,7 +365,7 @@ export const VisitsPage: React.FC = () => {
       setSelectedVisitIds(new Set());
       setLastSelectedIndex(-1);
     }
-  };
+  }, [visits]);
 
   const handleCardClick = (visit: Visit, event: React.MouseEvent) => {
     // Don't trigger selection if clicking on checkbox
@@ -385,7 +394,7 @@ export const VisitsPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
     if (selectedVisitIds.size === 0) return;
 
     setIsDeleting(true);
@@ -407,7 +416,7 @@ export const VisitsPage: React.FC = () => {
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [selectedVisitIds, loadInitialData, message]);
 
   const selectedVisits = useMemo(() => {
     const set = selectedVisitIds;
@@ -445,8 +454,9 @@ export const VisitsPage: React.FC = () => {
       setMergeOpen(false);
       setSelectedVisitIds(new Set([res.primary_visit_id]));
       await loadInitialData();
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Failed to merge visits');
+    } catch (e: unknown) {
+      const error = e as ApiError;
+      message.error(error?.response?.data?.detail || 'Failed to merge visits');
     } finally {
       setMerging(false);
     }
@@ -486,7 +496,7 @@ export const VisitsPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visits, selectedVisitIds, handleDeleteSelected]);
+  }, [visits, selectedVisitIds, handleDeleteSelected, handleSelectAll]);
 
   return (
     <div className="p-6">
@@ -872,8 +882,9 @@ export const VisitsPage: React.FC = () => {
                           message.success('Visit removed');
                           setIsModalVisible(false);
                           await loadInitialData();
-                        } catch (e: any) {
-                          message.error(e.response?.data?.detail || 'Failed to remove');
+                        } catch (e: unknown) {
+                          const error = e as ApiError;
+                          message.error(error.response?.data?.detail || 'Failed to remove');
                         }
                       }}
                     >
@@ -907,8 +918,9 @@ export const VisitsPage: React.FC = () => {
             setIsModalVisible(false);
             setReassignTarget('');
             await loadInitialData();
-          } catch (e: any) {
-            message.error(e.response?.data?.detail || 'Failed to reassign visit');
+          } catch (e: unknown) {
+            const error = e as ApiError;
+            message.error(error.response?.data?.detail || 'Failed to reassign visit');
           } finally {
             setReassigning(false);
           }
