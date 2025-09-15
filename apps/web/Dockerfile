@@ -45,8 +45,7 @@ FROM nginx:alpine AS production
 # Install security updates
 RUN apk update && apk upgrade && apk add --no-cache dumb-init
 
-# Create nginx user for security
-RUN addgroup -g 101 -S nginx && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+# nginx:alpine already ships with an nginx user/group; no need to recreate
 
 # Copy built assets
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
