@@ -107,7 +107,7 @@ jobs:
           TEST_MODE: true
         run: pytest --cov=apps --cov=packages --cov-report=xml --cov-report=term-missing
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: ./coverage.xml
           fail_ci_if_error: true
@@ -156,7 +156,7 @@ jobs:
         working-directory: apps/web
         run: npm run test:coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: ./apps/web/coverage/coverage-final.json
           fail_ci_if_error: true
