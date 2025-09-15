@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Table,
   Card,
@@ -18,6 +18,7 @@ import {
   Input,
   message
 } from 'antd';
+import type { BadgeProps } from 'antd';
 import {
   CloudServerOutlined,
   ReloadOutlined,
@@ -37,6 +38,12 @@ import WorkerLogViewer from '../components/WorkerLogViewer';
 const { Title } = Typography;
 const { Search } = Input;
 
+interface WorkerCapabilities {
+  total_active_streams?: number;
+  active_camera_streams?: string[];
+  streaming_status_updated?: string;
+}
+
 interface Worker {
   worker_id: string;
   tenant_id: string;
@@ -44,7 +51,7 @@ interface Worker {
   ip_address?: string;
   worker_name: string;
   worker_version?: string;
-  capabilities?: Record<string, any>;
+  capabilities?: WorkerCapabilities;
   status: WorkerStatus;
   site_id?: number;
   camera_id?: number;
@@ -110,7 +117,7 @@ const Workers: React.FC = () => {
         reconnectTimeoutRef.current = null;
       }
     };
-  }, []); // No dependencies - only run once on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Load workers when filters change
   useEffect(() => {
@@ -122,9 +129,9 @@ const Workers: React.FC = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [statusFilter, siteFilter]);
+  }, [statusFilter, siteFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setupWebSocket = () => {
+  const setupWebSocket = useCallback(() => {
     // Clean up existing connection first
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       wsRef.current.close();
@@ -266,9 +273,9 @@ const Workers: React.FC = () => {
     } catch (error) {
       console.error('Error setting up WebSocket:', error);
     }
-  };
+  }, []); // No dependencies needed as it uses refs and doesn't depend on state
 
-  const loadWorkers = async () => {
+  const loadWorkers = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -305,7 +312,7 @@ const Workers: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]); // Only depend on statusFilter as it's used in the API call
 
   const handleCleanupStaleWorkers = async () => {
     try {
@@ -337,7 +344,7 @@ const Workers: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: WorkerStatus, isHealthy: boolean) => {
+  const getStatusColor = (status: WorkerStatus, isHealthy: boolean): BadgeProps['status'] => {
     if (WorkerStatusHelper.isActive(status) && isHealthy) return 'success';
     if (WorkerStatusHelper.isActive(status) && !isHealthy) return 'warning';
     if (status === WorkerStatus.ERROR) return 'error';
@@ -405,7 +412,7 @@ const Workers: React.FC = () => {
       render: (status: WorkerStatus, record: Worker) => (
         <div className="text-center">
           <Badge 
-            status={getStatusColor(status, record.is_healthy) as any}
+            status={getStatusColor(status, record.is_healthy)}
             text={
               <Space size={4}>
                 {getStatusIcon(status, record.is_healthy)}
@@ -736,7 +743,7 @@ const Workers: React.FC = () => {
                 </Descriptions.Item>
                 <Descriptions.Item label="Status">
                   <Badge 
-                    status={getStatusColor(selectedWorker.status, selectedWorker.is_healthy) as any}
+                    status={getStatusColor(selectedWorker.status, selectedWorker.is_healthy)}
                     text={
                       <Space size={4}>
                         {getStatusIcon(selectedWorker.status, selectedWorker.is_healthy)}

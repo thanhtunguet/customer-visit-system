@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Form, Input, Radio } from 'antd';
+import type { FormInstance, RadioChangeEvent } from 'antd';
 import { CameraType, WebcamInfo } from '../types/api';
 import { WebcamDeviceSelector } from './WebcamDeviceSelector';
 import { apiClient } from '../services/api';
 
 interface CameraFormProps {
-  form: any;
+  form: FormInstance;
   selectedSite: number | null;
 }
 
@@ -15,7 +16,7 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
   const [webcamSource, setWebcamSource] = useState<'workers' | 'none'>('none');
   const [manualInputMode, setManualInputMode] = useState(false);
 
-  const loadWebcams = async () => {
+  const loadWebcams = async (): Promise<void> => {
     if (!selectedSite) return;
     
     try {
@@ -44,7 +45,7 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
         label="Camera Type"
         rules={[{ required: true, message: 'Please select camera type!' }]}
       >
-        <Radio.Group onChange={async (e) => {
+        <Radio.Group onChange={async (e: RadioChangeEvent) => {
           if (e.target.value === CameraType.WEBCAM) {
             await loadWebcams();
           }
@@ -87,7 +88,7 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
                   webcamSource={webcamSource}
                   manualInputMode={manualInputMode}
                   onManualInputModeChange={setManualInputMode}
-                  onDropdownVisibleChange={async (open) => {
+                  onDropdownVisibleChange={async (open: boolean) => {
                     if (open && webcams.length === 0) {
                       await loadWebcams();
                     }
