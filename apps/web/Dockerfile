@@ -55,7 +55,7 @@ COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf.default
+RUN rm -f /etc/nginx/conf.d/default.conf.default || true
 
 # Fix permissions
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

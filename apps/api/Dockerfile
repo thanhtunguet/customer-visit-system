@@ -17,7 +17,8 @@ RUN pip install --upgrade pip setuptools wheel
 
 # Copy requirements and install dependencies
 WORKDIR /app
-COPY requirements.txt .
+# Use path relative to build context (.) where Dockerfile path is apps/api/Dockerfile
+COPY apps/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Production stage
@@ -58,5 +59,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
-
+CMD ["python", "-m", "uvicorn", "apps.api.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
