@@ -10,9 +10,8 @@ import {
   Alert,
   Tag,
   Select,
-  Popconfirm
 } from 'antd';
-import { PlusOutlined, TeamOutlined, PictureOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Staff, Site, StaffCreate } from '../types/api';
 import { StaffDetailsModal } from '../components/StaffDetailsModal';

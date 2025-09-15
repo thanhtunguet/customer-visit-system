@@ -40,7 +40,6 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [gridLayout, setGridLayout] = useState<GridLayout>('auto');
-  const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
 
   // Get active cameras
   const activeCameras = cameras.filter(camera => streamStatuses[camera.camera_id]);
@@ -78,11 +77,9 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
     try {
       if (!isFullscreen && document.fullscreenElement === null) {
         await element.requestFullscreen();
-        setFullscreenElement(element);
         setIsFullscreen(true);
       } else if (document.fullscreenElement) {
         await document.exitFullscreen();
-        setFullscreenElement(null);
         setIsFullscreen(false);
       }
     } catch (err) {
@@ -95,9 +92,7 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
     const handleFullscreenChange = () => {
       const isCurrentlyFullscreen = document.fullscreenElement !== null;
       setIsFullscreen(isCurrentlyFullscreen);
-      if (!isCurrentlyFullscreen) {
-        setFullscreenElement(null);
-      }
+      // no-op
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);

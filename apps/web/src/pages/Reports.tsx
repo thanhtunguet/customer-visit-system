@@ -10,14 +10,11 @@ import {
   Space,
   Statistic,
   Divider,
-  Spin,
   Table,
-  Tag,
   Tooltip,
   Progress
 } from 'antd';
 import {
-  CalendarOutlined,
   DownloadOutlined,
   FilterOutlined,
   ReloadOutlined,
@@ -28,8 +25,6 @@ import {
   FallOutlined
 } from '@ant-design/icons';
 import {
-  LineChart,
-  Line,
   AreaChart,
   Area,
   BarChart,
@@ -42,10 +37,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
-  Heatmap
+  Legend
 } from 'recharts';
-import type { RangePickerProps } from 'antd/es/date-picker';
+// import type { RangePickerProps } from 'antd/es/date-picker';
 import dayjs from 'dayjs';
 import { apiClient } from '../services/api';
 
@@ -63,7 +57,7 @@ const COLORS = {
   success: '#16a34a'
 };
 
-const PIE_COLORS = ['#2563eb', '#059669', '#dc2626', '#d97706', '#7c3aed', '#16a34a'];
+// const PIE_COLORS = ['#2563eb', '#059669', '#dc2626', '#d97706', '#7c3aed', '#16a34a'];
 
 // Note: Seed data functions removed - using real API data only
 
@@ -87,7 +81,7 @@ export const Reports: React.FC = () => {
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week' | 'month'>('day');
   
   // Real data states
-  const [realVisitorReport, setRealVisitorReport] = useState<any[]>([]);
+  // const [realVisitorReport, setRealVisitorReport] = useState<any[]>([]);
   const [realStats, setRealStats] = useState({
     totalVisits: 0,
     totalCustomers: 0,
@@ -138,7 +132,7 @@ export const Reports: React.FC = () => {
         params.site_id = selectedSites[0];
       }
 
-      const [visitorReport, sites, customers, staff, demographicsReport] = await Promise.all([
+      const [visitorReport, sites, , , demographicsReport] = await Promise.all([
         apiClient.getVisitorReport(params),
         apiClient.getSites(),
         apiClient.getCustomers({ limit: 1000 }),
@@ -154,8 +148,7 @@ export const Reports: React.FC = () => {
         })
       ]);
 
-      // Store raw report data
-      setRealVisitorReport(visitorReport);
+      // Store raw report data (not used directly)
       
       // Store demographics data if available
       if (demographicsReport) {
@@ -178,8 +171,6 @@ export const Reports: React.FC = () => {
 
       // Calculate real statistics
       const totalVisitsReal = visitorReport.reduce((sum, item) => sum + item.total_visits, 0);
-      const totalCustomersReal = customers.length;
-      const totalStaffReal = staff.length;
       const avgDailyVisitsReal = visitorReport.length > 0 ? Math.round(totalVisitsReal / visitorReport.length) : 0;
 
       setRealStats({
@@ -618,7 +609,7 @@ export const Reports: React.FC = () => {
         <Col xs={24} lg={8}>
           <Card title="Peak Hours" className="h-full">
             <div className="space-y-4">
-              {peakHours?.map((hour, index) => (
+              {peakHours?.map((hour, _index) => (
                 <div key={hour.timeRange} className="flex items-center justify-between">
                   <div>
                     <Text strong>{hour.timeRange}</Text>

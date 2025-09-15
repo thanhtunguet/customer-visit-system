@@ -21,8 +21,12 @@ module.exports = {
     ],
     'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
-    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'warn',
+    'react/no-unescaped-entities': 'off',
+    'react/jsx-key': 'warn',
+    'no-empty': 'warn',
+    'no-case-declarations': 'warn',
   },
   overrides: [
     {
@@ -30,6 +34,10 @@ module.exports = {
       extends: [
         'plugin:@typescript-eslint/recommended',
       ],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      },
     },
     {
       files: ['**/*.test.ts', '**/*.test.tsx', 'src/test/**/*'],

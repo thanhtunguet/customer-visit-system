@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, List, Space, Tag, Alert, Divider, Select, message } from 'antd';
+import { Modal, Button, Tag, Alert, Select, message } from 'antd';
 import { TeamOutlined, UserOutlined, SwapOutlined } from '@ant-design/icons';
 import { Customer } from '../types/api';
 import { AuthenticatedAvatar } from './AuthenticatedAvatar';

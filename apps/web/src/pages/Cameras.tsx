@@ -4,25 +4,23 @@ import {
   Button, 
   Modal, 
   Form, 
-  Input, 
   Typography, 
   Space, 
   Alert,
   Tag,
   Select,
-  Radio,
   Popconfirm,
   Tooltip,
   App
 } from 'antd';
-import { PlusOutlined, VideoCameraOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined, RobotOutlined, PauseOutlined, WifiOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined, RobotOutlined, PauseOutlined, WifiOutlined } from '@ant-design/icons';
 
 import { WebRTCCameraStream } from '../components/WebRTCCameraStream';
 import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
-import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
+import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CameraForm } from '../components/CameraForm';
 import { apiClient } from '../services/api';
-import { Camera, Site, CameraType, WebcamInfo, CameraCreate } from '../types/api';
+import { Camera, Site, CameraType, CameraCreate } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -40,7 +38,7 @@ export const Cameras: React.FC = () => {
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
   const [streamModalVisible, setStreamModalVisible] = useState(false);
   const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
-  const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  // const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
   const [multiStreamModalVisible, setMultiStreamModalVisible] = useState(false);
 const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});
@@ -293,35 +291,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
     setStreamStatuses(prev => ({ ...prev, [cameraId]: isActive }));
   };
 
-  // Callback to handle connection state changes from CameraStream component
-  const handleConnectionStateChange = (state: 'disconnected' | 'connecting' | 'connected' | 'error') => {
-    setStreamConnectionState(state);
-  };
+  // removed connection state tracking for now
 
-  // Generate dynamic modal title with camera info and status
-  const getStreamModalTitle = () => {
-    if (!streamingCamera) return 'Camera Stream';
-    
-    const getStatusColor = () => {
-      switch (streamConnectionState) {
-        case 'connected': return '#52c41a';
-        case 'connecting': return '#1890ff';
-        case 'error': return '#ff4d4f';
-        default: return '#d9d9d9';
-      }
-    };
-
-    return (
-      <Space>
-        <VideoCameraOutlined style={{ color: '#1890ff' }} />
-        <span>{streamingCamera.name}</span>
-        <span style={{ color: '#8c8c8c', fontSize: '14px' }}>#{streamingCamera.camera_id}</span>
-        <Tag color={getStatusColor().replace('#', '')} style={{ marginLeft: '8px' }}>
-          {streamConnectionState.charAt(0).toUpperCase() + streamConnectionState.slice(1)}
-        </Tag>
-      </Space>
-    );
-  };
+  // removed unused getStreamModalTitle helper
 
   const columns = [
     {
@@ -647,7 +619,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
               setStreamingCamera(null);
             }}
             onStreamStateChange={handleStreamStateChange}
-            onConnectionStateChange={handleConnectionStateChange}
+                onConnectionStateChange={() => {}}
             autoStart={streamIntent === 'start'}
             autoReconnect={streamIntent === 'view'}
             currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}

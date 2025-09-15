@@ -34,7 +34,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { WorkerStatus, WorkerStatusHelper } from '@shared/common';
 import WorkerLogViewer from '../components/WorkerLogViewer';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { Search } = Input;
 
 interface Worker {
@@ -68,14 +68,7 @@ interface Camera {
   site_id: number;
 }
 
-interface WorkersResponse {
-  workers: Worker[];
-  total_count: number;
-  online_count: number;
-  offline_count: number;
-  error_count: number;
-  processing_count: number;
-}
+// WorkersResponse shape no longer used directly
 
 const Workers: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);

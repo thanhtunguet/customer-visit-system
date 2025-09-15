@@ -4,12 +4,9 @@ import {
   UserOutlined, 
   TeamOutlined, 
   EyeOutlined, 
-  ShopOutlined,
-  TrendingUpOutlined 
+  ShopOutlined
 } from '@ant-design/icons';
 import { 
-  LineChart, 
-  Line, 
   AreaChart,
   Area,
   XAxis, 
@@ -19,7 +16,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { apiClient } from '../services/api';
-import { VisitorReport, Visit } from '../types/api';
+import { Visit } from '../types/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -46,10 +43,10 @@ export const Dashboard: React.FC = () => {
     totalStaff: 0,
     activeSites: 0,
   });
-  const [chartData, setChartData] = useState<any[]>([]);
+  // const [chartData, setChartData] = useState<any[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
   const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
-  const [loadingTrends, setLoadingTrends] = useState(false);
+  // const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState({
@@ -119,13 +116,7 @@ export const Dashboard: React.FC = () => {
       // Always use real API data for visitor trends
       setVisitorTrends(transformedTrends);
 
-      // Prepare basic chart data (keeping for compatibility)
-      const chartData = visitorReport.slice(-7).map(item => ({
-        date: dayjs(item.period).format('MM/DD'),
-        visits: item.total_visits,
-        unique: item.unique_visitors,
-      }));
-      setChartData(chartData);
+      // Basic chart data calculation skipped (not rendered currently)
       setRecentVisits(visits);
 
       // Update system status based on health check and worker status

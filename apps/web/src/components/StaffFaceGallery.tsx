@@ -512,7 +512,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       // Process each image sequentially to avoid overwhelming the server
       for (const image of faceImages) {
         try {
-          const result = await apiClient.recalculateFaceEmbedding(staffId, image.image_id);
+          await apiClient.recalculateFaceEmbedding(staffId, image.image_id);
           successCount++;
           
           // Show progress for each successful recalculation
@@ -560,7 +560,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     setPreviewVisible(true);
   };
 
-  const primaryImage = faceImages.find(img => img.is_primary);
+  // const primaryImage = faceImages.find(img => img.is_primary);
 
   return (
     <div className="space-y-4">

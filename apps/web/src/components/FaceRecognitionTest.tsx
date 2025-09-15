@@ -10,8 +10,7 @@ import {
   Typography,
   Tag,
   Image,
-  Divider,
-  Spin
+  Divider
 } from 'antd';
 import {
   UploadOutlined,

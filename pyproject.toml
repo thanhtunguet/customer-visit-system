@@ -86,12 +86,14 @@ addopts = "-v --tb=short"
 [tool.black]
 line-length = 100
 target-version = ["py311"]
-include = "\.(py)$"
-exclude = [
-    ".venv",
-    "apps/web/node_modules",
-    "apps/web/dist",
-]
+include = '\.py$'
+exclude = '''
+/(
+  \.venv
+| apps/web/node_modules
+| apps/web/dist
+)/
+'''
 
 [tool.isort]
 profile = "black"

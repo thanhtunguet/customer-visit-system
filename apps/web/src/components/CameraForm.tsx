@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Radio, Alert } from 'antd';
+import { Form, Input, Radio } from 'antd';
 import { CameraType, WebcamInfo } from '../types/api';
 import { WebcamDeviceSelector } from './WebcamDeviceSelector';
 import { apiClient } from '../services/api';
@@ -9,7 +9,7 @@ interface CameraFormProps {
   selectedSite: number | null;
 }
 
-export const CameraForm: React.FC<CameraFormProps> = ({ form, selectedSite }) => {
+export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSite }) => {
   const [webcams, setWebcams] = useState<WebcamInfo[]>([]);
   const [webcamsLoading, setWebcamsLoading] = useState(false);
   const [webcamSource, setWebcamSource] = useState<'workers' | 'none'>('none');

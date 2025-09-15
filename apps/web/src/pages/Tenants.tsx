@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table, Button, Modal, Form, Input, Space, Popconfirm, 
-  Tag, Typography, Alert, Switch, Card, App
+  Typography, Alert, Switch, Card, App
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ShopOutlined

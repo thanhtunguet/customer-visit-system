@@ -4,8 +4,6 @@ import {
   PlayCircleOutlined, 
   StopOutlined,
   ReloadOutlined,
-  VideoCameraOutlined,
-  InfoCircleOutlined,
   WifiOutlined
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
@@ -35,10 +33,10 @@ interface WebRTCSession {
 export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   siteId,
   cameraId,
-  cameraName,
-  onClose,
+  cameraName: _cameraName,
+  onClose: _onClose,
   autoStart = false,
-  autoReconnect = false,
+  autoReconnect: _autoReconnect = false,
   currentStreamStatus = false,
   onStreamStateChange,
   onConnectionStateChange

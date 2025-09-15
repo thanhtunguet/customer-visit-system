@@ -12,11 +12,11 @@ import {
   UsergroupAddOutlined,
   KeyOutlined,
   CloudServerOutlined,
-  ControlOutlined
+  
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import { AuthUser, Tenant, UserRole } from '../types/api';
+import { AuthUser, UserRole } from '../types/api';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { useTenants } from '../contexts/TenantContext';
 

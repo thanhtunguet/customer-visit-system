@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Select, Input, Alert, Button } from 'antd';
 import { WebcamInfo } from '../types/api';
 

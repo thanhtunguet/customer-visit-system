@@ -9,8 +9,7 @@ import {
   List,
   Typography,
   Tag,
-  Image,
-  Divider,
+  
   Select
 } from 'antd';
 import {

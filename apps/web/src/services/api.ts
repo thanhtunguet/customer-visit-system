@@ -1,9 +1,9 @@
 import axios, { AxiosInstance } from 'axios';
 import { 
   Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
-  AuthUser, LoginRequest, TokenResponse, CameraType,
+  AuthUser, LoginRequest, TokenResponse,
   StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
-  SiteCreate, StaffCreate, CustomerCreate, CameraCreate, TenantCreate,
+  SiteCreate, CameraCreate, TenantCreate,
   User, UserCreate, UserUpdate, UserPasswordUpdate,
   ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate
 } from '../types/api';

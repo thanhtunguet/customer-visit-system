@@ -18,7 +18,7 @@ export const AuthenticatedAvatar: React.FC<AuthenticatedAvatarProps> = ({
   alt,
   icon = <UserOutlined />,
 }) => {
-  const { blobUrl, loading, error } = useAuthenticatedAvatar(src);
+  const { blobUrl, loading } = useAuthenticatedAvatar(src);
 
   if (loading) {
     return (

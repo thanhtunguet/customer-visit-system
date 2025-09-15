@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Modal,
-  Card,
   Typography,
   Space,
   Button,
@@ -11,7 +10,6 @@ import {
   Select,
   Input,
   Spin,
-  Tooltip,
   App
 } from 'antd';
 import {

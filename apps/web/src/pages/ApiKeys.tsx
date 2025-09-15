@@ -6,7 +6,6 @@ import {
   Space, 
   Tag, 
   Popconfirm, 
-  message, 
   Modal, 
   Form, 
   Input, 
@@ -23,9 +22,7 @@ import {
   EditOutlined, 
   DeleteOutlined, 
   KeyOutlined,
-  CopyOutlined,
-  EyeOutlined,
-  EyeInvisibleOutlined
+  CopyOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -159,7 +156,7 @@ const ApiKeys: React.FC = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (text, record) => (
+      render: (text, _record) => (
         <Space>
           <KeyOutlined />
           <strong>{text}</strong>

@@ -10,7 +10,7 @@ import {
   Alert,
   Tag
 } from 'antd';
-import { PlusOutlined, ShopOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { Site, SiteCreate } from '../types/api';

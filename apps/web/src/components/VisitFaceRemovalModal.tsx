@@ -5,7 +5,7 @@ import { apiClient } from '../services/api';
 import { Visit } from '../types/api';
 import dayjs from 'dayjs';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface VisitFaceRemovalModalProps {
   visible: boolean;

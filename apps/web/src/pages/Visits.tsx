@@ -33,7 +33,6 @@ import { CustomerFaceGallery } from '../components/CustomerFaceGallery';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
-const { Option } = Select;
 
 // Seed data for visits with image paths
 const SEED_VISITS: Visit[] = [
@@ -365,7 +364,7 @@ export const VisitsPage: React.FC = () => {
       return;
     }
 
-    const visitIndex = visits.findIndex(v => v.visit_id === visit.visit_id);
+    // determine index if needed
     const isCurrentlySelected = selectedVisitIds.has(visit.visit_id);
     const isInSelectionMode = selectedVisitIds.size > 0;
     
