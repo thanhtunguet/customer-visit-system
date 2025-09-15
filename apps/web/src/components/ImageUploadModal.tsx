@@ -78,7 +78,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     if (visible) {
       loadSites();
     }
-  }, [visible, loadSites]);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSites = useCallback(async () => {
     try {
