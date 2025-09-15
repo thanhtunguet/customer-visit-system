@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   Upload,
@@ -9,9 +9,9 @@ import {
   List,
   Typography,
   Tag,
-  
   Select
 } from 'antd';
+import type { UploadChangeParam, UploadFile } from 'antd/es/upload/interface';
 import {
   UploadOutlined,
   InboxOutlined,
@@ -24,6 +24,20 @@ import { apiClient } from '../services/api';
 
 const { Dragger } = Upload;
 const { Text, Title } = Typography;
+
+interface Site {
+  site_id: number;
+  name: string;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
 
 interface ProcessingResult {
   success: boolean;
@@ -55,7 +69,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
   const [results, setResults] = useState<ProcessingResult[]>([]);
   const [processingComplete, setProcessingComplete] = useState(false);
   const [fileList, setFileList] = useState<File[]>([]);
-  const [sites, setSites] = useState<any[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null);
   const [loadingSites, setLoadingSites] = useState(false);
 
@@ -64,9 +78,9 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     if (visible) {
       loadSites();
     }
-  }, [visible]);
+  }, [visible, loadSites]);
 
-  const loadSites = async () => {
+  const loadSites = useCallback(async () => {
     try {
       setLoadingSites(true);
       const sitesData = await apiClient.getSites();
@@ -79,7 +93,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     } finally {
       setLoadingSites(false);
     }
-  };
+  }, [selectedSiteId]);
 
   const resetState = () => {
     setUploading(false);
@@ -141,13 +155,15 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
       setFileList([]);
       setProcessingComplete(true);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to process images:', error);
       
       // Create error results for all files
       const errorResults: ProcessingResult[] = files.map((file) => ({
         success: false,
-        error: error.response?.data?.detail || error.message || 'Failed to process image',
+        error: error instanceof Error 
+          ? error.message 
+          : (error as ApiError)?.response?.data?.detail || 'Failed to process image',
         imageName: file.name
       }));
       
@@ -158,8 +174,8 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     }
   };
 
-  const handleFileChange = ({ fileList: newFileList }: any) => {
-    const files = newFileList.map((file: any) => file.originFileObj || file).filter(Boolean);
+  const handleFileChange = ({ fileList: newFileList }: UploadChangeParam<UploadFile>) => {
+    const files = newFileList.map((file: UploadFile) => file.originFileObj || file).filter(Boolean) as File[];
     setFileList(files);
   };
 
