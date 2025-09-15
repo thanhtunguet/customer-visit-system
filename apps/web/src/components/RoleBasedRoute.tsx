@@ -27,7 +27,7 @@ export const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
       setLoading(true);
       const user = await apiClient.getCurrentUser();
       setCurrentUser(user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to get current user:', error);
       setError('Failed to verify user role');
     } finally {

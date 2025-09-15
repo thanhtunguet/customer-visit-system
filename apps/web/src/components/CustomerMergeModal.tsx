@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Typography, Button, Table, Space, Alert, Spin, Input, message } from 'antd';
 import { MergeOutlined, UserOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
@@ -8,6 +8,15 @@ import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
 
 interface CustomerMergeModalProps {
   visible: boolean;
@@ -39,17 +48,9 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<SimilarCustomer | null>(null);
   const [mergeNotes, setMergeNotes] = useState('');
 
-  useEffect(() => {
-    if (visible && customer) {
-      loadSimilarCustomers();
-      setSelectedCustomer(null);
-      setMergeNotes('');
-    }
-  }, [visible, customer]);
-
-  const loadSimilarCustomers = async () => {
+  const loadSimilarCustomers = useCallback(async () => {
     if (!customer) return;
-    
+
     try {
       setLoading(true);
       const result = await apiClient.findSimilarCustomers(customer.customer_id, {
@@ -57,13 +58,21 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
         limit: 10
       });
       setSimilarCustomers(result.similar_customers);
-    } catch (error: any) {
+    } catch (error: unknown) {
       message.error('Failed to find similar customers');
       console.error('Error finding similar customers:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [customer]);
+
+  useEffect(() => {
+    if (visible && customer) {
+      loadSimilarCustomers();
+      setSelectedCustomer(null);
+      setMergeNotes('');
+    }
+  }, [visible, customer, loadSimilarCustomers]);
 
   const handleMerge = async () => {
     if (!customer || !selectedCustomer) return;
@@ -79,8 +88,8 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       message.success(`Successfully merged customers. Combined ${result.merged_visits} visits and ${result.merged_face_images} face images.`);
       onMergeComplete();
       onClose();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to merge customers');
+    } catch (error: unknown) {
+      message.error((error as ApiError)?.response?.data?.detail || 'Failed to merge customers');
       console.error('Error merging customers:', error);
     } finally {
       setMerging(false);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   Card,
   Row,
   Col,
@@ -27,6 +27,15 @@ import dayjs from 'dayjs';
 // SVG placeholder for missing images
 const IMAGE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBhdmFpbGFibGU8L3RleHQ+PC9zdmc+';
 
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
+
 interface CustomerFaceImage {
   image_id: number;
   image_path: string;
@@ -35,7 +44,7 @@ interface CustomerFaceImage {
   created_at: string;
   visit_id?: string;
   face_bbox: number[];
-  detection_metadata?: Record<string, any>;
+  detection_metadata?: Record<string, unknown>;
 }
 
 interface CustomerFaceGalleryProps {
@@ -62,9 +71,31 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   // Ref to track if user is holding Shift/Ctrl/Cmd
   const isMultiSelectRef = useRef(false);
 
+  const loadImages = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Clear cached image URLs to force refresh
+      setImageUrls({});
+
+      const response = await apiClient.getCustomerFaceImages(customerId);
+      setImages(response.images || []);
+
+      // Load image URLs for each image
+      response.images?.forEach(image => {
+        loadImageUrl(image.image_id, image.image_path);
+      });
+    } catch (err: unknown) {
+      setError((err as ApiError)?.response?.data?.detail || 'Failed to load face images');
+    } finally {
+      setLoading(false);
+    }
+  }, [customerId]);
+
   useEffect(() => {
     loadImages();
-  }, [customerId]);
+  }, [loadImages]);
 
   useEffect(() => {
     // Listen for keyboard events for multi-select
@@ -99,27 +130,6 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     }
   };
 
-  const loadImages = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Clear cached image URLs to force refresh
-      setImageUrls({});
-      
-      const response = await apiClient.getCustomerFaceImages(customerId);
-      setImages(response.images || []);
-      
-      // Load image URLs for each image
-      response.images?.forEach(image => {
-        loadImageUrl(image.image_id, image.image_path);
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load face images');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleImageClick = useCallback((imageId: number, index: number, event: React.MouseEvent) => {
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
@@ -185,8 +195,8 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
       if (onImagesChange) {
         onImagesChange();
       }
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || 'Failed to delete images');
+    } catch (err: unknown) {
+      message.error((err as ApiError)?.response?.data?.detail || 'Failed to delete images');
     } finally {
       setDeleting(false);
     }
@@ -427,8 +437,8 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
                     setSelectedImages(new Set());
                     await loadImages();
                     onImagesChange?.();
-                  } catch (e: any) {
-                    message.error(e.response?.data?.detail || 'Failed to reassign images');
+                  } catch (e: unknown) {
+                    message.error((e as ApiError)?.response?.data?.detail || 'Failed to reassign images');
                   }
                 }
               });

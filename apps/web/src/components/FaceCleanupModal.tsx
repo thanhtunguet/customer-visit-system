@@ -1,10 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Typography, Button, Slider, Alert, Space, Statistic, Row, Col, message, Spin } from 'antd';
 import { DeleteOutlined, CleanupOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Customer } from '../types/api';
 
 const { Title, Text } = Typography;
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
 
 interface FaceCleanupModalProps {
   visible: boolean;
@@ -36,25 +45,19 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
   const [maxToRemove, setMaxToRemove] = useState(10);
 
-  useEffect(() => {
-    if (visible && customer) {
-      loadCustomerStats();
-    }
-  }, [visible, customer]);
-
-  const loadCustomerStats = async () => {
+  const loadCustomerStats = useCallback(async () => {
     if (!customer) return;
-    
+
     try {
       setLoading(true);
       const result = await apiClient.getCustomerFaceImages(customer.customer_id);
-      
+
       // Calculate stats from face images
       const images = result.images;
       if (images.length > 0) {
         const confidenceScores = images.map(img => img.confidence_score);
         const qualityScores = images.map(img => img.quality_score);
-        
+
         const statsData: CustomerStats = {
           customer_id: customer.customer_id,
           total_images: images.length,
@@ -65,16 +68,22 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
           first_image_date: images[images.length - 1]?.created_at,
           latest_image_date: images[0]?.created_at
         };
-        
+
         setStats(statsData);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       message.error('Failed to load customer statistics');
       console.error('Error loading customer stats:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [customer]);
+
+  useEffect(() => {
+    if (visible && customer) {
+      loadCustomerStats();
+    }
+  }, [visible, customer, loadCustomerStats]);
 
   const handleCleanup = async () => {
     if (!customer) return;
@@ -89,8 +98,8 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
       message.success(`Successfully removed ${result.removed_count} low-confidence face detections`);
       onCleanupComplete();
       onClose();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to cleanup face detections');
+    } catch (error: unknown) {
+      message.error((error as ApiError)?.response?.data?.detail || 'Failed to cleanup face detections');
       console.error('Error cleaning up faces:', error);
     } finally {
       setCleaning(false);

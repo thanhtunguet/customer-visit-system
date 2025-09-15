@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space, Select, App } from 'antd';
 import { 
   DashboardOutlined, 
@@ -34,21 +34,11 @@ export const AppLayout: React.FC = () => {
   const [selectedTenantId, setSelectedTenantId] = useState<string>('__global__');
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
 
-  useEffect(() => {
-    loadCurrentUser();
-  }, []);
-
-  useEffect(() => {
-    if (user?.role === UserRole.SYSTEM_ADMIN) {
-      loadTenants();
-    }
-  }, [user, loadTenants]);
-
-  const loadCurrentUser = async () => {
+  const loadCurrentUser = useCallback(async () => {
     try {
       const userData = await apiClient.getCurrentUser();
       setUser(userData);
-      
+
       // For system admin, use stored tenant context or default to global view
       if (userData.role === UserRole.SYSTEM_ADMIN) {
         const storedTenantId = apiClient.getCurrentTenant();
@@ -65,7 +55,17 @@ export const AppLayout: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    loadCurrentUser();
+  }, [loadCurrentUser]);
+
+  useEffect(() => {
+    if (user?.role === UserRole.SYSTEM_ADMIN) {
+      loadTenants();
+    }
+  }, [user, loadTenants]);
 
 
 

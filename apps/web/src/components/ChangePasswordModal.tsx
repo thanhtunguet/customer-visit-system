@@ -3,6 +3,21 @@ import { Modal, Form, Input, Button, App } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
+
+interface FieldChangeEvent {
+  current_password?: string;
+  new_password?: string;
+  confirm_password?: string;
+}
+
 interface ChangePasswordModalProps {
   open: boolean;
   onClose: () => void;
@@ -32,8 +47,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       message.success('Password changed successfully');
       form.resetFields();
       onClose();
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 'Failed to change password';
+    } catch (error: unknown) {
+      const errorMessage = (error as ApiError)?.response?.data?.detail || 'Failed to change password';
       
       // Handle specific validation errors
       if (errorMessage.includes('Current password is incorrect')) {
@@ -65,7 +80,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   };
 
   // Clear field errors when user starts typing
-  const handleFieldChange = (changedFields: any) => {
+  const handleFieldChange = (changedFields: FieldChangeEvent) => {
     // Clear any manual field errors when user modifies the field
     if (changedFields.current_password !== undefined) {
       form.setFields([

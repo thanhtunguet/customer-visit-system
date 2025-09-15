@@ -7,6 +7,19 @@ import { LoginRequest, UserRole } from '../types/api';
 
 const { Title, Text } = Typography;
 
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      detail?: string | Array<{
+        loc: string[];
+        msg: string;
+      }>;
+    };
+  };
+  message?: string;
+}
+
 export const LoginForm: React.FC = () => {
   const [form] = Form.useForm();
   const navigate = useNavigate();
@@ -26,14 +39,14 @@ export const LoginForm: React.FC = () => {
       
       await apiClient.login(loginData);
       navigate('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log('Login error:', err);
       console.log('Error response:', err.response);
       console.log('Error status:', err.response?.status);
       console.log('Error data:', err.response?.data);
       
-      const errorData = err.response?.data;
-      const status = err.response?.status;
+      const errorData = (err as ApiError)?.response?.data;
+      const status = (err as ApiError)?.response?.status;
       
       // Handle different error scenarios
       if (status === 401) {
@@ -49,7 +62,7 @@ export const LoginForm: React.FC = () => {
           
           if (Array.isArray(errorData.detail)) {
             // Handle validation errors array
-            errorData.detail.forEach((error: any) => {
+            errorData.detail.forEach((error) => {
               if (error.loc && error.msg) {
                 const field = error.loc[error.loc.length - 1]; // Get last part of location
                 errors[field] = error.msg;

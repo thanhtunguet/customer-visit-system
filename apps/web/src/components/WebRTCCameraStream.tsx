@@ -8,6 +8,16 @@ import {
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+    status?: number;
+  };
+  message?: string;
+}
+
 interface WebRTCCameraStreamProps {
   siteId: string;
   cameraId: number;
@@ -120,7 +130,9 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           console.log('Video element source set to remote stream');
-          try { videoRef.current.play(); } catch (_) {}
+          try { videoRef.current.play(); } catch (_) {
+            // Ignore autoplay errors - browser may prevent it
+          }
         }
       }
     };
@@ -183,7 +195,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     };
 
     return pc;
-  }, [currentClientId, updateConnectionState, workerIdRef]);
+  }, [currentClientId, updateConnectionState, workerIdRef, handleReconnect, session]);
 
   // Setup signaling WebSocket connection
   const setupSignalingConnection = useCallback(async (): Promise<WebSocket | null> => {
@@ -259,7 +271,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       setError('Failed to setup signaling connection');
       return null;
     }
-  }, [currentClientId, isStreaming, manuallyStopped]);
+  }, [currentClientId, isStreaming, manuallyStopped, handleSignalingMessage]);
 
   // Stop WebRTC streaming session
   const handleStopStream = useCallback(async () => {
@@ -315,16 +327,17 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       
       message.success('WebRTC stream stopped');
       
-    } catch (err: any) {
-      setError(err.message || 'Failed to stop stream');
+    } catch (err: unknown) {
+      const error = err as ApiError;
+      setError(error.message || 'Failed to stop stream');
       message.error('Failed to stop stream');
     } finally {
       setLoading(false);
     }
-  }, [updateConnectionState, notifyStreamStateChange]);
+  }, [updateConnectionState, notifyStreamStateChange, siteId, cameraId, message]);
 
   // Handle signaling messages
-  const handleSignalingMessage = useCallback(async (message: any) => {
+  const handleSignalingMessage = useCallback(async (message: { type: string; data?: unknown; from_id?: string; sdp?: string; candidate?: string; sdpMid?: string; sdpMLineIndex?: number }) => {
     if (!peerConnectionRef.current) {
       console.warn('Received signaling message but no peer connection');
       return;
@@ -402,7 +415,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         await handleStopStream();
         break;
         
-      case 'signaling':
+      case 'signaling': {
         const signalingData = message.data;
         
         switch (signalingData.type) {
@@ -461,11 +474,12 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
             break;
         }
         break;
+      }
         
       default:
         console.log('Unknown signaling message type:', message.type);
     }
-  }, [currentClientId, workerIdRef, handleStopStream]);
+  }, [currentClientId, workerIdRef, handleStopStream, session]);
 
   // Start WebRTC streaming session
   const handleStartStream = useCallback(async () => {
@@ -519,20 +533,21 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         throw new Error('Failed to create WebRTC session');
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as ApiError;
       console.error('❌ WebRTC session failed:', err);
       console.error('❌ Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
       });
-      setError(err.response?.data?.detail || err.message || 'Failed to start WebRTC stream');
+      setError(error.response?.data?.detail || error.message || 'Failed to start WebRTC stream');
       updateConnectionState('error');
       message.error('Failed to start WebRTC stream');
     } finally {
       setLoading(false);
     }
-  }, [cameraId, siteId, currentClientId, notifyStreamStateChange, updateConnectionState, setupPeerConnection, setupSignalingConnection]);
+  }, [cameraId, siteId, currentClientId, notifyStreamStateChange, updateConnectionState, setupPeerConnection, setupSignalingConnection, message]);
 
 
 
@@ -567,7 +582,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         }
       }
     }, delay);
-  }, [manuallyStopped, session, setupPeerConnection, setupSignalingConnection, updateConnectionState]);
+  }, [manuallyStopped, setupPeerConnection, setupSignalingConnection, updateConnectionState, handleStartStream]);
 
   // Manual reconnect button
   const handleManualReconnect = useCallback(async () => {

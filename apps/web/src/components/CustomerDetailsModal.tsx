@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   Tabs,
@@ -23,6 +23,15 @@ import { CustomerFaceGallery } from './CustomerFaceGallery';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
 
 interface CustomerDetailsModalProps {
   visible: boolean;
@@ -55,14 +64,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('details');
 
-  useEffect(() => {
-    if (visible && customerId) {
-      loadCustomerData();
-      loadGalleryStats();
-    }
-  }, [visible, customerId]);
-
-  const loadCustomerData = async () => {
+  const loadCustomerData = useCallback(async () => {
     if (!customerId) return;
 
     try {
@@ -70,25 +72,32 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
       setError(null);
       const data = await apiClient.getCustomer(customerId);
       setCustomerData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load customer details');
+    } catch (err: unknown) {
+      setError((err as ApiError)?.response?.data?.detail || 'Failed to load customer details');
       setCustomerData(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerId]);
 
-  const loadGalleryStats = async () => {
+  const loadGalleryStats = useCallback(async () => {
     if (!customerId) return;
 
     try {
       const stats = await apiClient.get<CustomerGalleryStats>(`/customers/${customerId}/face-gallery-stats`);
       setGalleryStats(stats);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Failed to load gallery stats:', err);
       // Don't show error for stats, it's optional
     }
-  };
+  }, [customerId]);
+
+  useEffect(() => {
+    if (visible && customerId) {
+      loadCustomerData();
+      loadGalleryStats();
+    }
+  }, [visible, customerId, loadCustomerData, loadGalleryStats]);
 
   const handleClose = () => {
     setCustomerData(null);

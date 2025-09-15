@@ -23,6 +23,15 @@ import { apiClient } from '../services/api';
 
 const { Title, Text } = Typography;
 
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
+}
+
 interface FaceRecognitionTestProps {
   staffId: string;
   staffName: string;
@@ -68,8 +77,8 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
       
       const result = await apiClient.testFaceRecognition(staffId, testImage);
       setTestResult(result);
-    } catch (error: any) {
-      setError(error.response?.data?.detail || 'Recognition test failed');
+    } catch (error: unknown) {
+      setError((error as ApiError)?.response?.data?.detail || 'Recognition test failed');
       setTestResult(null);
     } finally {
       setTesting(false);
@@ -103,7 +112,7 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
       dataIndex: 'rank',
       key: 'rank',
       width: 60,
-      render: (_: any, __: any, index: number) => (
+      render: (_: unknown, __: unknown, index: number) => (
         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
           index === 0 ? 'bg-gold text-white' : 
           index === 1 ? 'bg-gray-400 text-white' : 
