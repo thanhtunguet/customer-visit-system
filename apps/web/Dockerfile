@@ -2,7 +2,7 @@
 # Multi-stage Dockerfile for Web frontend
 
 # Base stage for dependencies
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
