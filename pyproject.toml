@@ -34,7 +34,7 @@ dependencies = [
     
     # Vector DB & Storage
     "pymilvus==2.4.5",
-    "minio==7.2.7",
+    "minio==7.2.18",
     
     # Background Jobs
     "APScheduler==3.10.4",
