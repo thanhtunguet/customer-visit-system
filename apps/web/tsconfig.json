@@ -15,7 +15,10 @@
       "@shared/common": [
         "../../packages/ts/common"
       ]
-    }
+    },
+    "types": [
+      "vite/client"
+    ]
   },
   "include": [
     "src",
