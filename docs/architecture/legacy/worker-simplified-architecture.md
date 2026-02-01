@@ -1,3 +1,7 @@
+# Legacy: Simplified Worker Architecture (Socket-Only)
+
+Note: This document describes a deprecated socket-only worker approach that conflicts with the current enhanced worker with HTTP endpoints and proxy architecture. It is preserved for historical reference.
+
 # Simplified Worker Architecture - Socket-Only Communication
 
 ## Overview

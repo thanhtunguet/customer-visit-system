@@ -1,3 +1,7 @@
+# Legacy: Worker Socket Migration
+
+Note: This document describes a deprecated migration to a socket-only worker model. The current system uses the enhanced worker HTTP endpoints and API delegation/proxy architecture.
+
 # Worker Socket Migration - Simplified to Basic Worker Only
 
 ## Overview

@@ -1,3 +1,87 @@
+# Plan and Status
+
+Plan for Claude Code: Analyze & Enhance Camera–Worker Delegation
+
+# 🚨 IMPLEMENTATION STATUS UPDATE (2025-08-29)
+
+## ✅ COMPLETED ITEMS
+
+### 1. Deadlock Prevention & Backend Stability (CRITICAL - RESOLVED)
+- ✅ **Fixed Backend Unresponsiveness**: Resolved async/sync database mixing causing deadlocks
+- ✅ **Task Manager**: Implemented centralized task management with connection pool awareness
+- ✅ **Background Task Management**: Fixed 11 locations of unhandled `asyncio.create_task()` calls
+- ✅ **Database Connection Pool**: Added proper limits and timeouts (10+20 async, 5+10 sync connections)
+- ✅ **Worker Monitor Service**: Fixed sync database usage in async contexts
+- ✅ **API Server**: Now starts successfully and handles concurrent requests
+
+### 2. Enhanced Worker Architecture (IMPLEMENTED)
+- ✅ **HTTP Endpoints**: Workers now expose RESTful API for camera control
+- ✅ **Camera Streaming Service**: Full OpenCV integration with device management
+- ✅ **Multi-Camera Support**: Handle multiple streams with conflict resolution
+- ✅ **API Delegation**: Backend proxies camera operations to workers via HTTP
+- ✅ **Worker Registry**: Enhanced registration, heartbeat, and status tracking
+
+### 3. Database & Models (PARTIALLY IMPLEMENTED)
+- ✅ **Enhanced Tables**: staff_face_images with multiple faces per staff
+- ✅ **RLS Implementation**: Tenant isolation with Row Level Security
+- ✅ **Face Processing**: Detection, landmarks, embeddings, recognition testing
+- ❌ **camera_sessions Table**: NOT YET IMPLEMENTED (lease-based assignment missing)
+- ❌ **Worker Capacity Fields**: Basic status tracking exists but not full capacity model
+
+## 🔄 CHANGED FROM ORIGINAL PLAN
+
+### Architecture Changes:
+1. **Proxy Pattern**: Instead of direct WebSocket, API delegates to worker HTTP endpoints
+2. **Task Manager**: Added centralized async task management (not in original plan)
+3. **Multi-Face Staff**: Enhanced staff management beyond original scope
+4. **Real-time Communication**: SSE + WebSocket instead of pure WebSocket protocol
+
+### Technology Choices:
+1. **OpenCV Streaming**: Direct camera access vs RTSP-only approach
+2. **HTTP + REST**: Worker endpoints vs pure WebSocket communication
+3. **SQLAlchemy Async**: Mixed async/sync pattern vs pure async
+
+## ⚠️ REMAINING SYNC ISSUES & TECHNICAL DEBT
+
+### Critical Remaining Issues:
+1. **workers.py Router**: Still has sync database calls in async endpoints
+   - `register_worker()` uses `db: Session = Depends(get_db)` with `db.commit()`
+   - Multiple other endpoints mixing sync/async patterns
+   - **Impact**: Potential deadlocks under heavy worker registration load
+
+2. **Assignment Algorithm**: Using basic camera assignment vs lease-based system
+   - No `camera_sessions` table implemented
+   - No optimistic concurrency control
+   - No soft/hard reclaim logic
+   - **Impact**: Race conditions in multi-worker scenarios
+
+3. **Worker FSM**: Basic state tracking vs formal finite state machine
+   - States exist but no proper FSM implementation
+   - No graceful state transitions
+   - **Impact**: Unpredictable behavior during failures
+
+## 📋 IMMEDIATE PRIORITY FIXES NEEDED
+
+### High Priority (Stability):
+1. **Fix workers.py sync database calls** - Convert to async to prevent deadlocks
+2. **Implement camera_sessions table** - Enable proper lease-based assignment
+3. **Add worker FSM** - Proper state machine for reliability
+
+### Medium Priority (Features):
+1. **Structured logging** - Add correlation IDs and debug instrumentation
+2. **Observability** - OTLP metrics and tracing
+3. **Security hardening** - mTLS, encrypted RTSP credentials
+
+### Low Priority (Optimization):
+1. **Capacity-aware assignment** - Worker slot management
+2. **Ring buffer** - Edge storage for replay
+3. **Model hot-swap** - Dynamic model updates
+
+---
+
+
+---
+
 Work Breakdown Structure (WBS)
 
 Scope note: Single engineer + 4 AI coding agents. Stack: FastAPI + Postgres + Milvus + MinIO; React+TS+Vite+AntD+Tailwind; Workers on Mac Mini; Docker/Compose (local), Kubernetes (prod). Multi-tenant, on-prem, raw images retention 30 days, embeddings long-term.
