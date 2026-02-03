@@ -43,6 +43,8 @@ export TENANT_ID=${TENANT_ID:-t-dev}
 export SITE_ID=${SITE_ID:-s-1}
 export CAMERA_ID=${CAMERA_ID:-c-1}
 export WORKER_API_KEY=${WORKER_API_KEY:-dev-api-key}
+# So worker can import packages/python/common (common.models, etc.)
+export PYTHONPATH="${ROOT_DIR}/packages/python/common${PYTHONPATH:+:${PYTHONPATH}}"
 
 echo "Starting worker-sim against $API_URL"
 exec .venv/bin/python -m app.main

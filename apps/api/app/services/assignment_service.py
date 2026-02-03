@@ -475,8 +475,14 @@ class AssignmentService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("lease_cleanup_error", error=str(e))
-                await asyncio.sleep(5)  # Short delay on error  # Short delay on error
+                if "Name or service not known" in str(e) or "nodename nor servname" in str(e):
+                    logger.warning(
+                        "Database host unreachable for lease cleanup (check DB_HOST / DATABASE_URL): %s",
+                        e,
+                    )
+                else:
+                    logger.error("lease_cleanup_error", error=str(e))
+                await asyncio.sleep(5)
 
 
 # Global instance

@@ -12,6 +12,8 @@ export PORT=${PORT:-8080}
 export ENV=${ENV:-dev}
 export API_KEY_SECRET=${API_KEY_SECRET:-dev-secret}
 export WORKER_API_KEY=${WORKER_API_KEY:-dev-api-key}
+# So app can import packages/python/common (common.enums.commands, etc.)
+export PYTHONPATH="${ROOT_DIR}/packages/python/common${PYTHONPATH:+:${PYTHONPATH}}"
 
 echo "Starting API on :$PORT (reload)"
 # Use uvicorn with optimized settings for faster shutdown

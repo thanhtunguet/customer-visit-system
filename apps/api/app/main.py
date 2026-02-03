@@ -126,6 +126,8 @@ async def lifespan(app: FastAPI):
         try:
             await task_manager.stop()
             await worker_monitor_service.stop()
+            from .services.assignment_service import assignment_service
+            await assignment_service.stop()
             await worker_registry.stop()
             await worker_command_service.stop()
             await camera_delegation_service.stop()

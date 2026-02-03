@@ -15,6 +15,18 @@ from ..models.database import Worker
 logger = logging.getLogger(__name__)
 
 
+def _log_db_connection_error(log: logging.Logger, e: Exception, context: str) -> None:
+    """Log DB connection/DNS errors with a clear hint."""
+    if "Name or service not known" in str(e) or "nodename nor servname" in str(e):
+        log.warning(
+            "Database host unreachable for %s (check DB_HOST / DATABASE_URL): %s",
+            context,
+            e,
+        )
+    else:
+        log.error("Error during %s: %s", context, e)
+
+
 class WorkerMonitorService:
     """Service to monitor worker health and automatically update status"""
 
@@ -66,8 +78,8 @@ class WorkerMonitorService:
         """Check health of all workers and update their status"""
         from ..core.database import db
 
-        async with db.get_session() as db_session:
-            try:
+        try:
+            async with db.get_session() as db_session:
                 # Get all workers that might need status updates
                 current_time = datetime.utcnow()
                 stale_threshold = current_time - timedelta(
@@ -139,9 +151,13 @@ class WorkerMonitorService:
                     # Trigger WebSocket updates for affected tenants
                     await self._broadcast_worker_updates(workers_by_tenant, db_session)
 
-            except Exception as e:
-                logger.error(f"Error checking worker health: {e}")
-                await db_session.rollback()
+        except OSError as e:
+            _log_db_connection_error(logger, e, "worker health")
+        except Exception as e:
+            if "Name or service not known" in str(e) or "nodename nor servname" in str(e):
+                _log_db_connection_error(logger, e, "worker health")
+            else:
+                logger.error("Error checking worker health: %s", e)
 
     async def _broadcast_worker_updates(
         self, workers_by_tenant: Dict[str, Set[str]], db_session
