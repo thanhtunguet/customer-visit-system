@@ -1,0 +1,6 @@
+import { jsx as _jsx } from "react/jsx-runtime";
+import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { Button, Popconfirm, Tooltip } from 'antd';
+export const ViewAction = ({ onClick, disabled = false, loading = false, tooltip = 'View details', }) => (_jsx(Tooltip, { title: tooltip, children: _jsx(Button, { type: "text", icon: _jsx(EyeOutlined, {}), onClick: onClick, disabled: disabled, loading: loading, size: "small" }) }));
+export const EditAction = ({ onClick, disabled = false, loading = false, tooltip = 'Edit', }) => (_jsx(Tooltip, { title: tooltip, children: _jsx(Button, { type: "text", icon: _jsx(EditOutlined, {}), onClick: onClick, disabled: disabled, loading: loading, size: "small" }) }));
+export const DeleteAction = ({ onConfirm, disabled = false, loading = false, tooltip = 'Delete', title = 'Are you sure?', description, okText = 'Yes', cancelText = 'No', ...popconfirmProps }) => (_jsx(Tooltip, { title: tooltip, children: _jsx(Popconfirm, { title: title, description: description, onConfirm: onConfirm, okText: okText, cancelText: cancelText, ...popconfirmProps, children: _jsx(Button, { type: "text", icon: _jsx(DeleteOutlined, {}), disabled: disabled, loading: loading, size: "small", danger: true }) }) }));

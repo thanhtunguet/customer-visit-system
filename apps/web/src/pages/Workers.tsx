@@ -16,7 +16,7 @@ import {
   Badge,
   Select,
   Input,
-  message
+  message,
 } from 'antd';
 import type { BadgeProps } from 'antd';
 import {
@@ -28,7 +28,7 @@ import {
   ExclamationCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  BugOutlined
+  BugOutlined,
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import type { ColumnsType } from 'antd/es/table';
@@ -75,6 +75,15 @@ interface Camera {
   site_id: number;
 }
 
+interface WorkerApi extends Omit<Worker, 'status'> {
+  status: string;
+}
+
+const normalizeWorker = (worker: WorkerApi): Worker => ({
+  ...worker,
+  status: WorkerStatusHelper.fromString(worker.status),
+});
+
 // WorkersResponse shape no longer used directly
 
 const Workers: React.FC = () => {
@@ -83,7 +92,9 @@ const Workers: React.FC = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState<{
     total_count: number;
@@ -91,22 +102,25 @@ const Workers: React.FC = () => {
     offline_count: number;
     error_count: number;
   }>({ total_count: 0, online_count: 0, offline_count: 0, error_count: 0 });
-  
+
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  
+
   // Log viewer modal state
   const [logViewerVisible, setLogViewerVisible] = useState(false);
-  const [selectedWorkerForLogs, setSelectedWorkerForLogs] = useState<Worker | null>(null);
-  
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [selectedWorkerForLogs, setSelectedWorkerForLogs] =
+    useState<Worker | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(
+    undefined
+  );
   const [siteFilter, setSiteFilter] = useState<number | undefined>(undefined);
   const [searchText, setSearchText] = useState('');
 
   // Setup WebSocket connection once on mount
   useEffect(() => {
     setupWebSocket();
-    
+
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
@@ -118,14 +132,14 @@ const Workers: React.FC = () => {
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  
+
   // Load workers when filters change
   useEffect(() => {
     loadWorkers();
-    
+
     // Auto-refresh every 30 seconds (fallback)
     const interval = setInterval(loadWorkers, 30000);
-    
+
     return () => {
       clearInterval(interval);
     };
@@ -136,16 +150,16 @@ const Workers: React.FC = () => {
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       wsRef.current.close();
     }
-    
+
     // Clear any existing reconnection timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
+
     const token = localStorage.getItem('access_token');
     const currentTenant = apiClient.getCurrentTenant();
-    
+
     if (!token || !currentTenant) {
       console.warn('No token or tenant for WebSocket connection');
       return;
@@ -154,79 +168,105 @@ const Workers: React.FC = () => {
     try {
       const wsUrl = apiClient.getWorkerWebSocketUrl(currentTenant);
       const ws = new WebSocket(wsUrl);
-      
+
       ws.onopen = () => {
         console.log('WebSocket connected');
         setWsConnected(true);
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
           console.log('WebSocket message received:', message);
-          
+
           if (message.type === 'initial_data') {
-            setWorkers(message.data);
+            const normalizedWorkers = Array.isArray(message.data)
+              ? message.data.map((worker: WorkerApi) => normalizeWorker(worker))
+              : [];
+            setWorkers(normalizedWorkers);
             // Update summary stats
-            const total = message.data.length;
-            const online = message.data.filter((w: Worker) => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
-            const offline = message.data.filter((w: Worker) => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
-            const error = message.data.filter((w: Worker) => w.status === WorkerStatus.ERROR).length;
-            
+            const total = normalizedWorkers.length;
+            const online = normalizedWorkers.filter(
+              (w) => WorkerStatusHelper.isActive(w.status) && w.is_healthy
+            ).length;
+            const offline = normalizedWorkers.filter(
+              (w) => w.status === WorkerStatus.OFFLINE || !w.is_healthy
+            ).length;
+            const error = normalizedWorkers.filter(
+              (w) => w.status === WorkerStatus.ERROR
+            ).length;
+
             setSummaryStats({
               total_count: total,
               online_count: online,
               offline_count: offline,
-              error_count: error
+              error_count: error,
             });
-            
-          } else if (message.type === 'worker_registered' || message.type === 'worker_updated' || message.type === 'worker_status_changed') {
-            const updatedWorker = message.data;
-            
-            setWorkers(prev => {
-              const newWorkers = prev.map(w => 
+          } else if (
+            message.type === 'worker_registered' ||
+            message.type === 'worker_updated' ||
+            message.type === 'worker_status_changed'
+          ) {
+            const updatedWorker = normalizeWorker(message.data as WorkerApi);
+
+            setWorkers((prev) => {
+              const newWorkers = prev.map((w) =>
                 w.worker_id === updatedWorker.worker_id ? updatedWorker : w
               );
-              
+
               // If worker doesn't exist, add it
-              if (!prev.find(w => w.worker_id === updatedWorker.worker_id)) {
+              if (!prev.find((w) => w.worker_id === updatedWorker.worker_id)) {
                 newWorkers.push(updatedWorker);
               }
-              
+
               // Update summary stats
               const total = newWorkers.length;
-              const online = newWorkers.filter(w => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
-              const offline = newWorkers.filter(w => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
-              const error = newWorkers.filter(w => w.status === WorkerStatus.ERROR).length;
-              
+              const online = newWorkers.filter(
+                (w) => WorkerStatusHelper.isActive(w.status) && w.is_healthy
+              ).length;
+              const offline = newWorkers.filter(
+                (w) => w.status === WorkerStatus.OFFLINE || !w.is_healthy
+              ).length;
+              const error = newWorkers.filter(
+                (w) => w.status === WorkerStatus.ERROR
+              ).length;
+
               setSummaryStats({
                 total_count: total,
                 online_count: online,
                 offline_count: offline,
-                error_count: error
+                error_count: error,
               });
-              
+
               return newWorkers;
             });
           } else if (message.type === 'worker_removed') {
             const removedWorkerId = message.data.worker_id;
-            
-            setWorkers(prev => {
-              const newWorkers = prev.filter(w => w.worker_id !== removedWorkerId);
-              
+
+            setWorkers((prev) => {
+              const newWorkers = prev.filter(
+                (w) => w.worker_id !== removedWorkerId
+              );
+
               // Update summary stats
               const total = newWorkers.length;
-              const online = newWorkers.filter(w => WorkerStatusHelper.isActive(w.status) && w.is_healthy).length;
-              const offline = newWorkers.filter(w => w.status === WorkerStatus.OFFLINE || !w.is_healthy).length;
-              const error = newWorkers.filter(w => w.status === WorkerStatus.ERROR).length;
-              
+              const online = newWorkers.filter(
+                (w) => WorkerStatusHelper.isActive(w.status) && w.is_healthy
+              ).length;
+              const offline = newWorkers.filter(
+                (w) => w.status === WorkerStatus.OFFLINE || !w.is_healthy
+              ).length;
+              const error = newWorkers.filter(
+                (w) => w.status === WorkerStatus.ERROR
+              ).length;
+
               setSummaryStats({
                 total_count: total,
                 online_count: online,
                 offline_count: offline,
-                error_count: error
+                error_count: error,
               });
-              
+
               return newWorkers;
             });
           } else if (message.type === 'ping') {
@@ -238,38 +278,43 @@ const Workers: React.FC = () => {
               console.error('Failed to send pong:', error);
             }
           } else {
-            console.log('Unknown WebSocket message type:', message.type, message);
+            console.log(
+              'Unknown WebSocket message type:',
+              message.type,
+              message
+            );
           }
-          
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
       };
-      
+
       ws.onclose = () => {
         console.log('WebSocket disconnected');
         setWsConnected(false);
-        
+
         // Clear any existing timeout and set up reconnection
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
-        
+
         // Reconnect after 5 seconds only if component is still mounted
         reconnectTimeoutRef.current = setTimeout(() => {
-          if (wsRef.current === null || wsRef.current.readyState === WebSocket.CLOSED) {
+          if (
+            wsRef.current === null ||
+            wsRef.current.readyState === WebSocket.CLOSED
+          ) {
             setupWebSocket();
           }
         }, 5000);
       };
-      
+
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         setWsConnected(false);
       };
-      
+
       wsRef.current = ws;
-      
     } catch (error) {
       console.error('Error setting up WebSocket:', error);
     }
@@ -278,26 +323,30 @@ const Workers: React.FC = () => {
   const loadWorkers = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Load workers and sites first
       const [workersResponse, sitesResponse] = await Promise.all([
         apiClient.getWorkers({
           status: statusFilter,
-          include_offline: true
+          include_offline: true,
         }),
-        apiClient.get('/sites')
+        apiClient.get<Site[]>('/sites'),
       ]);
-      
+
       // Load cameras for all sites
-      const camerasPromises = sitesResponse.map((site: Site) => 
-        apiClient.get(`/sites/${site.site_id}/cameras`)
+      const camerasPromises = sitesResponse.map((site) =>
+        apiClient.get<Camera[]>(`/sites/${site.site_id}/cameras`)
       );
       const camerasResponses = await Promise.all(camerasPromises);
-      
+
       // Flatten all cameras from all sites
       const allCameras = camerasResponses.flat();
-      
-      setWorkers(workersResponse.workers);
+
+      setWorkers(
+        workersResponse.workers.map((worker) =>
+          normalizeWorker(worker as WorkerApi)
+        )
+      );
       setSites(sitesResponse);
       setCameras(allCameras);
       setSummaryStats({
@@ -344,7 +393,10 @@ const Workers: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: WorkerStatus, isHealthy: boolean): BadgeProps['status'] => {
+  const getStatusColor = (
+    status: WorkerStatus,
+    isHealthy: boolean
+  ): BadgeProps['status'] => {
     if (WorkerStatusHelper.isActive(status) && isHealthy) return 'success';
     if (WorkerStatusHelper.isActive(status) && !isHealthy) return 'warning';
     if (status === WorkerStatus.ERROR) return 'error';
@@ -353,8 +405,10 @@ const Workers: React.FC = () => {
   };
 
   const getStatusIcon = (status: WorkerStatus, isHealthy: boolean) => {
-    if (WorkerStatusHelper.isActive(status) && isHealthy) return <CheckCircleOutlined />;
-    if (WorkerStatusHelper.isActive(status) && !isHealthy) return <ExclamationCircleOutlined />;
+    if (WorkerStatusHelper.isActive(status) && isHealthy)
+      return <CheckCircleOutlined />;
+    if (WorkerStatusHelper.isActive(status) && !isHealthy)
+      return <ExclamationCircleOutlined />;
     if (status === WorkerStatus.ERROR) return <CloseCircleOutlined />;
     if (status === WorkerStatus.MAINTENANCE) return <SyncOutlined spin />;
     return <CloseCircleOutlined />;
@@ -375,31 +429,34 @@ const Workers: React.FC = () => {
 
   const getSiteName = (siteId?: number) => {
     if (!siteId) return null;
-    const site = sites.find(s => s.site_id === siteId);
+    const site = sites.find((s) => s.site_id === siteId);
     return site ? site.name : `Site ${siteId}`;
   };
 
   const getCameraName = (cameraId?: number) => {
     if (!cameraId) return null;
-    const camera = cameras.find(c => c.camera_id === cameraId);
+    const camera = cameras.find((c) => c.camera_id === cameraId);
     return camera ? camera.name : `Camera ${cameraId}`;
   };
 
-  const filteredWorkers = workers.filter(worker => {
+  const filteredWorkers = workers.filter((worker) => {
     // Apply search text filter
-    if (searchText && !(
-      worker.worker_name.toLowerCase().includes(searchText.toLowerCase()) ||
-      worker.hostname.toLowerCase().includes(searchText.toLowerCase()) ||
-      (worker.ip_address?.toLowerCase().includes(searchText.toLowerCase()))
-    )) {
+    if (
+      searchText &&
+      !(
+        worker.worker_name.toLowerCase().includes(searchText.toLowerCase()) ||
+        worker.hostname.toLowerCase().includes(searchText.toLowerCase()) ||
+        worker.ip_address?.toLowerCase().includes(searchText.toLowerCase())
+      )
+    ) {
       return false;
     }
-    
+
     // Apply site filter
     if (siteFilter && worker.site_id !== siteFilter) {
       return false;
     }
-    
+
     return true;
   });
 
@@ -411,19 +468,28 @@ const Workers: React.FC = () => {
       width: 100,
       render: (status: WorkerStatus, record: Worker) => (
         <div className="text-center">
-          <Badge 
+          <Badge
             status={getStatusColor(status, record.is_healthy)}
             text={
               <Space size={4}>
                 {getStatusIcon(status, record.is_healthy)}
-                <span className={`font-medium ${
-                  WorkerStatusHelper.isActive(status) && record.is_healthy ? 'text-green-600' :
-                  WorkerStatusHelper.isActive(status) && !record.is_healthy ? 'text-orange-500' :
-                  status === WorkerStatus.ERROR ? 'text-red-600' :
-                  status === WorkerStatus.MAINTENANCE ? 'text-blue-600' :
-                  'text-gray-500'
-                }`}>
-                  {WorkerStatusHelper.isActive(status) && !record.is_healthy ? 'Stale' : WorkerStatusHelper.getDisplayLabel(status)}
+                <span
+                  className={`font-medium ${
+                    WorkerStatusHelper.isActive(status) && record.is_healthy
+                      ? 'text-green-600'
+                      : WorkerStatusHelper.isActive(status) &&
+                          !record.is_healthy
+                        ? 'text-orange-500'
+                        : status === WorkerStatus.ERROR
+                          ? 'text-red-600'
+                          : status === WorkerStatus.MAINTENANCE
+                            ? 'text-blue-600'
+                            : 'text-gray-500'
+                  }`}
+                >
+                  {WorkerStatusHelper.isActive(status) && !record.is_healthy
+                    ? 'Stale'
+                    : WorkerStatusHelper.getDisplayLabel(status)}
                 </span>
               </Space>
             }
@@ -455,7 +521,9 @@ const Workers: React.FC = () => {
             {record.ip_address && ` • ${record.ip_address}`}
           </div>
           {record.worker_version && (
-            <div className="text-xs text-gray-400">v{record.worker_version}</div>
+            <div className="text-xs text-gray-400">
+              v{record.worker_version}
+            </div>
           )}
         </div>
       ),
@@ -482,7 +550,9 @@ const Workers: React.FC = () => {
         <div>
           {record.camera_id ? (
             <div>
-              <span className="font-medium">{getCameraName(record.camera_id)}</span>
+              <span className="font-medium">
+                {getCameraName(record.camera_id)}
+              </span>
               {/* Show streaming status from worker capabilities */}
               {record.capabilities && (
                 <div className="text-xs mt-1">
@@ -491,7 +561,9 @@ const Workers: React.FC = () => {
                       Streaming ({record.capabilities.total_active_streams})
                     </Tag>
                   ) : (
-                    <Tag color="gray" className="text-xs">Not streaming</Tag>
+                    <Tag color="gray" className="text-xs">
+                      Not streaming
+                    </Tag>
                   )}
                 </div>
               )}
@@ -509,14 +581,21 @@ const Workers: React.FC = () => {
       render: (_, record: Worker) => (
         <div>
           <div className="text-sm">
-            Faces: <span className="font-medium">{(record.total_faces_processed || 0).toLocaleString()}</span>
+            Faces:{' '}
+            <span className="font-medium">
+              {(record.total_faces_processed || 0).toLocaleString()}
+            </span>
           </div>
           <div className="text-sm">
-            Uptime: <span className="font-medium">{formatUptime(record.uptime_minutes)}</span>
+            Uptime:{' '}
+            <span className="font-medium">
+              {formatUptime(record.uptime_minutes)}
+            </span>
           </div>
           {record.error_count > 0 && (
             <div className="text-sm text-red-500">
-              Errors: <span className="font-medium">{record.error_count || 0}</span>
+              Errors:{' '}
+              <span className="font-medium">{record.error_count || 0}</span>
             </div>
           )}
         </div>
@@ -564,7 +643,9 @@ const Workers: React.FC = () => {
               type="text"
               danger
               icon={<DeleteOutlined />}
-              onClick={() => handleDeleteWorker(record.worker_id, record.worker_name)}
+              onClick={() =>
+                handleDeleteWorker(record.worker_id, record.worker_name)
+              }
             />
           </Tooltip>
         </Space>
@@ -579,7 +660,7 @@ const Workers: React.FC = () => {
           <CloudServerOutlined className="mr-2" />
           Workers Management
         </Title>
-        
+
         {/* Summary Statistics */}
         <Row gutter={16} className="mb-6">
           <Col span={6}>
@@ -648,12 +729,17 @@ const Workers: React.FC = () => {
               className="w-full sm:w-36"
               value={siteFilter}
               onChange={setSiteFilter}
-              options={sites.map(site => ({ value: site.site_id, label: site.name }))}
+              options={sites.map((site) => ({
+                value: site.site_id,
+                label: site.name,
+              }))}
             />
           </div>
           <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
             <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <div
+                className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}
+              ></div>
               <span className="text-sm text-gray-500">
                 {wsConnected ? 'Live' : 'Disconnected'}
               </span>
@@ -702,7 +788,8 @@ const Workers: React.FC = () => {
               pageSize: 50,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} workers`,
+              showTotal: (total, range) =>
+                `${range[0]}-${range[1]} of ${total} workers`,
             }}
             size="middle"
           />
@@ -742,12 +829,25 @@ const Workers: React.FC = () => {
                   {selectedWorker.ip_address || 'N/A'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Status">
-                  <Badge 
-                    status={getStatusColor(selectedWorker.status, selectedWorker.is_healthy)}
+                  <Badge
+                    status={getStatusColor(
+                      selectedWorker.status,
+                      selectedWorker.is_healthy
+                    )}
                     text={
                       <Space size={4}>
-                        {getStatusIcon(selectedWorker.status, selectedWorker.is_healthy)}
-                        <span>{WorkerStatusHelper.isActive(selectedWorker.status) && !selectedWorker.is_healthy ? 'Stale' : WorkerStatusHelper.getDisplayLabel(selectedWorker.status)}</span>
+                        {getStatusIcon(
+                          selectedWorker.status,
+                          selectedWorker.is_healthy
+                        )}
+                        <span>
+                          {WorkerStatusHelper.isActive(selectedWorker.status) &&
+                          !selectedWorker.is_healthy
+                            ? 'Stale'
+                            : WorkerStatusHelper.getDisplayLabel(
+                                selectedWorker.status
+                              )}
+                        </span>
                       </Space>
                     }
                   />
@@ -760,36 +860,58 @@ const Workers: React.FC = () => {
                   )}
                 </Descriptions.Item>
                 <Descriptions.Item label="Site Assignment">
-                  {selectedWorker.site_id ? getSiteName(selectedWorker.site_id) : 'Unassigned'}
+                  {selectedWorker.site_id
+                    ? getSiteName(selectedWorker.site_id)
+                    : 'Unassigned'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Camera Assignment">
-                  {selectedWorker.camera_id ? getCameraName(selectedWorker.camera_id) : 'Unassigned'}
+                  {selectedWorker.camera_id
+                    ? getCameraName(selectedWorker.camera_id)
+                    : 'Unassigned'}
                 </Descriptions.Item>
                 {selectedWorker.capabilities && (
                   <>
                     <Descriptions.Item label="Active Streams">
                       <Space>
-                        <Tag color={selectedWorker.capabilities.total_active_streams > 0 ? "success" : "default"}>
-                          {selectedWorker.capabilities.total_active_streams || 0} cameras streaming
+                        <Tag
+                          color={
+                            selectedWorker.capabilities.total_active_streams > 0
+                              ? 'success'
+                              : 'default'
+                          }
+                        >
+                          {selectedWorker.capabilities.total_active_streams ||
+                            0}{' '}
+                          cameras streaming
                         </Tag>
-                        {selectedWorker.capabilities.streaming_status_updated && (
+                        {selectedWorker.capabilities
+                          .streaming_status_updated && (
                           <span className="text-xs text-gray-500">
-                            Updated: {new Date(selectedWorker.capabilities.streaming_status_updated).toLocaleString()}
+                            Updated:{' '}
+                            {new Date(
+                              selectedWorker.capabilities.streaming_status_updated
+                            ).toLocaleString()}
                           </span>
                         )}
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label="Streaming Cameras" span={2}>
-                      {(selectedWorker.capabilities.active_camera_streams || []).length > 0 ? (
+                      {(selectedWorker.capabilities.active_camera_streams || [])
+                        .length > 0 ? (
                         <Space wrap>
-                          {(selectedWorker.capabilities.active_camera_streams || []).map((cameraId: string) => (
+                          {(
+                            selectedWorker.capabilities.active_camera_streams ||
+                            []
+                          ).map((cameraId: string) => (
                             <Tag key={cameraId} color="blue">
                               Camera {cameraId}
                             </Tag>
                           ))}
                         </Space>
                       ) : (
-                        <span className="text-gray-500">No cameras currently streaming</span>
+                        <span className="text-gray-500">
+                          No cameras currently streaming
+                        </span>
                       )}
                     </Descriptions.Item>
                   </>
@@ -798,7 +920,11 @@ const Workers: React.FC = () => {
                   {selectedWorker.total_faces_processed.toLocaleString()}
                 </Descriptions.Item>
                 <Descriptions.Item label="Error Count">
-                  <span className={selectedWorker.error_count > 0 ? 'text-red-500' : ''}>
+                  <span
+                    className={
+                      selectedWorker.error_count > 0 ? 'text-red-500' : ''
+                    }
+                  >
                     {selectedWorker.error_count}
                   </span>
                 </Descriptions.Item>
@@ -819,7 +945,7 @@ const Workers: React.FC = () => {
                   </Descriptions.Item>
                 )}
               </Descriptions>
-              
+
               {selectedWorker.capabilities && (
                 <div className="mt-4">
                   <Title level={5}>Capabilities</Title>

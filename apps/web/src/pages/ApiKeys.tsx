@@ -1,36 +1,45 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { App } from 'antd';
-import { 
-  Table, 
-  Button, 
-  Space, 
-  Tag, 
-  Popconfirm, 
-  Modal, 
-  Form, 
-  Input, 
-  Select, 
+import {
+  Table,
+  Button,
+  Space,
+  Tag,
+  Popconfirm,
+  Modal,
+  Form,
+  Input,
+  Select,
   DatePicker,
   Typography,
   Card,
   Alert,
   Tooltip,
-  Switch
+  Switch,
 } from 'antd';
-import { 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
   KeyOutlined,
-  CopyOutlined
+  CopyOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 
 import { apiClient } from '../services/api';
-import { ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate } from '../types/api';
+import {
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreateResponse,
+  ApiKeyUpdate,
+} from '../types/api';
 
 interface ApiKeyFormValues extends Omit<ApiKeyCreate, 'expires_at'> {
+  expires_at?: Dayjs;
+}
+
+interface ApiKeyEditFormValues extends Omit<ApiKeyUpdate, 'expires_at'> {
   expires_at?: Dayjs;
 }
 
@@ -45,26 +54,34 @@ const ApiKeys: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [keyDisplayModalVisible, setKeyDisplayModalVisible] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<ApiKey | null>(null);
-  const [newApiKeyData, setNewApiKeyData] = useState<ApiKeyCreateResponse | null>(null);
+  const [newApiKeyData, setNewApiKeyData] =
+    useState<ApiKeyCreateResponse | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
 
   const [createForm] = Form.useForm<ApiKeyFormValues>();
-  const [editForm] = Form.useForm<ApiKeyUpdate>();
+  const [editForm] = Form.useForm<ApiKeyEditFormValues>();
 
   const loadApiKeys = useCallback(async () => {
     setLoading(true);
     try {
-
-      
       const data = await apiClient.getApiKeys();
       setApiKeys(data);
     } catch (error) {
-      const axiosError = error as { response?: { data?: { detail?: string }; status?: number }; message?: string };
-      console.error('API Keys load error:', axiosError.response?.data || axiosError.message);
+      const axiosError = error as {
+        response?: { data?: { detail?: string }; status?: number };
+        message?: string;
+      };
+      console.error(
+        'API Keys load error:',
+        axiosError.response?.data || axiosError.message
+      );
       if (axiosError.response?.status === 400) {
         message.error('Please switch to a tenant view to manage API keys');
       } else {
-        message.error('Failed to load API keys: ' + (error.response?.data?.detail || error.message));
+        message.error(
+          'Failed to load API keys: ' +
+            (error.response?.data?.detail || error.message)
+        );
       }
     } finally {
       setLoading(false);
@@ -76,7 +93,7 @@ const ApiKeys: React.FC = () => {
     const timer = setTimeout(() => {
       loadApiKeys();
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, [loadApiKeys]);
 
@@ -85,9 +102,11 @@ const ApiKeys: React.FC = () => {
       // Convert dayjs to ISO string if expires_at is provided
       const payload: ApiKeyCreate = {
         ...values,
-        expires_at: values.expires_at ? values.expires_at.toISOString() : undefined
+        expires_at: values.expires_at
+          ? values.expires_at.toISOString()
+          : undefined,
       };
-      
+
       console.log('Creating API key with payload:', payload);
       const newApiKey = await apiClient.createApiKey(payload);
       setNewApiKeyData(newApiKey);
@@ -98,17 +117,29 @@ const ApiKeys: React.FC = () => {
       loadApiKeys();
     } catch (error) {
       console.error('API key creation error:', error);
-      const axiosError = error as { response?: { data?: { detail?: string } }; message?: string };
-      const errorMessage = axiosError.response?.data?.detail || axiosError.message || 'Unknown error';
+      const axiosError = error as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      const errorMessage =
+        axiosError.response?.data?.detail ||
+        axiosError.message ||
+        'Unknown error';
       message.error('Failed to create API key: ' + errorMessage);
     }
   };
 
-  const handleUpdateApiKey = async (values: ApiKeyUpdate) => {
+  const handleUpdateApiKey = async (values: ApiKeyEditFormValues) => {
     if (!selectedApiKey) return;
-    
+
     try {
-      await apiClient.updateApiKey(selectedApiKey.key_id, values);
+      const payload: ApiKeyUpdate = {
+        ...values,
+        expires_at: values.expires_at
+          ? values.expires_at.toISOString()
+          : undefined,
+      };
+      await apiClient.updateApiKey(selectedApiKey.key_id, payload);
       setEditModalVisible(false);
       setSelectedApiKey(null);
       editForm.resetFields();
@@ -132,11 +163,14 @@ const ApiKeys: React.FC = () => {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      message.success('Copied to clipboard!');
-    }).catch(() => {
-      message.error('Failed to copy to clipboard');
-    });
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        message.success('Copied to clipboard!');
+      })
+      .catch(() => {
+        message.error('Failed to copy to clipboard');
+      });
   };
 
   const formatLastUsed = (lastUsed: string | undefined) => {
@@ -230,7 +264,9 @@ const ApiKeys: React.FC = () => {
                 editForm.setFieldsValue({
                   name: record.name,
                   is_active: record.is_active,
-                  expires_at: record.expires_at ? dayjs(record.expires_at) : undefined,
+                  expires_at: record.expires_at
+                    ? dayjs(record.expires_at)
+                    : undefined,
                 });
                 setEditModalVisible(true);
               }}
@@ -244,11 +280,7 @@ const ApiKeys: React.FC = () => {
               okText="Yes"
               cancelText="No"
             >
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-              />
+              <Button type="text" danger icon={<DeleteOutlined />} />
             </Popconfirm>
           </Tooltip>
         </Space>
@@ -268,11 +300,20 @@ const ApiKeys: React.FC = () => {
             style={{ marginBottom: 16 }}
           />
         )}
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+        >
           <div>
             <h2>API Key Management</h2>
-            <p>Manage API keys for worker authentication and system integration.</p>
+            <p>
+              Manage API keys for worker authentication and system integration.
+            </p>
           </div>
           <Button
             type="primary"
@@ -307,11 +348,7 @@ const ApiKeys: React.FC = () => {
         }}
         footer={null}
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-          onFinish={handleCreateApiKey}
-        >
+        <Form form={createForm} layout="vertical" onFinish={handleCreateApiKey}>
           <Form.Item
             name="name"
             label="API Key Name"
@@ -320,24 +357,19 @@ const ApiKeys: React.FC = () => {
             <Input placeholder="e.g., Production Worker Key" />
           </Form.Item>
 
-          <Form.Item
-            name="role"
-            label="Role"
-            initialValue="worker"
-          >
+          <Form.Item name="role" label="Role" initialValue="worker">
             <Select>
               <Option value="worker">Worker</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            name="expires_at"
-            label="Expiration Date (Optional)"
-          >
+          <Form.Item name="expires_at" label="Expiration Date (Optional)">
             <DatePicker
               style={{ width: '100%' }}
               placeholder="Select expiration date"
-              disabledDate={(current) => current && current < dayjs().endOf('day')}
+              disabledDate={(current) =>
+                current && current < dayjs().endOf('day')
+              }
             />
           </Form.Item>
 
@@ -346,10 +378,13 @@ const ApiKeys: React.FC = () => {
               <Button key="create" type="primary" htmlType="submit">
                 Create API Key
               </Button>
-              <Button key="cancel" onClick={() => {
-                setCreateModalVisible(false);
-                createForm.resetFields();
-              }}>
+              <Button
+                key="cancel"
+                onClick={() => {
+                  setCreateModalVisible(false);
+                  createForm.resetFields();
+                }}
+              >
                 Cancel
               </Button>
             </Space>
@@ -368,11 +403,7 @@ const ApiKeys: React.FC = () => {
         }}
         footer={null}
       >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleUpdateApiKey}
-        >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdateApiKey}>
           <Form.Item
             name="name"
             label="API Key Name"
@@ -381,22 +412,17 @@ const ApiKeys: React.FC = () => {
             <Input placeholder="e.g., Production Worker Key" />
           </Form.Item>
 
-          <Form.Item
-            name="is_active"
-            label="Status"
-            valuePropName="checked"
-          >
+          <Form.Item name="is_active" label="Status" valuePropName="checked">
             <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
           </Form.Item>
 
-          <Form.Item
-            name="expires_at"
-            label="Expiration Date"
-          >
+          <Form.Item name="expires_at" label="Expiration Date">
             <DatePicker
               style={{ width: '100%' }}
               placeholder="Select expiration date"
-              disabledDate={(current) => current && current < dayjs().endOf('day')}
+              disabledDate={(current) =>
+                current && current < dayjs().endOf('day')
+              }
             />
           </Form.Item>
 
@@ -405,11 +431,14 @@ const ApiKeys: React.FC = () => {
               <Button key="update" type="primary" htmlType="submit">
                 Update API Key
               </Button>
-              <Button key="cancel" onClick={() => {
-                setEditModalVisible(false);
-                setSelectedApiKey(null);
-                editForm.resetFields();
-              }}>
+              <Button
+                key="cancel"
+                onClick={() => {
+                  setEditModalVisible(false);
+                  setSelectedApiKey(null);
+                  editForm.resetFields();
+                }}
+              >
                 Cancel
               </Button>
             </Space>
@@ -427,13 +456,16 @@ const ApiKeys: React.FC = () => {
           setShowApiKey(false);
         }}
         footer={[
-          <Button key="close" onClick={() => {
-            setKeyDisplayModalVisible(false);
-            setNewApiKeyData(null);
-            setShowApiKey(false);
-          }}>
+          <Button
+            key="close"
+            onClick={() => {
+              setKeyDisplayModalVisible(false);
+              setNewApiKeyData(null);
+              setShowApiKey(false);
+            }}
+          >
             Close
-          </Button>
+          </Button>,
         ]}
         closable={false}
         maskClosable={false}
@@ -447,27 +479,30 @@ const ApiKeys: React.FC = () => {
               showIcon
               style={{ marginBottom: 16 }}
             />
-            
+
             <div style={{ marginBottom: 16 }}>
               <strong>API Key Name:</strong> {newApiKeyData.name}
             </div>
-            
+
             <div style={{ marginBottom: 16 }}>
-              <strong>Role:</strong> <Tag color="blue">{newApiKeyData.role.toUpperCase()}</Tag>
+              <strong>Role:</strong>{' '}
+              <Tag color="blue">{newApiKeyData.role.toUpperCase()}</Tag>
             </div>
-            
+
             <div style={{ marginBottom: 16 }}>
               <strong>API Key:</strong>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 8, 
-                marginTop: 8,
-                padding: 12,
-                backgroundColor: '#f5f5f5',
-                borderRadius: 6,
-                border: '1px solid #d9d9d9'
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 8,
+                  padding: 12,
+                  backgroundColor: '#f5f5f5',
+                  borderRadius: 6,
+                  border: '1px solid #d9d9d9',
+                }}
+              >
                 <Input.Password
                   value={newApiKeyData.api_key}
                   readOnly
@@ -484,10 +519,11 @@ const ApiKeys: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             {newApiKeyData.expires_at && (
               <div>
-                <strong>Expires:</strong> {dayjs(newApiKeyData.expires_at).format('MMMM D, YYYY')}
+                <strong>Expires:</strong>{' '}
+                {dayjs(newApiKeyData.expires_at).format('MMMM D, YYYY')}
               </div>
             )}
           </div>

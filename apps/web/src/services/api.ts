@@ -1,16 +1,37 @@
 import axios, { AxiosInstance } from 'axios';
-import { 
-  Tenant, Site, Camera, Staff, Customer, Visit, VisitorReport, 
-  AuthUser, LoginRequest, TokenResponse,
-  StaffFaceImage, StaffWithFaces, FaceRecognitionTestResult, WebcamInfo,
-  SiteCreate, CameraCreate, TenantCreate,
-  User, UserCreate, UserUpdate, UserPasswordUpdate,
-  ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate
+import {
+  Tenant,
+  Site,
+  Camera,
+  Staff,
+  Customer,
+  Visit,
+  VisitorReport,
+  AuthUser,
+  LoginRequest,
+  TokenResponse,
+  StaffFaceImage,
+  StaffWithFaces,
+  FaceRecognitionTestResult,
+  WebcamInfo,
+  SiteCreate,
+  CameraCreate,
+  TenantCreate,
+  User,
+  UserCreate,
+  UserUpdate,
+  UserPasswordUpdate,
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreateResponse,
+  ApiKeyUpdate,
 } from '../types/api';
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
 
 // Force use of window.location.origin in development to use Vite proxy
-const API_BASE_URL = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
+const API_BASE_URL = import.meta.env.DEV
+  ? window.location.origin
+  : import.meta.env.VITE_API_URL || window.location.origin;
 
 class ApiClient {
   private client: AxiosInstance;
@@ -42,7 +63,10 @@ class ApiClient {
       (response) => response,
       (error) => {
         // Don't auto-logout on login endpoint 401s - let the login form handle it
-        if (error.response?.status === 401 && !error.config?.url?.includes('/auth/token')) {
+        if (
+          error.response?.status === 401 &&
+          !error.config?.url?.includes('/auth/token')
+        ) {
           this.logout();
         }
         return Promise.reject(error);
@@ -70,26 +94,29 @@ class ApiClient {
       grant_type: 'password',
       ...credentials,
     });
-    
+
     this.token = response.data.access_token;
     localStorage.setItem('access_token', this.token);
-    
+
     // Sync tenant context from token (more reliable than credentials)
     this.syncTenantContextFromToken();
-    
+
     return response.data;
   }
 
   async switchView(targetTenantId: string | null): Promise<TokenResponse> {
-    const response = await this.client.post<TokenResponse>('/auth/switch-view', {
-      target_tenant_id: targetTenantId,
-    });
-    
+    const response = await this.client.post<TokenResponse>(
+      '/auth/switch-view',
+      {
+        target_tenant_id: targetTenantId,
+      }
+    );
+
     // Update token and sync tenant context from new token
     this.token = response.data.access_token;
     localStorage.setItem('access_token', this.token);
     this.syncTenantContextFromToken();
-    
+
     return response.data;
   }
 
@@ -134,10 +161,10 @@ class ApiClient {
       localStorage.removeItem('current_tenant_id');
       return;
     }
-    
+
     const tenantId = getTenantIdFromToken(this.token);
     this.currentTenantId = tenantId;
-    
+
     // Always store the tenant context (null for global view, tenantId for tenant view)
     if (tenantId) {
       localStorage.setItem('current_tenant_id', tenantId);
@@ -151,8 +178,14 @@ class ApiClient {
     return response.data;
   }
 
-  async changeMyPassword(passwordData: { current_password: string; new_password: string }): Promise<{ message: string }> {
-    const response = await this.client.put<{ message: string }>('/me/password', passwordData);
+  async changeMyPassword(passwordData: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ message: string }> {
+    const response = await this.client.put<{ message: string }>(
+      '/me/password',
+      passwordData
+    );
     return response.data;
   }
 
@@ -172,8 +205,14 @@ class ApiClient {
     return response.data;
   }
 
-  async updateTenant(tenantId: string, tenant: Partial<TenantCreate>): Promise<Tenant> {
-    const response = await this.client.put<Tenant>(`/tenants/${tenantId}`, tenant);
+  async updateTenant(
+    tenantId: string,
+    tenant: Partial<TenantCreate>
+  ): Promise<Tenant> {
+    const response = await this.client.put<Tenant>(
+      `/tenants/${tenantId}`,
+      tenant
+    );
     return response.data;
   }
 
@@ -181,10 +220,16 @@ class ApiClient {
     await this.client.delete(`/tenants/${tenantId}`);
   }
 
-  async toggleTenantStatus(tenantId: string, isActive: boolean): Promise<Tenant> {
-    const response = await this.client.patch<Tenant>(`/tenants/${tenantId}/status`, {
-      is_active: isActive
-    });
+  async toggleTenantStatus(
+    tenantId: string,
+    isActive: boolean
+  ): Promise<Tenant> {
+    const response = await this.client.patch<Tenant>(
+      `/tenants/${tenantId}/status`,
+      {
+        is_active: isActive,
+      }
+    );
     return response.data;
   }
 
@@ -210,29 +255,36 @@ class ApiClient {
 
   // Cameras
   async getCameras(siteId: number): Promise<Camera[]> {
-    const response = await this.client.get<Camera[]>(`/sites/${siteId}/cameras`);
+    const response = await this.client.get<Camera[]>(
+      `/sites/${siteId}/cameras`
+    );
     return response.data;
   }
 
-  async createCamera(
-    siteId: number, 
-    camera: CameraCreate
-  ): Promise<Camera> {
-    const response = await this.client.post<Camera>(`/sites/${siteId}/cameras`, camera);
+  async createCamera(siteId: number, camera: CameraCreate): Promise<Camera> {
+    const response = await this.client.post<Camera>(
+      `/sites/${siteId}/cameras`,
+      camera
+    );
     return response.data;
   }
 
   async getCamera(siteId: number, cameraId: number): Promise<Camera> {
-    const response = await this.client.get<Camera>(`/sites/${siteId}/cameras/${cameraId}`);
+    const response = await this.client.get<Camera>(
+      `/sites/${siteId}/cameras/${cameraId}`
+    );
     return response.data;
   }
 
   async updateCamera(
-    siteId: number, 
+    siteId: number,
     cameraId: number,
     camera: CameraCreate
   ): Promise<Camera> {
-    const response = await this.client.put<Camera>(`/sites/${siteId}/cameras/${cameraId}`, camera);
+    const response = await this.client.put<Camera>(
+      `/sites/${siteId}/cameras/${cameraId}`,
+      camera
+    );
     return response.data;
   }
 
@@ -241,8 +293,13 @@ class ApiClient {
   }
 
   // Camera Streaming
-  async startCameraStream(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
-    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/start`);
+  async startCameraStream(
+    siteId: number,
+    cameraId: number
+  ): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+    const response = await this.client.post(
+      `/sites/${siteId}/cameras/${cameraId}/stream/start`
+    );
     return response.data;
   }
 
@@ -259,12 +316,20 @@ class ApiClient {
     return response.data;
   }
 
-  async stopCameraStream(siteId: number | string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
-    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/stop`);
+  async stopCameraStream(
+    siteId: number | string,
+    cameraId: number
+  ): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+    const response = await this.client.post(
+      `/sites/${siteId}/cameras/${cameraId}/stream/stop`
+    );
     return response.data;
   }
 
-  async getCameraStreamStatus(siteId: number | string, cameraId: number): Promise<{
+  async getCameraStreamStatus(
+    siteId: number | string,
+    cameraId: number
+  ): Promise<{
     camera_id: number;
     stream_active: boolean;
     processing_active?: boolean;
@@ -277,14 +342,20 @@ class ApiClient {
       queue_size: number;
     } | null;
   }> {
-    const response = await this.client.get(`/sites/${siteId}/cameras/${cameraId}/stream/status`);
+    const response = await this.client.get(
+      `/sites/${siteId}/cameras/${cameraId}/stream/status`
+    );
     return response.data;
   }
 
   getCameraStreamUrl(siteId: number | string, cameraId: number): string {
-    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
+    const baseUrl = import.meta.env.DEV
+      ? window.location.origin
+      : import.meta.env.VITE_API_URL || window.location.origin;
     const token = this.token || localStorage.getItem('access_token');
-    const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);
+    const url = new URL(
+      `${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`
+    );
     if (token) {
       url.searchParams.set('access_token', token);
     }
@@ -292,13 +363,15 @@ class ApiClient {
   }
 
   getWorkerWebSocketUrl(tenantId: string): string {
-    const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
+    const baseUrl = import.meta.env.DEV
+      ? window.location.origin
+      : import.meta.env.VITE_API_URL || window.location.origin;
     const token = this.token || localStorage.getItem('access_token');
-    
+
     // Convert HTTP(S) URL to WebSocket URL
     const wsProtocol = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
     const wsBaseUrl = baseUrl.replace(/^https?:/, wsProtocol);
-    
+
     const url = new URL(`${wsBaseUrl}/v1/workers/ws/${tenantId}`);
     if (token) {
       url.searchParams.set('token', token);
@@ -307,13 +380,35 @@ class ApiClient {
   }
 
   // Camera Processing Control
-  async startCameraProcessing(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; worker_id: string; command_id: string; processing_active: boolean }> {
-    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/processing/start`);
+  async startCameraProcessing(
+    siteId: number,
+    cameraId: number
+  ): Promise<{
+    message: string;
+    camera_id: number;
+    worker_id: string;
+    command_id: string;
+    processing_active: boolean;
+  }> {
+    const response = await this.client.post(
+      `/sites/${siteId}/cameras/${cameraId}/processing/start`
+    );
     return response.data;
   }
 
-  async stopCameraProcessing(siteId: number, cameraId: number): Promise<{ message: string; camera_id: number; worker_id: string; command_id: string; processing_active: boolean }> {
-    const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/processing/stop`);
+  async stopCameraProcessing(
+    siteId: number,
+    cameraId: number
+  ): Promise<{
+    message: string;
+    camera_id: number;
+    worker_id: string;
+    command_id: string;
+    processing_active: boolean;
+  }> {
+    const response = await this.client.post(
+      `/sites/${siteId}/cameras/${cameraId}/processing/stop`
+    );
     return response.data;
   }
 
@@ -323,7 +418,9 @@ class ApiClient {
     return response.data;
   }
 
-  async createStaff(staff: Omit<Staff, 'tenant_id' | 'staff_id' | 'created_at' | 'is_active'>): Promise<Staff> {
+  async createStaff(
+    staff: Omit<Staff, 'tenant_id' | 'staff_id' | 'created_at' | 'is_active'>
+  ): Promise<Staff> {
     const response = await this.client.post<Staff>('/staff', staff);
     return response.data;
   }
@@ -346,61 +443,86 @@ class ApiClient {
   }
 
   // Staff Face Images
-  async getStaffFaceImages(staffId: number | string): Promise<StaffFaceImage[]> {
-    const response = await this.client.get<StaffFaceImage[]>(`/staff/${staffId}/faces`);
+  async getStaffFaceImages(
+    staffId: number | string
+  ): Promise<StaffFaceImage[]> {
+    const response = await this.client.get<StaffFaceImage[]>(
+      `/staff/${staffId}/faces`
+    );
     return response.data;
   }
 
   async getStaffWithFaces(staffId: number | string): Promise<StaffWithFaces> {
-    const response = await this.client.get<StaffWithFaces>(`/staff/${staffId}/details`);
+    const response = await this.client.get<StaffWithFaces>(
+      `/staff/${staffId}/details`
+    );
     return response.data;
   }
 
   async uploadStaffFaceImage(
-    staffId: number | string, 
-    imageData: string, 
+    staffId: number | string,
+    imageData: string,
     isPrimary: boolean = false
   ): Promise<StaffFaceImage> {
-    const response = await this.client.post<StaffFaceImage>(`/staff/${staffId}/faces`, {
-      image_data: imageData,
-      is_primary: isPrimary
-    }, {
-      timeout: 45000, // 45 second timeout for individual uploads
-    });
+    const response = await this.client.post<StaffFaceImage>(
+      `/staff/${staffId}/faces`,
+      {
+        image_data: imageData,
+        is_primary: isPrimary,
+      },
+      {
+        timeout: 45000, // 45 second timeout for individual uploads
+      }
+    );
     return response.data;
   }
 
   async uploadMultipleStaffFaceImages(
-    staffId: string, 
+    staffId: number | string,
     imageDataArray: string[]
   ): Promise<StaffFaceImage[]> {
-    const response = await this.client.post<StaffFaceImage[]>(`/staff/${staffId}/faces/bulk`, {
-      images: imageDataArray.map((imageData, index) => ({
-        image_data: imageData,
-        is_primary: index === 0 // First image is primary if no existing images
-      }))
-    }, {
-      timeout: Math.max(60000, imageDataArray.length * 20000), // Dynamic timeout based on number of images
-    });
+    const response = await this.client.post<StaffFaceImage[]>(
+      `/staff/${staffId}/faces/bulk`,
+      {
+        images: imageDataArray.map((imageData, index) => ({
+          image_data: imageData,
+          is_primary: index === 0, // First image is primary if no existing images
+        })),
+      },
+      {
+        timeout: Math.max(60000, imageDataArray.length * 20000), // Dynamic timeout based on number of images
+      }
+    );
     return response.data;
   }
 
-  async deleteStaffFaceImage(staffId: number | string, imageId: string): Promise<void> {
+  async deleteStaffFaceImage(
+    staffId: number | string,
+    imageId: string
+  ): Promise<void> {
     await this.client.delete(`/staff/${staffId}/faces/${imageId}`);
   }
 
-  async recalculateFaceEmbedding(staffId: number | string, imageId: string): Promise<{
+  async recalculateFaceEmbedding(
+    staffId: number | string,
+    imageId: string
+  ): Promise<{
     message: string;
     processing_info: {
       face_count: number;
       confidence: number;
     };
   }> {
-    const response = await this.client.put(`/staff/${staffId}/faces/${imageId}/recalculate`);
+    const response = await this.client.put(
+      `/staff/${staffId}/faces/${imageId}/recalculate`
+    );
     return response.data;
   }
 
-  async testFaceRecognition(staffId: number | string, testImage: string): Promise<FaceRecognitionTestResult> {
+  async testFaceRecognition(
+    staffId: number | string,
+    testImage: string
+  ): Promise<FaceRecognitionTestResult> {
     const response = await this.client.post<FaceRecognitionTestResult>(
       `/staff/${staffId}/test-recognition`,
       { test_image: testImage }
@@ -409,26 +531,46 @@ class ApiClient {
   }
 
   // Customers
-  async getCustomers(params?: { limit?: number; offset?: number }): Promise<Customer[]> {
-    const response = await this.client.get<Customer[]>('/customers', { params });
+  async getCustomers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<Customer[]> {
+    const response = await this.client.get<Customer[]>('/customers', {
+      params,
+    });
     return response.data;
   }
 
-  async createCustomer(customer: Omit<Customer, 'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'>): Promise<Customer> {
+  async createCustomer(
+    customer: Omit<
+      Customer,
+      'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'
+    >
+  ): Promise<Customer> {
     const response = await this.client.post<Customer>('/customers', customer);
     return response.data;
   }
 
   async getCustomer(customerId: number): Promise<Customer> {
-    const response = await this.client.get<Customer>(`/customers/${customerId}`);
+    const response = await this.client.get<Customer>(
+      `/customers/${customerId}`
+    );
     return response.data;
   }
 
   async updateCustomer(
     customerId: number,
-    customer: Partial<Omit<Customer, 'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'>>
+    customer: Partial<
+      Omit<
+        Customer,
+        'tenant_id' | 'customer_id' | 'first_seen' | 'last_seen' | 'visit_count'
+      >
+    >
   ): Promise<Customer> {
-    const response = await this.client.put<Customer>(`/customers/${customerId}`, customer);
+    const response = await this.client.put<Customer>(
+      `/customers/${customerId}`,
+      customer
+    );
     return response.data;
   }
 
@@ -445,7 +587,7 @@ class ApiClient {
     failed_embedding_cleanups: number[];
   }> {
     const response = await this.client.post('/customers/bulk-delete', {
-      customer_ids: customerIds
+      customer_ids: customerIds,
     });
     return response.data;
   }
@@ -454,7 +596,7 @@ class ApiClient {
     customer_id: number;
     total_images: number;
     images: Array<{
-      image_id: number;  // Fixed: should be number, not string
+      image_id: number; // Fixed: should be number, not string
       image_path: string;
       confidence_score: number;
       quality_score: number;
@@ -464,18 +606,26 @@ class ApiClient {
       detection_metadata?: Record<string, unknown>;
     }>;
   }> {
-    const response = await this.client.get(`/customers/${customerId}/face-images`);
+    const response = await this.client.get(
+      `/customers/${customerId}/face-images`
+    );
     return response.data;
   }
 
-  async deleteCustomerFaceImagesBatch(customerId: number, imageIds: number[]): Promise<{
+  async deleteCustomerFaceImagesBatch(
+    customerId: number,
+    imageIds: number[]
+  ): Promise<{
     message: string;
     deleted_count: number;
     requested_count: number;
   }> {
-    const response = await this.client.post(`/customers/${customerId}/face-images/batch-delete`, {
-      image_ids: imageIds
-    });
+    const response = await this.client.post(
+      `/customers/${customerId}/face-images/batch-delete`,
+      {
+        image_ids: imageIds,
+      }
+    );
     return response.data;
   }
 
@@ -485,15 +635,20 @@ class ApiClient {
     visits_processed: number;
     total_visits_found: number;
   }> {
-    const response = await this.client.post(`/customers/${customerId}/face-images/backfill`);
+    const response = await this.client.post(
+      `/customers/${customerId}/face-images/backfill`
+    );
     return response.data;
   }
 
   // Customer Data Cleanup
-  async findSimilarCustomers(customerId: number, params?: {
-    threshold?: number;
-    limit?: number;
-  }): Promise<{
+  async findSimilarCustomers(
+    customerId: number,
+    params?: {
+      threshold?: number;
+      limit?: number;
+    }
+  ): Promise<{
     customer_id: number;
     customer_name?: string;
     similar_customers: Array<{
@@ -509,11 +664,17 @@ class ApiClient {
     threshold_used: number;
     total_found: number;
   }> {
-    const response = await this.client.get(`/customers/${customerId}/similar`, { params });
+    const response = await this.client.get(`/customers/${customerId}/similar`, {
+      params,
+    });
     return response.data;
   }
 
-  async mergeCustomers(primaryCustomerId: number, secondaryCustomerId: number, notes?: string): Promise<{
+  async mergeCustomers(
+    primaryCustomerId: number,
+    secondaryCustomerId: number,
+    notes?: string
+  ): Promise<{
     message: string;
     primary_customer_id: number;
     secondary_customer_id: number;
@@ -525,15 +686,17 @@ class ApiClient {
     const response = await this.client.post('/customers/merge', {
       primary_customer_id: primaryCustomerId,
       secondary_customer_id: secondaryCustomerId,
-      notes
+      notes,
     });
     return response.data;
   }
 
-  async bulkMergeCustomers(mergeOperations: Array<{
-    primary_customer_id: number;
-    secondary_customer_ids: number[];
-  }>): Promise<{
+  async bulkMergeCustomers(
+    mergeOperations: Array<{
+      primary_customer_id: number;
+      secondary_customer_ids: number[];
+    }>
+  ): Promise<{
     message: string;
     job_id: string;
     status: string;
@@ -542,12 +705,16 @@ class ApiClient {
     check_status_url: string;
   }> {
     const response = await this.client.post('/customers/bulk-merge', {
-      merges: mergeOperations
+      merges: mergeOperations,
     });
     return response.data;
   }
 
-  async reassignVisit(visitId: string, newCustomerId: number, update_embeddings: boolean = true): Promise<{
+  async reassignVisit(
+    visitId: string,
+    newCustomerId: number,
+    update_embeddings: boolean = true
+  ): Promise<{
     message: string;
     visit_id: string;
     old_customer_id: number;
@@ -564,7 +731,10 @@ class ApiClient {
     return response.data;
   }
 
-  async reassignFaceImage(imageId: number, newCustomerId: number): Promise<{
+  async reassignFaceImage(
+    imageId: number,
+    newCustomerId: number
+  ): Promise<{
     message: string;
     image_id: number;
     new_customer_id: number;
@@ -576,16 +746,22 @@ class ApiClient {
     return response.data;
   }
 
-  async cleanupLowConfidenceFaces(customerId: number, params?: {
-    min_confidence?: number;
-    max_to_remove?: number;
-  }): Promise<{
+  async cleanupLowConfidenceFaces(
+    customerId: number,
+    params?: {
+      min_confidence?: number;
+      max_to_remove?: number;
+    }
+  ): Promise<{
     message: string;
     customer_id: number;
     removed_count: number;
     min_confidence_threshold: number;
   }> {
-    const response = await this.client.post(`/customers/${customerId}/cleanup-low-confidence-faces`, params || {});
+    const response = await this.client.post(
+      `/customers/${customerId}/cleanup-low-confidence-faces`,
+      params || {}
+    );
     return response.data;
   }
 
@@ -622,12 +798,15 @@ class ApiClient {
       deleted_visit_ids: string[];
       images_cleaned?: number;
     }>('/visits/delete', {
-      visit_ids: visitIds
+      visit_ids: visitIds,
     });
     return response.data;
   }
 
-  async mergeVisits(visitIds: string[], primaryVisitId?: string): Promise<{
+  async mergeVisits(
+    visitIds: string[],
+    primaryVisitId?: string
+  ): Promise<{
     message: string;
     primary_visit_id: string;
     merged_visit_ids: string[];
@@ -666,7 +845,10 @@ class ApiClient {
     start_date?: string;
     end_date?: string;
   }): Promise<VisitorReport[]> {
-    const response = await this.client.get<VisitorReport[]>('/reports/visitors', { params });
+    const response = await this.client.get<VisitorReport[]>(
+      '/reports/visitors',
+      { params }
+    );
     return response.data;
   }
 
@@ -692,7 +874,11 @@ class ApiClient {
   }
 
   // Health check
-  async getHealth(): Promise<{ status: string; env: string; timestamp: string }> {
+  async getHealth(): Promise<{
+    status: string;
+    env: string;
+    timestamp: string;
+  }> {
     const response = await this.client.get('/health');
     return response.data;
   }
@@ -700,7 +886,7 @@ class ApiClient {
   // User Management (System Admin only)
   async getUsers(skip: number = 0, limit: number = 100): Promise<User[]> {
     const response = await this.client.get<User[]>('/users', {
-      params: { skip, limit }
+      params: { skip, limit },
     });
     return response.data;
   }
@@ -720,18 +906,28 @@ class ApiClient {
     return response.data;
   }
 
-  async changeUserPassword(userId: string, passwordData: UserPasswordUpdate): Promise<{ message: string }> {
-    const response = await this.client.put<{ message: string }>(`/users/${userId}/password`, passwordData);
+  async changeUserPassword(
+    userId: string,
+    passwordData: UserPasswordUpdate
+  ): Promise<{ message: string }> {
+    const response = await this.client.put<{ message: string }>(
+      `/users/${userId}/password`,
+      passwordData
+    );
     return response.data;
   }
 
   async deleteUser(userId: string): Promise<{ message: string }> {
-    const response = await this.client.delete<{ message: string }>(`/users/${userId}`);
+    const response = await this.client.delete<{ message: string }>(
+      `/users/${userId}`
+    );
     return response.data;
   }
 
   async toggleUserStatus(userId: string): Promise<User> {
-    const response = await this.client.put<User>(`/users/${userId}/toggle-status`);
+    const response = await this.client.put<User>(
+      `/users/${userId}/toggle-status`
+    );
     return response.data;
   }
 
@@ -742,7 +938,10 @@ class ApiClient {
   }
 
   async createApiKey(data: ApiKeyCreate): Promise<ApiKeyCreateResponse> {
-    const response = await this.client.post<ApiKeyCreateResponse>('/api-keys', data);
+    const response = await this.client.post<ApiKeyCreateResponse>(
+      '/api-keys',
+      data
+    );
     return response.data;
   }
 
@@ -774,7 +973,13 @@ class ApiClient {
       worker_name: string;
       worker_version?: string;
       capabilities?: Record<string, unknown>;
-      status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
+      status:
+        | 'idle'
+        | 'processing'
+        | 'online'
+        | 'offline'
+        | 'error'
+        | 'maintenance';
       site_id?: number;
       camera_id?: number;
       last_heartbeat?: string;
@@ -802,7 +1007,13 @@ class ApiClient {
     worker_name: string;
     worker_version?: string;
     capabilities?: Record<string, unknown>;
-    status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
+    status:
+      | 'idle'
+      | 'processing'
+      | 'online'
+      | 'offline'
+      | 'error'
+      | 'maintenance';
     site_id?: number;
     camera_id?: number;
     last_heartbeat?: string;
@@ -822,12 +1033,14 @@ class ApiClient {
     return response.data;
   }
 
-  async cleanupStaleWorkers(ttlSeconds: number = 300): Promise<{ 
-    message: string; 
-    ttl_seconds: number; 
-    removed_count: number 
+  async cleanupStaleWorkers(ttlSeconds: number = 300): Promise<{
+    message: string;
+    ttl_seconds: number;
+    removed_count: number;
   }> {
-    const response = await this.client.post('/workers/cleanup-stale', { ttl_seconds: ttlSeconds });
+    const response = await this.client.post('/workers/cleanup-stale', {
+      ttl_seconds: ttlSeconds,
+    });
     return response.data;
   }
 
@@ -854,7 +1067,9 @@ class ApiClient {
     status: string;
     message: string;
   }> {
-    const response = await this.client.post(`/webrtc/sessions/${sessionId}/stop`);
+    const response = await this.client.post(
+      `/webrtc/sessions/${sessionId}/stop`
+    );
     return response.data;
   }
 
@@ -912,17 +1127,20 @@ class ApiClient {
       last_status_check?: string;
       source: string;
     }>;
-    workers: Record<string, {
-      worker_id: string;
-      worker_name: string;
-      hostname: string;
-      status: string;
-      is_healthy: boolean;
-      last_heartbeat: string;
-      assigned_cameras: number[];
-      active_camera_streams: string[];
-      total_active_streams: number;
-    }>;
+    workers: Record<
+      string,
+      {
+        worker_id: string;
+        worker_name: string;
+        hostname: string;
+        status: string;
+        is_healthy: boolean;
+        last_heartbeat: string;
+        assigned_cameras: number[];
+        active_camera_streams: string[];
+        total_active_streams: number;
+      }
+    >;
     streaming_summary: {
       total_active_streams: number;
       total_assigned_cameras: number;
@@ -949,15 +1167,18 @@ class ApiClient {
       active_camera_streams: string[];
       total_active_streams: number;
     }>;
-    camera_assignments: Record<string, {
-      camera_id: number;
-      worker_id: string;
-      worker_name: string;
-      worker_status: string;
-      is_healthy: boolean;
-      site_id: number;
-      assigned_at: string;
-    }>;
+    camera_assignments: Record<
+      string,
+      {
+        camera_id: number;
+        worker_id: string;
+        worker_name: string;
+        worker_status: string;
+        is_healthy: boolean;
+        site_id: number;
+        assigned_at: string;
+      }
+    >;
     summary: {
       healthy_workers: number;
       active_workers: number;
@@ -971,7 +1192,10 @@ class ApiClient {
   }
 
   // Process uploaded images for face recognition
-  async processUploadedImages(images: File[], siteId: number): Promise<{
+  async processUploadedImages(
+    images: File[],
+    siteId: number
+  ): Promise<{
     results: Array<{
       success: boolean;
       customer_id?: number;
@@ -987,21 +1211,25 @@ class ApiClient {
     recognized_count: number;
   }> {
     const formData = new FormData();
-    
+
     // Add all images
     images.forEach((image) => {
       formData.append('images', image);
     });
-    
+
     // Add site ID
     formData.append('site_id', siteId.toString());
-    
-    const response = await this.client.post('/events/process-images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: Math.max(60000, images.length * 10000), // Dynamic timeout based on number of images
-    });
+
+    const response = await this.client.post(
+      '/events/process-images',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: Math.max(60000, images.length * 10000), // Dynamic timeout based on number of images
+      }
+    );
     return response.data;
   }
 
@@ -1024,7 +1252,12 @@ class ApiClient {
   }
 
   async listJobs(params?: {
-    status_filter?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    status_filter?:
+      | 'pending'
+      | 'running'
+      | 'completed'
+      | 'failed'
+      | 'cancelled';
     job_type_filter?: string;
   }): Promise<{
     jobs: Array<{
@@ -1052,17 +1285,26 @@ class ApiClient {
   }
 
   // Generic HTTP methods for flexibility
-  async get<T = unknown>(url: string, params?: Record<string, unknown>): Promise<T> {
+  async get<T = unknown>(
+    url: string,
+    params?: Record<string, unknown>
+  ): Promise<T> {
     const response = await this.client.get(url, { params });
     return response.data;
   }
 
-  async post<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
+  async post<T = unknown>(
+    url: string,
+    data?: Record<string, unknown>
+  ): Promise<T> {
     const response = await this.client.post(url, data);
     return response.data;
   }
 
-  async put<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
+  async put<T = unknown>(
+    url: string,
+    data?: Record<string, unknown>
+  ): Promise<T> {
     const response = await this.client.put(url, data);
     return response.data;
   }
@@ -1080,7 +1322,7 @@ class ApiClient {
         // It's a presigned URL, use it directly
         return imagePath;
       }
-      
+
       // Normalize to avoid duplicating baseURL path (/v1)
       let filesPath: string;
       if (imagePath.startsWith('/v1/files/')) {
@@ -1095,7 +1337,7 @@ class ApiClient {
       const response = await this.client.get(filesPath, {
         responseType: 'blob',
       });
-      
+
       // Create blob URL for the image
       const blob = response.data;
       return URL.createObjectURL(blob);

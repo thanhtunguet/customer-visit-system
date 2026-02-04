@@ -42,7 +42,13 @@ const mockFaceImages: StaffFaceImage[] = [
     image_id: 'img-1',
     staff_id: 123,
     image_path: 'staff-faces/t-test/img-1.jpg',
-    face_landmarks: [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]],
+    face_landmarks: [
+      [1, 2],
+      [3, 4],
+      [5, 6],
+      [7, 8],
+      [9, 10],
+    ],
     is_primary: true,
     created_at: '2023-01-01T00:00:00Z',
   },
@@ -51,7 +57,13 @@ const mockFaceImages: StaffFaceImage[] = [
     image_id: 'img-2',
     staff_id: 123,
     image_path: 'staff-faces/t-test/img-2.jpg',
-    face_landmarks: [[2, 3], [4, 5], [6, 7], [8, 9], [10, 11]],
+    face_landmarks: [
+      [2, 3],
+      [4, 5],
+      [6, 7],
+      [8, 9],
+      [10, 11],
+    ],
     is_primary: false,
     created_at: '2023-01-02T00:00:00Z',
   },
@@ -68,9 +80,9 @@ describe('StaffFaceGallery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock AbortController
-    global.AbortController = vi.fn(() => ({
+    globalThis.AbortController = vi.fn(() => ({
       abort: vi.fn(),
-      signal: {}
+      signal: {},
     })) as unknown as typeof AbortController;
   });
 
@@ -98,17 +110,27 @@ describe('StaffFaceGallery', () => {
       image_id: 'new-img',
       staff_id: 123,
       image_path: 'staff-faces/t-test/new-img.jpg',
-      face_landmarks: [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]],
+      face_landmarks: [
+        [1, 2],
+        [3, 4],
+        [5, 6],
+        [7, 8],
+        [9, 10],
+      ],
       is_primary: false,
       created_at: '2023-01-03T00:00:00Z',
     };
 
-    (apiClient.uploadStaffFaceImage as Mock).mockResolvedValue(mockUploadResponse);
+    (apiClient.uploadStaffFaceImage as Mock).mockResolvedValue(
+      mockUploadResponse
+    );
 
     render(<StaffFaceGallery {...mockProps} />);
 
     const uploadButton = screen.getByText('Add Image');
-    const uploadInput = uploadButton.closest('.ant-upload')?.querySelector('input[type="file"]');
+    const uploadInput = uploadButton
+      .closest('.ant-upload')
+      ?.querySelector('input[type="file"]');
 
     if (uploadInput) {
       fireEvent.change(uploadInput, { target: { files: [mockFile] } });
@@ -122,7 +144,9 @@ describe('StaffFaceGallery', () => {
       );
     });
 
-    expect(message.success).toHaveBeenCalledWith('Face image uploaded successfully');
+    expect(message.success).toHaveBeenCalledWith(
+      'Face image uploaded successfully'
+    );
     expect(mockProps.onImagesChange).toHaveBeenCalled();
   });
 
@@ -141,7 +165,9 @@ describe('StaffFaceGallery', () => {
     render(<StaffFaceGallery {...mockProps} />);
 
     const uploadButton = screen.getByText('Add Image');
-    const uploadInput = uploadButton.closest('.ant-upload')?.querySelector('input[type="file"]');
+    const uploadInput = uploadButton
+      .closest('.ant-upload')
+      ?.querySelector('input[type="file"]');
 
     if (uploadInput) {
       fireEvent.change(uploadInput, { target: { files: [mockFile] } });
@@ -159,7 +185,7 @@ describe('StaffFaceGallery', () => {
 
     // Find and click delete button (need to look for the delete icon in actions)
     const deleteButtons = screen.getAllByRole('button');
-    const deleteButton = deleteButtons.find(button => 
+    const deleteButton = deleteButtons.find((button) =>
       button.querySelector('.anticon-delete')
     );
 
@@ -173,8 +199,13 @@ describe('StaffFaceGallery', () => {
       });
 
       await waitFor(() => {
-        expect(apiClient.deleteStaffFaceImage).toHaveBeenCalledWith(123, 'img-1');
-        expect(message.success).toHaveBeenCalledWith('Face image deleted successfully');
+        expect(apiClient.deleteStaffFaceImage).toHaveBeenCalledWith(
+          123,
+          'img-1'
+        );
+        expect(message.success).toHaveBeenCalledWith(
+          'Face image deleted successfully'
+        );
         expect(mockProps.onImagesChange).toHaveBeenCalled();
       });
     }
@@ -189,13 +220,15 @@ describe('StaffFaceGallery', () => {
       },
     };
 
-    (apiClient.recalculateFaceEmbedding as Mock).mockResolvedValue(mockRecalcResponse);
+    (apiClient.recalculateFaceEmbedding as Mock).mockResolvedValue(
+      mockRecalcResponse
+    );
 
     render(<StaffFaceGallery {...mockProps} />);
 
     // Find and click recalculate button
     const reloadButtons = screen.getAllByRole('button');
-    const reloadButton = reloadButtons.find(button => 
+    const reloadButton = reloadButtons.find((button) =>
       button.querySelector('.anticon-reload')
     );
 
@@ -203,7 +236,10 @@ describe('StaffFaceGallery', () => {
       fireEvent.click(reloadButton);
 
       await waitFor(() => {
-        expect(apiClient.recalculateFaceEmbedding).toHaveBeenCalledWith(123, 'img-1');
+        expect(apiClient.recalculateFaceEmbedding).toHaveBeenCalledWith(
+          123,
+          'img-1'
+        );
         expect(message.success).toHaveBeenCalledWith(
           'Face landmarks and embedding recalculated successfully (Confidence: 95.0%)'
         );
@@ -223,7 +259,9 @@ describe('StaffFaceGallery', () => {
     render(<StaffFaceGallery {...mockProps} />);
 
     // Should show landmarks detected info
-    const landmarksText = screen.getAllByText(/✓ Landmarks detected \(5 points\)/);
+    const landmarksText = screen.getAllByText(
+      /✓ Landmarks detected \(5 points\)/
+    );
     expect(landmarksText).toHaveLength(2); // Both images have landmarks
   });
 
@@ -243,7 +281,7 @@ describe('StaffFaceGallery', () => {
 
     const images = screen.getAllByRole('img');
     expect(images[0]).toHaveAttribute(
-      'src', 
+      'src',
       'http://localhost:8080/v1/files/staff-faces/t-test/img-1.jpg'
     );
   });

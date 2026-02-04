@@ -5,11 +5,28 @@ import { vi, describe, it, expect, beforeEach, MockedFunction } from 'vitest';
 import { message } from 'antd';
 import { TenantsPage } from '../../pages/Tenants';
 import { apiClient } from '../../services/api';
-import { Tenant } from '../../types/api';
+import { Tenant, UserRole } from '../../types/api';
 
 // Mock the API client
-vi.mock('../../services/api');
-const mockedApiClient = apiClient as { [K in keyof typeof apiClient]: MockedFunction<typeof apiClient[K]> };
+vi.mock('../../services/api', () => ({
+  apiClient: {
+    getCurrentUser: vi.fn(),
+    getTenants: vi.fn(),
+    createTenant: vi.fn(),
+    deleteTenant: vi.fn(),
+    toggleTenantStatus: vi.fn(),
+  },
+}));
+
+type MockedApiClient = {
+  getCurrentUser: MockedFunction<typeof apiClient.getCurrentUser>;
+  getTenants: MockedFunction<typeof apiClient.getTenants>;
+  createTenant: MockedFunction<typeof apiClient.createTenant>;
+  deleteTenant: MockedFunction<typeof apiClient.deleteTenant>;
+  toggleTenantStatus: MockedFunction<typeof apiClient.toggleTenantStatus>;
+};
+
+const mockedApiClient = apiClient as unknown as MockedApiClient;
 
 // Mock antd message
 vi.mock('antd', async () => {
@@ -41,22 +58,18 @@ const mockTenants: Tenant[] = [
 
 const mockSystemAdminUser = {
   sub: 'admin',
-  role: 'system_admin',
+  role: UserRole.SYSTEM_ADMIN,
   tenant_id: 'system',
 };
 
 const mockTenantAdminUser = {
   sub: 'tenant_admin',
-  role: 'tenant_admin',
+  role: UserRole.TENANT_ADMIN,
   tenant_id: 'test-tenant-1',
 };
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(
-    <BrowserRouter>
-      {component}
-    </BrowserRouter>
-  );
+  return render(<BrowserRouter>{component}</BrowserRouter>);
 };
 
 describe('TenantManagement', () => {
@@ -93,7 +106,9 @@ describe('TenantManagement', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Create New Tenant')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('e.g., acme-corp')).toBeInTheDocument();
+        expect(
+          screen.getByPlaceholderText('e.g., acme-corp')
+        ).toBeInTheDocument();
       });
     });
 
@@ -128,9 +143,14 @@ describe('TenantManagement', () => {
       fireEvent.change(screen.getByPlaceholderText('e.g., Acme Corporation'), {
         target: { value: 'New Tenant' },
       });
-      fireEvent.change(screen.getByPlaceholderText('Brief description of the tenant organization...'), {
-        target: { value: 'New tenant description' },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText(
+          'Brief description of the tenant organization...'
+        ),
+        {
+          target: { value: 'New tenant description' },
+        }
+      );
 
       // Submit form
       fireEvent.click(screen.getByRole('button', { name: 'Create Tenant' }));
@@ -177,13 +197,19 @@ describe('TenantManagement', () => {
 
       // Confirm deletion
       await waitFor(() => {
-        expect(screen.getByText('Are you sure you want to delete tenant "Test Tenant 1"?')).toBeInTheDocument();
+        expect(
+          screen.getByText(
+            'Are you sure you want to delete tenant "Test Tenant 1"?'
+          )
+        ).toBeInTheDocument();
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'Yes, Delete' }));
 
       await waitFor(() => {
-        expect(mockedApiClient.deleteTenant).toHaveBeenCalledWith('test-tenant-1');
+        expect(mockedApiClient.deleteTenant).toHaveBeenCalledWith(
+          'test-tenant-1'
+        );
       });
     });
 
@@ -199,8 +225,12 @@ describe('TenantManagement', () => {
 
       // Find and click the status switch for inactive tenant (test-tenant-2)
       const switches = screen.getAllByRole('switch');
-      const inactiveSwitch = switches.find(s => !s.getAttribute('aria-checked') || s.getAttribute('aria-checked') === 'false');
-      
+      const inactiveSwitch = switches.find(
+        (s) =>
+          !s.getAttribute('aria-checked') ||
+          s.getAttribute('aria-checked') === 'false'
+      );
+
       if (inactiveSwitch) {
         fireEvent.click(inactiveSwitch);
 
@@ -212,7 +242,10 @@ describe('TenantManagement', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Yes, Activate' }));
 
         await waitFor(() => {
-          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith('test-tenant-2', true);
+          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith(
+            'test-tenant-2',
+            true
+          );
         });
       }
     });
@@ -229,21 +262,32 @@ describe('TenantManagement', () => {
 
       // Find and click the status switch for active tenant (test-tenant-1)
       const switches = screen.getAllByRole('switch');
-      const activeSwitch = switches.find(s => s.getAttribute('aria-checked') === 'true');
-      
+      const activeSwitch = switches.find(
+        (s) => s.getAttribute('aria-checked') === 'true'
+      );
+
       if (activeSwitch) {
         fireEvent.click(activeSwitch);
 
         // Check confirmation dialog content
         await waitFor(() => {
           expect(screen.getByText('Deactivate Tenant')).toBeInTheDocument();
-          expect(screen.getByText(/disable all operations for this tenant organization/)).toBeInTheDocument();
+          expect(
+            screen.getByText(
+              /disable all operations for this tenant organization/
+            )
+          ).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Yes, Deactivate' }));
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Yes, Deactivate' })
+        );
 
         await waitFor(() => {
-          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith('test-tenant-1', false);
+          expect(mockedApiClient.toggleTenantStatus).toHaveBeenCalledWith(
+            'test-tenant-1',
+            false
+          );
         });
       }
     });
@@ -259,7 +303,9 @@ describe('TenantManagement', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Access Denied')).toBeInTheDocument();
-        expect(screen.getByText(/Only system administrators can manage tenants/)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Only system administrators can manage tenants/)
+        ).toBeInTheDocument();
         expect(screen.getByText('tenant_admin')).toBeInTheDocument();
       });
 
@@ -338,10 +384,14 @@ describe('TenantManagement', () => {
           expect(screen.getByText(/Deactivate Tenant/)).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Yes, Deactivate' }));
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Yes, Deactivate' })
+        );
 
         await waitFor(() => {
-          expect(message.error).toHaveBeenCalledWith('Failed to update tenant status');
+          expect(message.error).toHaveBeenCalledWith(
+            'Failed to update tenant status'
+          );
         });
       }
     });

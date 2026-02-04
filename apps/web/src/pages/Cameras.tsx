@@ -1,19 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Table, 
-  Button, 
-  Modal, 
-  Form, 
-  Typography, 
-  Space, 
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Typography,
+  Space,
   Alert,
   Tag,
   Select,
   Popconfirm,
   Tooltip,
-  App
+  App,
 } from 'antd';
-import { PlusOutlined, PlayCircleOutlined, StopOutlined, EyeOutlined, RobotOutlined, PauseOutlined, WifiOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  EyeOutlined,
+  RobotOutlined,
+  PauseOutlined,
+  WifiOutlined,
+} from '@ant-design/icons';
 
 import { WebRTCCameraStream } from '../components/WebRTCCameraStream';
 import { MultiCameraStreamView } from '../components/MultiCameraStreamView';
@@ -37,14 +45,19 @@ export const Cameras: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
   const [streamModalVisible, setStreamModalVisible] = useState(false);
-  const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
-  const [, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [, setStreamConnectionState] = useState<
+    'disconnected' | 'connecting' | 'connected' | 'error'
+  >('disconnected');
   const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
   const [multiStreamModalVisible, setMultiStreamModalVisible] = useState(false);
-const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});
+  const [processingStatuses, setProcessingStatuses] = useState<
+    Record<string, boolean>
+  >({});
 
   // WebRTC streaming state
-
 
   useEffect(() => {
     loadSites();
@@ -59,65 +72,92 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   // Real-time camera status updates using Server-Sent Events
   useEffect(() => {
     let eventSource: EventSource | null = null;
-    
+
     if (selectedSite && cameras.length > 0) {
       const setupSSE = async () => {
         try {
           // Get initial status
-          const response = await apiClient.get(`/sites/${selectedSite}/streaming/status`);
+          const response = await apiClient.get<{
+            cameras?: Array<{
+              camera_id: string;
+              stream_active?: boolean;
+              processing_active?: boolean;
+            }>;
+          }>(`/sites/${selectedSite}/streaming/status`);
           const streamingData = response;
-          
+
           const statuses: Record<string, boolean> = {};
-          
+
           // Update stream and processing statuses from initial response
           const processingStatuses: Record<string, boolean> = {};
           if (streamingData.cameras && Array.isArray(streamingData.cameras)) {
-            streamingData.cameras.forEach((cameraInfo: { camera_id: string; stream_active?: boolean; processing_active?: boolean }) => {
-              statuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
-              processingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
-            });
+            streamingData.cameras.forEach(
+              (cameraInfo: {
+                camera_id: string;
+                stream_active?: boolean;
+                processing_active?: boolean;
+              }) => {
+                statuses[cameraInfo.camera_id] =
+                  cameraInfo.stream_active || false;
+                processingStatuses[cameraInfo.camera_id] =
+                  cameraInfo.processing_active || false;
+              }
+            );
           }
-          
+
           setStreamStatuses(statuses);
           setProcessingStatuses(processingStatuses);
-          
+
           // Set up SSE for real-time updates
           const token = localStorage.getItem('access_token');
-          const sseUrl = new URL(`${apiClient.baseURL}/sites/${selectedSite}/cameras/status-stream`);
+          const sseUrl = new URL(
+            `${apiClient.baseURL}/sites/${selectedSite}/cameras/status-stream`
+          );
           if (token) {
             sseUrl.searchParams.set('access_token', token);
           }
           eventSource = new EventSource(sseUrl.toString());
-          
+
           eventSource.onmessage = (event) => {
             try {
               const data = JSON.parse(event.data);
-              
+
               if (data.type === 'camera_status_update') {
                 // Update both streaming and processing status
-                setStreamStatuses(prev => ({
+                setStreamStatuses((prev) => ({
                   ...prev,
-                  [data.camera_id]: data.data.stream_active
+                  [data.camera_id]: data.data.stream_active,
                 }));
-                setProcessingStatuses(prev => ({
+                setProcessingStatuses((prev) => ({
                   ...prev,
-                  [data.camera_id]: data.data.processing_active || false
+                  [data.camera_id]: data.data.processing_active || false,
                 }));
                 console.log('Real-time camera status update:', data);
               } else if (data.type === 'site_status_update') {
                 const newStatuses: Record<string, boolean> = {};
                 const newProcessingStatuses: Record<string, boolean> = {};
                 if (data.data.cameras && Array.isArray(data.data.cameras)) {
-                  data.data.cameras.forEach((cameraInfo: { camera_id: string; stream_active?: boolean; processing_active?: boolean }) => {
-                    newStatuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
-                    newProcessingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
-                  });
+                  data.data.cameras.forEach(
+                    (cameraInfo: {
+                      camera_id: string;
+                      stream_active?: boolean;
+                      processing_active?: boolean;
+                    }) => {
+                      newStatuses[cameraInfo.camera_id] =
+                        cameraInfo.stream_active || false;
+                      newProcessingStatuses[cameraInfo.camera_id] =
+                        cameraInfo.processing_active || false;
+                    }
+                  );
                 }
                 setStreamStatuses(newStatuses);
                 setProcessingStatuses(newProcessingStatuses);
                 console.log('Real-time site status update:', data.data);
               } else if (data.type === 'connected') {
-                console.log('Connected to camera status stream for site:', data.site_id);
+                console.log(
+                  'Connected to camera status stream for site:',
+                  data.site_id
+                );
               } else if (data.type === 'keepalive') {
                 // Handle keepalive
               }
@@ -125,41 +165,44 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
               console.error('Error parsing SSE data:', err);
             }
           };
-          
+
           eventSource.onerror = (error) => {
             console.error('SSE connection error:', error);
             eventSource?.close();
-            
+
             // Fallback to polling on SSE failure
             setTimeout(setupSSE, 5000);
           };
-          
         } catch (err) {
           console.error('Failed to setup real-time updates:', err);
-          
+
           // Fallback to individual camera status checks
           const statuses: Record<string, boolean> = {};
           const processingStatuses: Record<string, boolean> = {};
-          
+
           for (const camera of cameras) {
             try {
-              const status = await apiClient.getCameraStreamStatus(selectedSite, camera.camera_id);
+              const status = await apiClient.getCameraStreamStatus(
+                selectedSite,
+                camera.camera_id
+              );
               statuses[camera.camera_id] = status.stream_active;
-              processingStatuses[camera.camera_id] = status.processing_active || false;
+              processingStatuses[camera.camera_id] =
+                status.processing_active || false;
             } catch (err) {
               statuses[camera.camera_id] = false;
               processingStatuses[camera.camera_id] = false;
             }
           }
-          
+
           setStreamStatuses(statuses);
           setProcessingStatuses(processingStatuses);
         }
       };
-      
+
       setupSSE();
     }
-    
+
     return () => {
       if (eventSource) {
         eventSource.close();
@@ -201,7 +244,11 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   const handleCreateCamera = async (values: CameraCreate) => {
     try {
       if (editingCamera) {
-        await apiClient.updateCamera(selectedSite, editingCamera.camera_id, values);
+        await apiClient.updateCamera(
+          selectedSite,
+          editingCamera.camera_id,
+          values
+        );
       } else {
         await apiClient.createCamera(selectedSite, values);
       }
@@ -251,8 +298,6 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
     setMultiStreamModalVisible(false);
   };
 
-
-
   const handleViewStream = async (camera: Camera) => {
     console.log('🟢 WebRTC View Stream clicked - camera:', camera.camera_id);
     setStreamingCamera(camera);
@@ -263,39 +308,54 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   const handleStopStream = async (camera: Camera) => {
     try {
       await apiClient.stopCameraStream(selectedSite, camera.camera_id);
-      setStreamStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
+      setStreamStatuses((prev) => ({ ...prev, [camera.camera_id]: false }));
       message.success(`Stopped stream for ${camera.name}`);
     } catch (err) {
-      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
-      message.error(`Failed to stop stream: ${axiosError.response?.data?.detail || axiosError.message}`);
+      const axiosError = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      message.error(
+        `Failed to stop stream: ${axiosError.response?.data?.detail || axiosError.message}`
+      );
     }
   };
 
   const handleStartProcessing = async (camera: Camera) => {
     try {
       await apiClient.startCameraProcessing(selectedSite!, camera.camera_id);
-      setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: true }));
+      setProcessingStatuses((prev) => ({ ...prev, [camera.camera_id]: true }));
       message.success(`Started face recognition processing for ${camera.name}`);
     } catch (err) {
-      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
-      message.error(`Failed to start processing: ${axiosError.response?.data?.detail || axiosError.message}`);
+      const axiosError = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      message.error(
+        `Failed to start processing: ${axiosError.response?.data?.detail || axiosError.message}`
+      );
     }
   };
 
   const handleStopProcessing = async (camera: Camera) => {
     try {
       await apiClient.stopCameraProcessing(selectedSite!, camera.camera_id);
-      setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
+      setProcessingStatuses((prev) => ({ ...prev, [camera.camera_id]: false }));
       message.success(`Stopped face recognition processing for ${camera.name}`);
     } catch (err) {
-      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
-      message.error(`Failed to stop processing: ${axiosError.response?.data?.detail || axiosError.message}`);
+      const axiosError = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      message.error(
+        `Failed to stop processing: ${axiosError.response?.data?.detail || axiosError.message}`
+      );
     }
   };
 
   // Callback to handle stream state changes from CameraStream component
   const handleStreamStateChange = (cameraId: string, isActive: boolean) => {
-    setStreamStatuses(prev => ({ ...prev, [cameraId]: isActive }));
+    setStreamStatuses((prev) => ({ ...prev, [cameraId]: isActive }));
   };
 
   // removed connection state tracking for now
@@ -316,9 +376,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string) => (
-        <span className="font-medium">{text}</span>
-      ),
+      render: (text: string) => <span className="font-medium">{text}</span>,
     },
     {
       title: 'Type',
@@ -334,19 +392,25 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       title: 'RTSP URL',
       dataIndex: 'rtsp_url',
       key: 'rtsp_url',
-      render: (text?: string) => text || <span className="text-gray-400">-</span>,
+      render: (text?: string) =>
+        text || <span className="text-gray-400">-</span>,
     },
     {
       title: 'Device Index',
-      dataIndex: 'device_index', 
+      dataIndex: 'device_index',
       key: 'device_index',
-      render: (index?: number) => index !== null && index !== undefined ? (
-        <Tooltip title={`OpenCV device index ${index} - matches system webcam enumeration`}>
-          <span className="font-mono bg-gray-100 px-2 py-1 rounded">#{index}</span>
-        </Tooltip>
-      ) : (
-        <span className="text-gray-400">-</span>
-      ),
+      render: (index?: number) =>
+        index !== null && index !== undefined ? (
+          <Tooltip
+            title={`OpenCV device index ${index} - matches system webcam enumeration`}
+          >
+            <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+              #{index}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
     },
     {
       title: 'Status',
@@ -400,7 +464,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       render: (_, camera: Camera) => {
         const isStreaming = streamStatuses[camera.camera_id];
         const isProcessing = processingStatuses[camera.camera_id];
-        
+
         return (
           <Space size="small">
             <Tooltip title="View WebRTC P2P stream">
@@ -506,16 +570,18 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title level={2} className="mb-0">Cameras</Title>
+        <Title level={2} className="mb-0">
+          Cameras
+        </Title>
         <Space>
           <Select
             value={selectedSite}
             onChange={setSelectedSite}
             placeholder="Select Site"
             style={{ width: 200 }}
-            options={sites.map(site => ({ 
-              value: site.site_id, 
-              label: site.name 
+            options={sites.map((site) => ({
+              value: site.site_id,
+              label: site.name,
             }))}
           />
           <Button
@@ -526,7 +592,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
               form.resetFields();
               // Set default values when creating new camera
               form.setFieldsValue({
-                camera_type: CameraType.RTSP
+                camera_type: CameraType.RTSP,
               });
               setModalVisible(true);
             }}
@@ -538,9 +604,14 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
           <Button
             icon={<EyeOutlined />}
             onClick={handleViewAllStreams}
-            disabled={!selectedSite || cameras.filter(cam => streamStatuses[cam.camera_id]).length === 0}
+            disabled={
+              !selectedSite ||
+              cameras.filter((cam) => streamStatuses[cam.camera_id]).length ===
+                0
+            }
           >
-            View All Streams ({cameras.filter(cam => streamStatuses[cam.camera_id]).length})
+            View All Streams (
+            {cameras.filter((cam) => streamStatuses[cam.camera_id]).length})
           </Button>
         </Space>
       </div>
@@ -571,7 +642,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       </div>
 
       <Modal
-        title={editingCamera ? "Edit Camera" : "Add New Camera"}
+        title={editingCamera ? 'Edit Camera' : 'Add New Camera'}
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false);
@@ -581,11 +652,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
         onOk={() => form.submit()}
         confirmLoading={loading}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateCamera}
-        >
+        <Form form={form} layout="vertical" onFinish={handleCreateCamera}>
           <CameraForm form={form} selectedSite={selectedSite} />
         </Form>
       </Modal>
@@ -596,7 +663,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
           <Space>
             <WifiOutlined style={{ color: '#1890ff' }} />
             <span>{streamingCamera?.name} - WebRTC P2P Stream</span>
-            <span style={{ color: '#8c8c8c', fontSize: '14px' }}>#{streamingCamera?.camera_id}</span>
+            <span style={{ color: '#8c8c8c', fontSize: '14px' }}>
+              #{streamingCamera?.camera_id}
+            </span>
             <Tag color="blue" style={{ marginLeft: '8px' }}>
               Peer-to-Peer
             </Tag>
@@ -626,15 +695,15 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
               setStreamingCamera(null);
             }}
             onStreamStateChange={handleStreamStateChange}
-                onConnectionStateChange={() => {}}
+            onConnectionStateChange={() => {}}
             autoStart={streamIntent === 'start'}
             autoReconnect={streamIntent === 'view'}
-            currentStreamStatus={streamStatuses[streamingCamera.camera_id] || false}
+            currentStreamStatus={
+              streamStatuses[streamingCamera.camera_id] || false
+            }
           />
         )}
       </Modal>
-
-
 
       {/* Multi Camera Streaming Modal */}
       <Modal

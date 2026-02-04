@@ -1,6 +1,7 @@
 import React, { useState, useCallback, ReactNode } from 'react';
 import { apiClient } from '../services/api';
 import { TenantContext, TenantContextValue } from './TenantContextInternal';
+import type { Tenant } from '../types/api';
 
 interface TenantProviderProps {
   children: ReactNode;
@@ -31,12 +32,10 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     tenants,
     loading,
     loadTenants,
-    refreshTenants
+    refreshTenants,
   };
 
   return (
-    <TenantContext.Provider value={value}>
-      {children}
-    </TenantContext.Provider>
+    <TenantContext.Provider value={value}>{children}</TenantContext.Provider>
   );
 };
