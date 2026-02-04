@@ -42,7 +42,7 @@ dependencies = [
     
     # Utilities
     "marshmallow==3.21.3",
-    "structlog==24.4.0",
+    "structlog==25.5.0",
     
     # Face processing
     "Pillow==10.4.0",
