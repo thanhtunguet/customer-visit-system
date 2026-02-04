@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "face-recognition"
-version = "0.1.0"
+version = "0.1.1"
 description = "Face Recognition System with FastAPI, Worker, and Web UI"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -54,7 +54,8 @@ dependencies = [
     "insightface==0.7.3",
     "onnx==1.16.0",
     "scikit-image==0.22.0",
-    "aiortc==1.13.0",
+    "aiortc==1.7.1",
+    "av==11.0.0",
     "websockets==12.0",
 ]
 
