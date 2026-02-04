@@ -22,7 +22,7 @@ export const AuthenticatedAvatar: React.FC<AuthenticatedAvatarProps> = ({
 
   if (loading) {
     return (
-      <div 
+      <div
         className={`flex items-center justify-center ${className}`}
         style={{ width: size, height: size }}
       >

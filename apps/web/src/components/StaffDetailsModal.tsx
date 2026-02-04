@@ -8,13 +8,13 @@ import {
   Alert,
   Button,
   Space,
-  Typography
+  Typography,
 } from 'antd';
 import {
   UserOutlined,
   PictureOutlined,
   ExperimentOutlined,
-  EditOutlined
+  EditOutlined,
 } from '@ant-design/icons';
 import { StaffWithFaces } from '../types/api';
 import { apiClient } from '../services/api';
@@ -35,7 +35,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
   visible,
   staffId,
   onClose,
-  onEdit
+  onEdit,
 }) => {
   const [loading, setLoading] = useState(false);
   const [staffData, setStaffData] = useState<StaffWithFaces | null>(null);
@@ -52,7 +52,9 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
       setStaffData(data);
     } catch (err) {
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Failed to load staff details');
+      setError(
+        axiosError.response?.data?.detail || 'Failed to load staff details'
+      );
       setStaffData(null);
     } finally {
       setLoading(false);
@@ -94,10 +96,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
               {staffData.name}
             </Title>
             {onEdit && (
-              <Button
-                icon={<EditOutlined />}
-                onClick={handleEdit}
-              >
+              <Button icon={<EditOutlined />} onClick={handleEdit}>
                 Edit Staff
               </Button>
             )}
@@ -107,39 +106,43 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
             <Descriptions.Item label="Staff ID">
               <span className="font-mono">{staffData.staff_id}</span>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Name">
               <span className="font-medium">{staffData.name}</span>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Site Assignment">
               {staffData.site_id || (
                 <span className="text-gray-400">All Sites</span>
               )}
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Status">
               <Tag color={staffData.is_active ? 'green' : 'red'}>
                 {staffData.is_active ? 'Active' : 'Inactive'}
               </Tag>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Face Images">
               <Space>
                 <span>{staffData.face_images.length} images</span>
-                {staffData.face_images.some(img => img.is_primary) && (
-                  <Tag color="gold" className="text-xs">Has Primary</Tag>
+                {staffData.face_images.some((img) => img.is_primary) && (
+                  <Tag color="gold" className="text-xs">
+                    Has Primary
+                  </Tag>
                 )}
                 {staffData.face_images.length === 0 && (
-                  <Tag color="orange" className="text-xs">No Face Data</Tag>
+                  <Tag color="orange" className="text-xs">
+                    No Face Data
+                  </Tag>
                 )}
               </Space>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Created">
               {dayjs(staffData.created_at).format('MMMM D, YYYY [at] h:mm A')}
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Recognition Status">
               {staffData.face_images.length > 0 ? (
                 <Tag color="green">Enrolled</Tag>
@@ -158,7 +161,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
             />
           )}
         </div>
-      )
+      ),
     },
     {
       key: 'faces',
@@ -175,7 +178,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
           faceImages={staffData.face_images}
           onImagesChange={loadStaffData}
         />
-      )
+      ),
     },
     {
       key: 'test',
@@ -191,8 +194,8 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
           staffId={staffData.staff_id}
           staffName={staffData.name}
         />
-      )
-    }
+      ),
+    },
   ];
 
   return (
@@ -235,9 +238,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
       )}
 
       {!staffData && !loading && !error && (
-        <div className="text-center py-12 text-gray-400">
-          No staff selected
-        </div>
+        <div className="text-center py-12 text-gray-400">No staff selected</div>
       )}
     </Modal>
   );

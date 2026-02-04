@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Table, 
-  Button, 
-  Modal, 
-  Form, 
-  Input, 
-  Typography, 
-  Space, 
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Typography,
+  Space,
   Alert,
   Tag,
   Select,
@@ -15,7 +15,11 @@ import { PlusOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Staff, Site, StaffCreate } from '../types/api';
 import { StaffDetailsModal } from '../components/StaffDetailsModal';
-import { ViewAction, EditAction, DeleteAction } from '../components/TableActionButtons';
+import {
+  ViewAction,
+  EditAction,
+  DeleteAction,
+} from '../components/TableActionButtons';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -41,7 +45,7 @@ export const StaffPage: React.FC = () => {
       setError(null);
       const [staffData, sitesData] = await Promise.all([
         apiClient.getStaff(),
-        apiClient.getSites()
+        apiClient.getSites(),
       ]);
       setStaff(staffData);
       setSites(sitesData);
@@ -66,7 +70,9 @@ export const StaffPage: React.FC = () => {
       await loadData();
     } catch (err) {
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Failed to save staff member');
+      setError(
+        axiosError.response?.data?.detail || 'Failed to save staff member'
+      );
     }
   };
 
@@ -85,7 +91,7 @@ export const StaffPage: React.FC = () => {
   };
 
   const handleEditFromDetails = (staffId: number) => {
-    const staffMember = staff.find(s => s.staff_id === staffId);
+    const staffMember = staff.find((s) => s.staff_id === staffId);
     if (staffMember) {
       setDetailsModalVisible(false);
       handleEditStaff(staffMember);
@@ -98,7 +104,9 @@ export const StaffPage: React.FC = () => {
       await loadData();
     } catch (err) {
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Failed to delete staff member');
+      setError(
+        axiosError.response?.data?.detail || 'Failed to delete staff member'
+      );
     }
   };
 
@@ -117,8 +125,8 @@ export const StaffPage: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: Staff) => (
-        <Button 
-          type="link" 
+        <Button
+          type="link"
           className="p-0 h-auto font-medium text-left"
           onClick={() => handleViewDetails(record)}
         >
@@ -132,7 +140,7 @@ export const StaffPage: React.FC = () => {
       key: 'site_id',
       render: (siteId?: number) => {
         if (!siteId) return <span className="text-gray-400">All Sites</span>;
-        const site = sites.find(s => s.site_id === siteId);
+        const site = sites.find((s) => s.site_id === siteId);
         return site ? site.name : siteId;
       },
     },
@@ -189,11 +197,7 @@ export const StaffPage: React.FC = () => {
         description={error}
         type="error"
         showIcon
-        action={
-          <Button onClick={loadData}>
-            Retry
-          </Button>
-        }
+        action={<Button onClick={loadData}>Retry</Button>}
       />
     );
   }
@@ -201,7 +205,9 @@ export const StaffPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title level={2} className="mb-0">Staff Management</Title>
+        <Title level={2} className="mb-0">
+          Staff Management
+        </Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -243,7 +249,7 @@ export const StaffPage: React.FC = () => {
 
       {/* Add/Edit Staff Modal */}
       <Modal
-        title={editingStaff ? "Edit Staff Member" : "Add New Staff Member"}
+        title={editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false);
@@ -253,11 +259,7 @@ export const StaffPage: React.FC = () => {
         onOk={() => form.submit()}
         confirmLoading={loading}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateStaff}
-        >
+        <Form form={form} layout="vertical" onFinish={handleCreateStaff}>
           <Form.Item
             name="name"
             label="Full Name"
@@ -266,16 +268,13 @@ export const StaffPage: React.FC = () => {
             <Input placeholder="e.g. John Doe" />
           </Form.Item>
 
-          <Form.Item
-            name="site_id"
-            label="Assigned Site"
-          >
+          <Form.Item name="site_id" label="Assigned Site">
             <Select
               placeholder="Select a site (optional)"
               allowClear
-              options={sites.map(site => ({ 
-                value: site.site_id, 
-                label: site.name 
+              options={sites.map((site) => ({
+                value: site.site_id,
+                label: site.name,
               }))}
             />
           </Form.Item>

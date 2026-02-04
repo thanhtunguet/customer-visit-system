@@ -80,9 +80,15 @@ export const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
             className="mb-4"
           />
           <div className="text-sm text-gray-600">
-            <p><strong>Current User:</strong> {currentUser.sub}</p>
-            <p><strong>Role:</strong> {currentUser.role}</p>
-            <p><strong>Tenant:</strong> {currentUser.tenant_id}</p>
+            <p>
+              <strong>Current User:</strong> {currentUser.sub}
+            </p>
+            <p>
+              <strong>Role:</strong> {currentUser.role}
+            </p>
+            <p>
+              <strong>Tenant:</strong> {currentUser.tenant_id}
+            </p>
           </div>
         </Card>
       </div>
@@ -93,31 +99,39 @@ export const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
 };
 
 // Convenience components for specific roles
-export const SystemAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <RoleBasedRoute allowedRoles={['system_admin']}>
-    {children}
-  </RoleBasedRoute>
+export const SystemAdminRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <RoleBasedRoute allowedRoles={['system_admin']}>{children}</RoleBasedRoute>
 );
 
-export const TenantAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+export const TenantAdminRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
   <RoleBasedRoute allowedRoles={['system_admin', 'tenant_admin']}>
     {children}
   </RoleBasedRoute>
 );
 
-export const SiteManagerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <RoleBasedRoute allowedRoles={['system_admin', 'tenant_admin', 'site_manager']}>
+export const SiteManagerRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <RoleBasedRoute
+    allowedRoles={['system_admin', 'tenant_admin', 'site_manager']}
+  >
     {children}
   </RoleBasedRoute>
 );
 
-export const TenantManagementRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <RoleBasedRoute allowedRoles={['system_admin']}>
-    {children}
-  </RoleBasedRoute>
+export const TenantManagementRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <RoleBasedRoute allowedRoles={['system_admin']}>{children}</RoleBasedRoute>
 );
 
-export const SiteManagementRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+export const SiteManagementRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
   <RoleBasedRoute allowedRoles={['system_admin', 'tenant_admin']}>
     {children}
   </RoleBasedRoute>

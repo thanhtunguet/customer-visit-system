@@ -21,7 +21,7 @@ export const WebcamDeviceSelector: React.FC<WebcamDeviceSelectorProps> = ({
   onManualInputModeChange,
   onDropdownVisibleChange,
   value,
-  onChange
+  onChange,
 }) => {
   if (manualInputMode || webcamSource === 'none') {
     return (
@@ -45,9 +45,15 @@ export const WebcamDeviceSelector: React.FC<WebcamDeviceSelectorProps> = ({
         <div className="text-sm text-gray-600">
           <strong>Common device indices:</strong>
           <ul className="mt-1 ml-4 list-disc">
-            <li><code>0</code> - First webcam (built-in camera)</li>
-            <li><code>1</code> - Second webcam (external USB camera)</li>
-            <li><code>2</code> - Third webcam</li>
+            <li>
+              <code>0</code> - First webcam (built-in camera)
+            </li>
+            <li>
+              <code>1</code> - Second webcam (external USB camera)
+            </li>
+            <li>
+              <code>2</code> - Third webcam
+            </li>
           </ul>
         </div>
         {webcamSource === 'workers' && (
@@ -69,12 +75,19 @@ export const WebcamDeviceSelector: React.FC<WebcamDeviceSelectorProps> = ({
     <div>
       <Select
         loading={webcamsLoading}
-        placeholder={webcamsLoading ? 'Loading webcams from workers...' : 'Select a webcam device'}
+        placeholder={
+          webcamsLoading
+            ? 'Loading webcams from workers...'
+            : 'Select a webcam device'
+        }
         showSearch
         value={value}
         onChange={onChange}
-        filterOption={(input, option) => 
-          option?.label?.toString().toLowerCase().indexOf(input.toLowerCase()) >= 0
+        filterOption={(input, option) =>
+          option?.label
+            ?.toString()
+            .toLowerCase()
+            .indexOf(input.toLowerCase()) >= 0
         }
         onDropdownVisibleChange={onDropdownVisibleChange}
         dropdownRender={(menu) => (
@@ -95,12 +108,14 @@ export const WebcamDeviceSelector: React.FC<WebcamDeviceSelectorProps> = ({
         options={webcams.map((w) => ({
           value: w.device_index,
           disabled: !w.is_working || w.in_use,
-          label: `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim()
+          label:
+            `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim(),
         }))}
       />
       {webcamSource === 'workers' && (
         <div className="text-xs text-green-600 mt-2">
-          ✓ Device list loaded from workers. Workers are available for camera streaming.
+          ✓ Device list loaded from workers. Workers are available for camera
+          streaming.
         </div>
       )}
     </div>

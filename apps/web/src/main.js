@@ -1,6 +1,8 @@
-import { jsx as _jsx } from "react/jsx-runtime";
+import { jsx as _jsx } from 'react/jsx-runtime';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
 import './styles.css';
-createRoot(document.getElementById('root')).render(_jsx(React.StrictMode, { children: _jsx(App, {}) }));
+createRoot(document.getElementById('root')).render(
+  _jsx(React.StrictMode, { children: _jsx(App, {}) })
+);

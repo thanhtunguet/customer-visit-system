@@ -22,7 +22,7 @@ export interface Site {
 
 export enum CameraType {
   RTSP = 'rtsp',
-  WEBCAM = 'webcam'
+  WEBCAM = 'webcam',
 }
 
 export interface Camera {
@@ -161,7 +161,7 @@ export interface StaffFaceImage {
   image_id: string;
   staff_id: number;
   image_path: string;
-  face_landmarks?: number[][];  // 5-point landmarks
+  face_landmarks?: number[][]; // 5-point landmarks
   is_primary: boolean;
   created_at: string;
 }
@@ -222,7 +222,7 @@ export enum UserRole {
   SYSTEM_ADMIN = 'system_admin',
   TENANT_ADMIN = 'tenant_admin',
   SITE_MANAGER = 'site_manager',
-  WORKER = 'worker'
+  WORKER = 'worker',
 }
 
 export interface User {

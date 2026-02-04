@@ -21,7 +21,7 @@ export function decodeJWT(token: string): JWTPayload | null {
     if (parts.length !== 3) {
       return null;
     }
-    
+
     const payload = parts[1];
     const decoded = JSON.parse(atob(payload));
     return decoded as JWTPayload;
@@ -39,7 +39,7 @@ export function isTokenExpired(token: string): boolean {
   if (!payload) {
     return true;
   }
-  
+
   return Date.now() >= payload.exp * 1000;
 }
 

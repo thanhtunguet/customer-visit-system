@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Typography, Button, Table, Space, Alert, Spin, Input, message } from 'antd';
+import {
+  Modal,
+  Typography,
+  Button,
+  Table,
+  Space,
+  Alert,
+  Spin,
+  Input,
+  message,
+} from 'antd';
 import { MergeOutlined, UserOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Customer } from '../types/api';
@@ -40,12 +50,15 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
   visible,
   customer,
   onClose,
-  onMergeComplete
+  onMergeComplete,
 }) => {
   const [loading, setLoading] = useState(false);
   const [merging, setMerging] = useState(false);
-  const [similarCustomers, setSimilarCustomers] = useState<SimilarCustomer[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<SimilarCustomer | null>(null);
+  const [similarCustomers, setSimilarCustomers] = useState<SimilarCustomer[]>(
+    []
+  );
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<SimilarCustomer | null>(null);
   const [mergeNotes, setMergeNotes] = useState('');
 
   const loadSimilarCustomers = useCallback(async () => {
@@ -53,10 +66,13 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
 
     try {
       setLoading(true);
-      const result = await apiClient.findSimilarCustomers(customer.customer_id, {
-        threshold: 0.85,
-        limit: 10
-      });
+      const result = await apiClient.findSimilarCustomers(
+        customer.customer_id,
+        {
+          threshold: 0.85,
+          limit: 10,
+        }
+      );
       setSimilarCustomers(result.similar_customers);
     } catch (error: unknown) {
       message.error('Failed to find similar customers');
@@ -84,12 +100,17 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
         selectedCustomer.customer_id,
         mergeNotes || undefined
       );
-      
-      message.success(`Successfully merged customers. Combined ${result.merged_visits} visits and ${result.merged_face_images} face images.`);
+
+      message.success(
+        `Successfully merged customers. Combined ${result.merged_visits} visits and ${result.merged_face_images} face images.`
+      );
       onMergeComplete();
       onClose();
     } catch (error: unknown) {
-      message.error((error as ApiError)?.response?.data?.detail || 'Failed to merge customers');
+      message.error(
+        (error as ApiError)?.response?.data?.detail ||
+          'Failed to merge customers'
+      );
       console.error('Error merging customers:', error);
     } finally {
       setMerging(false);
@@ -101,12 +122,7 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       title: 'Avatar',
       key: 'avatar',
       width: 60,
-      render: () => (
-        <AuthenticatedAvatar
-          size={40}
-          icon={<UserOutlined />}
-        />
-      ),
+      render: () => <AuthenticatedAvatar size={40} icon={<UserOutlined />} />,
     },
     {
       title: 'Customer Info',
@@ -116,7 +132,8 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
           <Text strong>{record.name || `Customer ${record.customer_id}`}</Text>
           <br />
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            {record.visit_count} visits • {record.gender} • {record.estimated_age_range}
+            {record.visit_count} visits • {record.gender} •{' '}
+            {record.estimated_age_range}
           </Text>
         </div>
       ),
@@ -126,7 +143,9 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       key: 'last_seen',
       render: (record: SimilarCustomer) => (
         <Text type="secondary">
-          {record.last_seen ? dayjs(record.last_seen).format('MMM D, YYYY') : 'Unknown'}
+          {record.last_seen
+            ? dayjs(record.last_seen).format('MMM D, YYYY')
+            : 'Unknown'}
         </Text>
       ),
     },
@@ -135,12 +154,13 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       key: 'similarity',
       render: (record: SimilarCustomer) => {
         const similarity = Math.round(record.max_similarity * 100);
-        const color = similarity >= 95 ? '#52c41a' : similarity >= 90 ? '#faad14' : '#1890ff';
-        return (
-          <Text style={{ color, fontWeight: 'bold' }}>
-            {similarity}%
-          </Text>
-        );
+        const color =
+          similarity >= 95
+            ? '#52c41a'
+            : similarity >= 90
+              ? '#faad14'
+              : '#1890ff';
+        return <Text style={{ color, fontWeight: 'bold' }}>{similarity}%</Text>;
       },
     },
     {
@@ -148,13 +168,23 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       key: 'action',
       render: (record: SimilarCustomer) => (
         <Button
-          type={selectedCustomer?.customer_id === record.customer_id ? 'primary' : 'default'}
+          type={
+            selectedCustomer?.customer_id === record.customer_id
+              ? 'primary'
+              : 'default'
+          }
           size="small"
-          onClick={() => setSelectedCustomer(
-            selectedCustomer?.customer_id === record.customer_id ? null : record
-          )}
+          onClick={() =>
+            setSelectedCustomer(
+              selectedCustomer?.customer_id === record.customer_id
+                ? null
+                : record
+            )
+          }
         >
-          {selectedCustomer?.customer_id === record.customer_id ? 'Selected' : 'Select'}
+          {selectedCustomer?.customer_id === record.customer_id
+            ? 'Selected'
+            : 'Select'}
         </Button>
       ),
     },
@@ -195,8 +225,16 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
           message="Customer Merge"
           description={
             <div>
-              <p><strong>Primary Customer:</strong> {customer.name || `Customer ${customer.customer_id}`} ({customer.visit_count} visits)</p>
-              <p>The selected customer will be merged into this primary customer. All visits and face images will be transferred, and the selected customer will be marked as merged.</p>
+              <p>
+                <strong>Primary Customer:</strong>{' '}
+                {customer.name || `Customer ${customer.customer_id}`} (
+                {customer.visit_count} visits)
+              </p>
+              <p>
+                The selected customer will be merged into this primary customer.
+                All visits and face images will be transferred, and the selected
+                customer will be marked as merged.
+              </p>
             </div>
           }
           type="info"
@@ -245,10 +283,22 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
             message="Merge Confirmation"
             description={
               <div>
-                <p><strong>This action cannot be undone!</strong></p>
+                <p>
+                  <strong>This action cannot be undone!</strong>
+                </p>
                 <p>Merging will:</p>
                 <ul>
-                  <li>Transfer all visits from <strong>{selectedCustomer.name || `Customer ${selectedCustomer.customer_id}`}</strong> to <strong>{customer.name || `Customer ${customer.customer_id}`}</strong></li>
+                  <li>
+                    Transfer all visits from{' '}
+                    <strong>
+                      {selectedCustomer.name ||
+                        `Customer ${selectedCustomer.customer_id}`}
+                    </strong>{' '}
+                    to{' '}
+                    <strong>
+                      {customer.name || `Customer ${customer.customer_id}`}
+                    </strong>
+                  </li>
                   <li>Transfer all face images and embeddings</li>
                   <li>Update visit counts and date ranges</li>
                   <li>Mark the selected customer as merged (soft delete)</li>

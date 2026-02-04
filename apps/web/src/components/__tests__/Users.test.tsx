@@ -128,7 +128,9 @@ describe('Users Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Create New User')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Enter username')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Enter email address')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('Enter email address')
+      ).toBeInTheDocument();
     });
   });
 
@@ -173,7 +175,7 @@ describe('Users Component', () => {
     await waitFor(() => {
       // System admin should show "N/A" for tenant
       expect(screen.getByText('N/A')).toBeInTheDocument();
-      
+
       // Site manager should show tenant name
       expect(screen.getByText('Test Tenant')).toBeInTheDocument();
     });
@@ -182,7 +184,7 @@ describe('Users Component', () => {
   it('handles loading state', () => {
     // Mock slow API response
     (apiClient.getUsers as any).mockImplementation(
-      () => new Promise(resolve => setTimeout(() => resolve(mockUsers), 1000))
+      () => new Promise((resolve) => setTimeout(() => resolve(mockUsers), 1000))
     );
 
     render(<Users />);
@@ -192,7 +194,9 @@ describe('Users Component', () => {
   });
 
   it('handles API error gracefully', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     (apiClient.getUsers as any).mockRejectedValue(new Error('API Error'));
 
     render(<Users />);
@@ -233,7 +237,7 @@ describe('Users Component', () => {
     await waitFor(() => {
       // User with last login should show formatted date
       expect(screen.getByText(/1\/1\/2023/)).toBeInTheDocument();
-      
+
       // User without last login should show "Never"
       expect(screen.getByText('Never')).toBeInTheDocument();
     });
@@ -324,10 +328,10 @@ describe('Users Component - User Actions', () => {
     await waitFor(() => {
       // Find the toggle button for the second user (site manager)
       const actionButtons = screen.getAllByRole('button');
-      const toggleButton = actionButtons.find(button => 
+      const toggleButton = actionButtons.find((button) =>
         button.getAttribute('aria-label')?.includes('Disable')
       );
-      
+
       if (toggleButton) {
         fireEvent.click(toggleButton);
       }

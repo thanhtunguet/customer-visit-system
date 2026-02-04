@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Typography, Button, Table, Space, Alert, message, Tag, Image } from 'antd';
+import {
+  Modal,
+  Typography,
+  Button,
+  Table,
+  Space,
+  Alert,
+  message,
+  Tag,
+  Image,
+} from 'antd';
 import { DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Visit } from '../types/api';
@@ -23,7 +33,7 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
   visible,
   customerId,
   onClose,
-  onRemovalComplete
+  onRemovalComplete,
 }) => {
   const [loading, setLoading] = useState(false);
   const [visits, setVisits] = useState<VisitWithFace[]>([]);
@@ -32,19 +42,23 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
 
   const loadCustomerVisits = useCallback(async () => {
     if (!customerId) return;
-    
+
     try {
       setLoading(true);
       const result = await apiClient.getVisits({
         person_id: customerId.toString(),
-        limit: 100
+        limit: 100,
       });
-      
+
       // Filter to only visits with face images and sort by confidence
       const visitsWithFaces = result.visits
-        .filter(visit => visit.image_path && visit.confidence_score !== undefined)
-        .sort((a, b) => (a.confidence_score || 0) - (b.confidence_score || 0)) as VisitWithFace[];
-      
+        .filter(
+          (visit) => visit.image_path && visit.confidence_score !== undefined
+        )
+        .sort(
+          (a, b) => (a.confidence_score || 0) - (b.confidence_score || 0)
+        ) as VisitWithFace[];
+
       setVisits(visitsWithFaces);
     } catch (error) {
       message.error('Failed to load customer visits');
@@ -66,11 +80,11 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
 
     try {
       setRemoving(true);
-      
+
       // Remove visits one by one to get detailed feedback
       let successCount = 0;
       let failCount = 0;
-      
+
       for (const visitId of selectedVisitIds) {
         try {
           await apiClient.removeVisitFaceDetection(visitId);
@@ -80,9 +94,11 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
           console.error(`Failed to remove visit ${visitId}:`, error);
         }
       }
-      
+
       if (successCount > 0) {
-        message.success(`Successfully removed ${successCount} face detection(s)${failCount > 0 ? ` (${failCount} failed)` : ''}`);
+        message.success(
+          `Successfully removed ${successCount} face detection(s)${failCount > 0 ? ` (${failCount} failed)` : ''}`
+        );
         onRemovalComplete();
         onClose();
       } else {
@@ -107,7 +123,7 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
       title: 'Image',
       key: 'image',
       width: 80,
-      render: (record: VisitWithFace) => (
+      render: (record: VisitWithFace) =>
         record.image_path ? (
           <Image
             width={60}
@@ -117,11 +133,20 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
             fallback="data:image/svg+xml,%3csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='60' height='60' fill='%23f0f0f0'/%3e%3cpath d='M20 25h20v10H20z' fill='%23999'/%3e%3ccircle cx='22' cy='27' r='1' fill='%23666'/%3e%3ccircle cx='38' cy='27' r='1' fill='%23666'/%3e%3c/svg%3e"
           />
         ) : (
-          <div style={{ width: 60, height: 60, background: '#f0f0f0', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              width: 60,
+              height: 60,
+              background: '#f0f0f0',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <EyeOutlined style={{ color: '#999' }} />
           </div>
-        )
-      ),
+        ),
     },
     {
       title: 'Date',
@@ -191,8 +216,14 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
           message="Face Detection Removal"
           description={
             <div>
-              <p><strong>Customer ID:</strong> {customerId}</p>
-              <p>Select individual face detections to remove. This will permanently delete the detection record, face image, and associated embedding from all systems.</p>
+              <p>
+                <strong>Customer ID:</strong> {customerId}
+              </p>
+              <p>
+                Select individual face detections to remove. This will
+                permanently delete the detection record, face image, and
+                associated embedding from all systems.
+              </p>
             </div>
           }
           type="warning"

@@ -1,33 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Table, 
-  Button, 
-  Space, 
-  Tag, 
-  Popconfirm, 
-  Modal, 
-  Form, 
-  Input, 
-  Select, 
+import {
+  Table,
+  Button,
+  Space,
+  Tag,
+  Popconfirm,
+  Modal,
+  Form,
+  Input,
+  Select,
   Switch,
   Tooltip,
   Card,
   Typography,
-  App
+  App,
 } from 'antd';
-import { 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
   KeyOutlined,
   StopOutlined,
   PlayCircleOutlined,
-  UsergroupAddOutlined
+  UsergroupAddOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { apiClient } from '../services/api';
-import { User, UserCreate, UserUpdate, UserPasswordUpdate, UserRole, Tenant } from '../types/api';
+import {
+  User,
+  UserCreate,
+  UserUpdate,
+  UserPasswordUpdate,
+  UserRole,
+  Tenant,
+} from '../types/api';
 
 const { Option } = Select;
 const { Title } = Typography;
@@ -82,7 +89,9 @@ export const Users: React.FC = () => {
       loadUsers();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to create user');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to create user'
+      );
     }
   };
 
@@ -98,7 +107,9 @@ export const Users: React.FC = () => {
       loadUsers();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to update user');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to update user'
+      );
     }
   };
 
@@ -113,18 +124,24 @@ export const Users: React.FC = () => {
       setSelectedUser(null);
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to change password');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to change password'
+      );
     }
   };
 
   const handleToggleStatus = async (user: User) => {
     try {
       await apiClient.toggleUserStatus(user.user_id);
-      message.success(`User ${user.is_active ? 'disabled' : 'enabled'} successfully`);
+      message.success(
+        `User ${user.is_active ? 'disabled' : 'enabled'} successfully`
+      );
       loadUsers();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to toggle user status');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to toggle user status'
+      );
     }
   };
 
@@ -135,7 +152,9 @@ export const Users: React.FC = () => {
       loadUsers();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to delete user');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to delete user'
+      );
     }
   };
 
@@ -148,7 +167,7 @@ export const Users: React.FC = () => {
       last_name: user.last_name,
       role: user.role,
       tenant_id: user.tenant_id,
-      is_active: user.is_active
+      is_active: user.is_active,
     });
     setEditModalVisible(true);
   };
@@ -160,27 +179,37 @@ export const Users: React.FC = () => {
 
   const getRoleColor = (role: UserRole): string => {
     switch (role) {
-      case UserRole.SYSTEM_ADMIN: return 'red';
-      case UserRole.TENANT_ADMIN: return 'orange';
-      case UserRole.SITE_MANAGER: return 'blue';
-      case UserRole.WORKER: return 'green';
-      default: return 'default';
+      case UserRole.SYSTEM_ADMIN:
+        return 'red';
+      case UserRole.TENANT_ADMIN:
+        return 'orange';
+      case UserRole.SITE_MANAGER:
+        return 'blue';
+      case UserRole.WORKER:
+        return 'green';
+      default:
+        return 'default';
     }
   };
 
   const getRoleLabel = (role: UserRole): string => {
     switch (role) {
-      case UserRole.SYSTEM_ADMIN: return 'System Admin';
-      case UserRole.TENANT_ADMIN: return 'Tenant Admin';
-      case UserRole.SITE_MANAGER: return 'Site Manager';
-      case UserRole.WORKER: return 'Worker';
-      default: return role;
+      case UserRole.SYSTEM_ADMIN:
+        return 'System Admin';
+      case UserRole.TENANT_ADMIN:
+        return 'Tenant Admin';
+      case UserRole.SITE_MANAGER:
+        return 'Site Manager';
+      case UserRole.WORKER:
+        return 'Worker';
+      default:
+        return role;
     }
   };
 
   const getTenantName = (tenantId?: string): string => {
     if (!tenantId) return 'N/A';
-    const tenant = tenants.find(t => t.tenant_id === tenantId);
+    const tenant = tenants.find((t) => t.tenant_id === tenantId);
     return tenant ? tenant.name : tenantId;
   };
 
@@ -206,9 +235,7 @@ export const Users: React.FC = () => {
       title: 'Role',
       key: 'role',
       render: (_, user) => (
-        <Tag color={getRoleColor(user.role)}>
-          {getRoleLabel(user.role)}
-        </Tag>
+        <Tag color={getRoleColor(user.role)}>{getRoleLabel(user.role)}</Tag>
       ),
       sorter: (a, b) => a.role.localeCompare(b.role),
     },
@@ -230,15 +257,15 @@ export const Users: React.FC = () => {
     {
       title: 'Last Login',
       key: 'last_login',
-      render: (_, user) => 
-        user.last_login 
-          ? new Date(user.last_login).toLocaleString()
-          : 'Never',
+      render: (_, user) =>
+        user.last_login ? new Date(user.last_login).toLocaleString() : 'Never',
       sorter: (a, b) => {
         if (!a.last_login && !b.last_login) return 0;
         if (!a.last_login) return 1;
         if (!b.last_login) return -1;
-        return new Date(a.last_login).getTime() - new Date(b.last_login).getTime();
+        return (
+          new Date(a.last_login).getTime() - new Date(b.last_login).getTime()
+        );
       },
     },
     {
@@ -253,7 +280,7 @@ export const Users: React.FC = () => {
               onClick={() => showEditModal(user)}
             />
           </Tooltip>
-          
+
           <Tooltip title="Change Password">
             <Button
               icon={<KeyOutlined />}
@@ -261,7 +288,7 @@ export const Users: React.FC = () => {
               onClick={() => showPasswordModal(user)}
             />
           </Tooltip>
-          
+
           <Tooltip title={user.is_active ? 'Disable User' : 'Enable User'}>
             <Popconfirm
               title={`Are you sure you want to ${user.is_active ? 'disable' : 'enable'} this user?`}
@@ -270,13 +297,15 @@ export const Users: React.FC = () => {
               cancelText="No"
             >
               <Button
-                icon={user.is_active ? <StopOutlined /> : <PlayCircleOutlined />}
+                icon={
+                  user.is_active ? <StopOutlined /> : <PlayCircleOutlined />
+                }
                 size="small"
                 danger={user.is_active}
               />
             </Popconfirm>
           </Tooltip>
-          
+
           <Tooltip title="Delete User">
             <Popconfirm
               title="Are you sure you want to delete this user?"
@@ -284,11 +313,7 @@ export const Users: React.FC = () => {
               okText="Yes"
               cancelText="No"
             >
-              <Button
-                icon={<DeleteOutlined />}
-                size="small"
-                danger
-              />
+              <Button icon={<DeleteOutlined />} size="small" danger />
             </Popconfirm>
           </Tooltip>
         </Space>
@@ -319,7 +344,6 @@ export const Users: React.FC = () => {
       </div>
 
       <Card>
-
         <Table
           columns={columns}
           dataSource={users}
@@ -345,17 +369,13 @@ export const Users: React.FC = () => {
         footer={null}
         width={600}
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-          onFinish={handleCreateUser}
-        >
+        <Form form={createForm} layout="vertical" onFinish={handleCreateUser}>
           <Form.Item
             name="username"
             label="Username"
             rules={[
               { required: true, message: 'Please enter username' },
-              { min: 3, message: 'Username must be at least 3 characters' }
+              { min: 3, message: 'Username must be at least 3 characters' },
             ]}
           >
             <Input placeholder="Enter username" />
@@ -366,7 +386,7 @@ export const Users: React.FC = () => {
             label="Email"
             rules={[
               { required: true, message: 'Please enter email' },
-              { type: 'email', message: 'Please enter a valid email' }
+              { type: 'email', message: 'Please enter a valid email' },
             ]}
           >
             <Input placeholder="Enter email address" />
@@ -397,7 +417,7 @@ export const Users: React.FC = () => {
             label="Password"
             rules={[
               { required: true, message: 'Please enter password' },
-              { min: 6, message: 'Password must be at least 6 characters' }
+              { min: 6, message: 'Password must be at least 6 characters' },
             ]}
           >
             <Input.Password placeholder="Enter password" />
@@ -409,7 +429,7 @@ export const Users: React.FC = () => {
             rules={[{ required: true, message: 'Please select role' }]}
           >
             <Select placeholder="Select user role">
-              {Object.values(UserRole).map(role => (
+              {Object.values(UserRole).map((role) => (
                 <Option key={role} value={role}>
                   {getRoleLabel(role)}
                 </Option>
@@ -426,7 +446,9 @@ export const Users: React.FC = () => {
                 validator(_, value) {
                   const role = getFieldValue('role');
                   if (role !== UserRole.SYSTEM_ADMIN && !value) {
-                    return Promise.reject(new Error('Tenant is required for non-system admin users'));
+                    return Promise.reject(
+                      new Error('Tenant is required for non-system admin users')
+                    );
                   }
                   return Promise.resolve();
                 },
@@ -434,7 +456,7 @@ export const Users: React.FC = () => {
             ]}
           >
             <Select placeholder="Select tenant (not required for System Admin)">
-              {tenants.map(tenant => (
+              {tenants.map((tenant) => (
                 <Option key={tenant.tenant_id} value={tenant.tenant_id}>
                   {tenant.name}
                 </Option>
@@ -453,10 +475,12 @@ export const Users: React.FC = () => {
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => {
-                setCreateModalVisible(false);
-                createForm.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  setCreateModalVisible(false);
+                  createForm.resetFields();
+                }}
+              >
                 Cancel
               </Button>
               <Button type="primary" htmlType="submit">
@@ -479,17 +503,13 @@ export const Users: React.FC = () => {
         footer={null}
         width={600}
       >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleEditUser}
-        >
+        <Form form={editForm} layout="vertical" onFinish={handleEditUser}>
           <Form.Item
             name="username"
             label="Username"
             rules={[
               { required: true, message: 'Please enter username' },
-              { min: 3, message: 'Username must be at least 3 characters' }
+              { min: 3, message: 'Username must be at least 3 characters' },
             ]}
           >
             <Input placeholder="Enter username" />
@@ -500,7 +520,7 @@ export const Users: React.FC = () => {
             label="Email"
             rules={[
               { required: true, message: 'Please enter email' },
-              { type: 'email', message: 'Please enter a valid email' }
+              { type: 'email', message: 'Please enter a valid email' },
             ]}
           >
             <Input placeholder="Enter email address" />
@@ -532,7 +552,7 @@ export const Users: React.FC = () => {
             rules={[{ required: true, message: 'Please select role' }]}
           >
             <Select placeholder="Select user role">
-              {Object.values(UserRole).map(role => (
+              {Object.values(UserRole).map((role) => (
                 <Option key={role} value={role}>
                   {getRoleLabel(role)}
                 </Option>
@@ -549,7 +569,9 @@ export const Users: React.FC = () => {
                 validator(_, value) {
                   const role = getFieldValue('role');
                   if (role !== UserRole.SYSTEM_ADMIN && !value) {
-                    return Promise.reject(new Error('Tenant is required for non-system admin users'));
+                    return Promise.reject(
+                      new Error('Tenant is required for non-system admin users')
+                    );
                   }
                   return Promise.resolve();
                 },
@@ -557,7 +579,7 @@ export const Users: React.FC = () => {
             ]}
           >
             <Select placeholder="Select tenant (not required for System Admin)">
-              {tenants.map(tenant => (
+              {tenants.map((tenant) => (
                 <Option key={tenant.tenant_id} value={tenant.tenant_id}>
                   {tenant.name}
                 </Option>
@@ -565,21 +587,19 @@ export const Users: React.FC = () => {
             </Select>
           </Form.Item>
 
-          <Form.Item
-            name="is_active"
-            label="Status"
-            valuePropName="checked"
-          >
+          <Form.Item name="is_active" label="Status" valuePropName="checked">
             <Switch checkedChildren="Active" unCheckedChildren="Disabled" />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => {
-                setEditModalVisible(false);
-                editForm.resetFields();
-                setSelectedUser(null);
-              }}>
+              <Button
+                onClick={() => {
+                  setEditModalVisible(false);
+                  editForm.resetFields();
+                  setSelectedUser(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button type="primary" htmlType="submit">
@@ -612,7 +632,7 @@ export const Users: React.FC = () => {
             label="New Password"
             rules={[
               { required: true, message: 'Please enter new password' },
-              { min: 6, message: 'Password must be at least 6 characters' }
+              { min: 6, message: 'Password must be at least 6 characters' },
             ]}
           >
             <Input.Password placeholder="Enter new password" />
@@ -639,11 +659,13 @@ export const Users: React.FC = () => {
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => {
-                setPasswordModalVisible(false);
-                passwordForm.resetFields();
-                setSelectedUser(null);
-              }}>
+              <Button
+                onClick={() => {
+                  setPasswordModalVisible(false);
+                  passwordForm.resetFields();
+                  setSelectedUser(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button type="primary" htmlType="submit">

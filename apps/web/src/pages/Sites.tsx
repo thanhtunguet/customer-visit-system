@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Table, 
-  Button, 
-  Modal, 
-  Form, 
-  Input, 
-  Typography, 
-  Space, 
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Typography,
+  Space,
   Alert,
-  Tag
+  Tag,
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
@@ -94,15 +94,14 @@ export const Sites: React.FC = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string) => (
-        <span className="font-medium">{text}</span>
-      ),
+      render: (text: string) => <span className="font-medium">{text}</span>,
     },
     {
       title: 'Location',
       dataIndex: 'location',
       key: 'location',
-      render: (text?: string) => text || <span className="text-gray-400">-</span>,
+      render: (text?: string) =>
+        text || <span className="text-gray-400">-</span>,
     },
     {
       title: 'Created',
@@ -117,9 +116,7 @@ export const Sites: React.FC = () => {
     {
       title: 'Status',
       key: 'status',
-      render: () => (
-        <Tag color="green">Active</Tag>
-      ),
+      render: () => <Tag color="green">Active</Tag>,
     },
     {
       title: 'Actions',
@@ -150,11 +147,7 @@ export const Sites: React.FC = () => {
         description={error}
         type="error"
         showIcon
-        action={
-          <Button onClick={loadSites}>
-            Retry
-          </Button>
-        }
+        action={<Button onClick={loadSites}>Retry</Button>}
       />
     );
   }
@@ -162,7 +155,9 @@ export const Sites: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title level={2} className="mb-0">Sites</Title>
+        <Title level={2} className="mb-0">
+          Sites
+        </Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -203,7 +198,7 @@ export const Sites: React.FC = () => {
       </div>
 
       <Modal
-        title={editingSite ? "Edit Site" : "Add New Site"}
+        title={editingSite ? 'Edit Site' : 'Add New Site'}
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false);
@@ -213,13 +208,7 @@ export const Sites: React.FC = () => {
         onOk={() => form.submit()}
         confirmLoading={loading}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateSite}
-        >
-
-
+        <Form form={form} layout="vertical" onFinish={handleCreateSite}>
           <Form.Item
             name="name"
             label="Site Name"
@@ -228,10 +217,7 @@ export const Sites: React.FC = () => {
             <Input placeholder="e.g. Main Office" />
           </Form.Item>
 
-          <Form.Item
-            name="location"
-            label="Location"
-          >
+          <Form.Item name="location" label="Location">
             <Input placeholder="e.g. 123 Main St, City, State" />
           </Form.Item>
         </Form>

@@ -1,5 +1,27 @@
-import { PlusOutlined, UserOutlined, EyeOutlined, ReloadOutlined, UploadOutlined, TeamOutlined, MergeCellsOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons';
-import { Typography, Form, Input, Button, Table, Modal, Select, Space, Alert, List, Tag } from 'antd';
+import {
+  PlusOutlined,
+  UserOutlined,
+  EyeOutlined,
+  ReloadOutlined,
+  UploadOutlined,
+  TeamOutlined,
+  MergeCellsOutlined,
+  DeleteOutlined,
+  SwapOutlined,
+} from '@ant-design/icons';
+import {
+  Typography,
+  Form,
+  Input,
+  Button,
+  Table,
+  Modal,
+  Select,
+  Space,
+  Alert,
+  List,
+  Tag,
+} from 'antd';
 import { apiClient } from '../services/api';
 import { EditAction, DeleteAction } from '../components/TableActionButtons';
 import { CustomerDetailsModal } from '../components/CustomerDetailsModal';
@@ -18,26 +40,37 @@ export const Customers: React.FC = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form] = Form.useForm();
   const [error, setError] = useState<string | null>(null);
-  
+
   // Details modal state
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
+    null
+  );
+
   // Backfill state
-  const [backfillLoading, setBackfillLoading] = useState<Set<number>>(new Set());
-  
+  const [backfillLoading, setBackfillLoading] = useState<Set<number>>(
+    new Set()
+  );
+
   // Upload images modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   // Merge/similar modal
   const [similarVisible, setSimilarVisible] = useState(false);
   const [similarLoading, setSimilarLoading] = useState(false);
-  const [similarList, setSimilarList] = useState<Array<{ customer_id: number; name?: string; visit_count: number; max_similarity: number; }>>([]);
+  const [similarList, setSimilarList] = useState<
+    Array<{
+      customer_id: number;
+      name?: string;
+      visit_count: number;
+      max_similarity: number;
+    }>
+  >([]);
   const [similarSourceId, setSimilarSourceId] = useState<number | null>(null);
-  
+
   // Multi-select state
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
-  
+
   // Bulk merge state
   const [bulkMergeModalVisible, setBulkMergeModalVisible] = useState(false);
   const [bulkMergeLoading, setBulkMergeLoading] = useState(false);
@@ -94,7 +127,9 @@ export const Customers: React.FC = () => {
       await loadCustomers();
     } catch (err) {
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Failed to delete customer');
+      setError(
+        axiosError.response?.data?.detail || 'Failed to delete customer'
+      );
     }
   };
 
@@ -108,7 +143,10 @@ export const Customers: React.FC = () => {
     setSimilarVisible(true);
     setSimilarLoading(true);
     try {
-      const res = await apiClient.findSimilarCustomers(customer.customer_id, { threshold: 0.85, limit: 10 });
+      const res = await apiClient.findSimilarCustomers(customer.customer_id, {
+        threshold: 0.85,
+        limit: 10,
+      });
       setSimilarList(res.similar_customers || []);
     } catch (e) {
       setSimilarList([]);
@@ -122,7 +160,8 @@ export const Customers: React.FC = () => {
     Modal.confirm({
       title: `Merge Customer #${targetId} into #${similarSourceId}?`,
       icon: null,
-      content: 'All visits and face images from the secondary will be moved to the primary.',
+      content:
+        'All visits and face images from the secondary will be moved to the primary.',
       okText: 'Merge',
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -131,16 +170,20 @@ export const Customers: React.FC = () => {
           setSimilarVisible(false);
           await loadCustomers();
         } catch (err) {
-          const axiosError = err as { response?: { data?: { detail?: string } } };
-          setError(axiosError.response?.data?.detail || 'Failed to merge customers');
+          const axiosError = err as {
+            response?: { data?: { detail?: string } };
+          };
+          setError(
+            axiosError.response?.data?.detail || 'Failed to merge customers'
+          );
         }
-      }
+      },
     });
   };
 
   const handleDetailsModalEdit = (customerId: number) => {
     // Find customer and open edit modal
-    const customer = customers.find(c => c.customer_id === customerId);
+    const customer = customers.find((c) => c.customer_id === customerId);
     if (customer) {
       setDetailsModalVisible(false);
       handleEditCustomer(customer);
@@ -155,9 +198,13 @@ export const Customers: React.FC = () => {
       icon: <DeleteOutlined className="text-red-500" />,
       content: (
         <div>
-          <p>Are you sure you want to delete <strong>{selectedRowKeys.length}</strong> selected customers?</p>
+          <p>
+            Are you sure you want to delete{' '}
+            <strong>{selectedRowKeys.length}</strong> selected customers?
+          </p>
           <p className="text-red-600 text-sm">
-            This will permanently remove their recognition data, face images, and visit history.
+            This will permanently remove their recognition data, face images,
+            and visit history.
           </p>
         </div>
       ),
@@ -171,80 +218,106 @@ export const Customers: React.FC = () => {
           setSelectedRowKeys([]);
           await loadCustomers();
         } catch (err) {
-          const axiosError = err as { response?: { data?: { detail?: string } } };
-          setError(axiosError.response?.data?.detail || 'Failed to delete selected customers');
+          const axiosError = err as {
+            response?: { data?: { detail?: string } };
+          };
+          setError(
+            axiosError.response?.data?.detail ||
+              'Failed to delete selected customers'
+          );
         } finally {
           setBulkDeleteLoading(false);
         }
-      }
+      },
     });
   };
 
-  const handleBulkMerge = async (mergeOperations: Array<{
-    primary_customer_id: number;
-    secondary_customer_ids: number[];
-  }>) => {
+  const handleBulkMerge = async (
+    mergeOperations: Array<{
+      primary_customer_id: number;
+      secondary_customer_ids: number[];
+    }>
+  ) => {
     setBulkMergeLoading(true);
     try {
       const result = await apiClient.bulkMergeCustomers(mergeOperations);
-      
+
       // Show success message with job information
       Modal.success({
         title: 'Bulk Merge Started',
         content: (
           <div>
             <p>Bulk customer merge has been started in the background.</p>
-            <p><strong>Job ID:</strong> {result.job_id}</p>
-            <p><strong>Operations:</strong> {result.total_operations}</p>
-            <p><strong>Customers:</strong> {result.total_customers}</p>
+            <p>
+              <strong>Job ID:</strong> {result.job_id}
+            </p>
+            <p>
+              <strong>Operations:</strong> {result.total_operations}
+            </p>
+            <p>
+              <strong>Customers:</strong> {result.total_customers}
+            </p>
             <p className="text-gray-600 text-sm mt-2">
-              You can monitor the progress in the background jobs section or refresh the customer list after completion.
+              You can monitor the progress in the background jobs section or
+              refresh the customer list after completion.
             </p>
           </div>
         ),
       });
-      
+
       setSelectedRowKeys([]);
       setBulkMergeModalVisible(false);
-      
+
       // Optionally refresh customers after a delay
       setTimeout(async () => {
         await loadCustomers();
       }, 5000);
-      
     } catch (err) {
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Failed to start bulk merge');
+      setError(
+        axiosError.response?.data?.detail || 'Failed to start bulk merge'
+      );
     } finally {
       setBulkMergeLoading(false);
     }
   };
 
   const getSelectedCustomers = () => {
-    return customers.filter(customer => selectedRowKeys.includes(customer.customer_id));
+    return customers.filter((customer) =>
+      selectedRowKeys.includes(customer.customer_id)
+    );
   };
 
   const handleBackfillAvatar = async (customer: Customer) => {
-    setBackfillLoading(prev => new Set([...prev, customer.customer_id]));
-    
+    setBackfillLoading((prev) => new Set([...prev, customer.customer_id]));
+
     try {
-      const result = await apiClient.backfillCustomerFaceImages(customer.customer_id);
-      
+      const result = await apiClient.backfillCustomerFaceImages(
+        customer.customer_id
+      );
+
       if (result.visits_processed > 0) {
         setError(null);
         // Reload customers to show updated avatars
         await loadCustomers();
         // You could also show a success message here
-        console.log(`✅ Backfilled ${result.visits_processed} face images for customer ${customer.customer_id}`);
+        console.log(
+          `✅ Backfilled ${result.visits_processed} face images for customer ${customer.customer_id}`
+        );
       } else {
-        setError(`No face images found to backfill for customer ${customer.name || customer.customer_id}`);
+        setError(
+          `No face images found to backfill for customer ${customer.name || customer.customer_id}`
+        );
       }
     } catch (err) {
       console.error('Backfill failed:', err);
       const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`);
+      setError(
+        axiosError.response?.data?.detail ||
+          `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`
+      );
     } finally {
-      setBackfillLoading(prev => {
+      setBackfillLoading((prev) => {
         const newSet = new Set(prev);
         newSet.delete(customer.customer_id);
         return newSet;
@@ -282,7 +355,9 @@ export const Customers: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       render: (text?: string) => (
-        <span className="font-medium">{text || <span className="text-gray-400 italic">Unknown</span>}</span>
+        <span className="font-medium">
+          {text || <span className="text-gray-400 italic">Unknown</span>}
+        </span>
       ),
     },
     {
@@ -291,7 +366,8 @@ export const Customers: React.FC = () => {
       key: 'gender',
       render: (gender?: string) => {
         if (!gender) return <span className="text-gray-400">-</span>;
-        const color = gender === 'male' ? 'blue' : gender === 'female' ? 'pink' : 'gray';
+        const color =
+          gender === 'male' ? 'blue' : gender === 'female' ? 'pink' : 'gray';
         return <span className={`text-${color}-600 capitalize`}>{gender}</span>;
       },
     },
@@ -299,21 +375,21 @@ export const Customers: React.FC = () => {
       title: 'Phone',
       dataIndex: 'phone',
       key: 'phone',
-      render: (text?: string) => text || <span className="text-gray-400">-</span>,
+      render: (text?: string) =>
+        text || <span className="text-gray-400">-</span>,
     },
     {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
-      render: (text?: string) => text || <span className="text-gray-400">-</span>,
+      render: (text?: string) =>
+        text || <span className="text-gray-400">-</span>,
     },
     {
       title: 'Visit Count',
       dataIndex: 'visit_count',
       key: 'visit_count',
-      render: (count: number) => (
-        <span className="font-semibold">{count}</span>
-      ),
+      render: (count: number) => <span className="font-semibold">{count}</span>,
     },
     {
       title: 'First Seen',
@@ -393,11 +469,7 @@ export const Customers: React.FC = () => {
         description={error}
         type="error"
         showIcon
-        action={
-          <Button onClick={loadCustomers}>
-            Retry
-          </Button>
-        }
+        action={<Button onClick={loadCustomers}>Retry</Button>}
       />
     );
   }
@@ -405,7 +477,9 @@ export const Customers: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title level={2} className="mb-0">Customers</Title>
+        <Title level={2} className="mb-0">
+          Customers
+        </Title>
         <Space>
           {selectedRowKeys.length > 1 && (
             <Button
@@ -484,7 +558,7 @@ export const Customers: React.FC = () => {
       </div>
 
       <Modal
-        title={editingCustomer ? "Edit Customer" : "Add New Customer"}
+        title={editingCustomer ? 'Edit Customer' : 'Add New Customer'}
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false);
@@ -494,22 +568,12 @@ export const Customers: React.FC = () => {
         onOk={() => form.submit()}
         confirmLoading={loading}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateCustomer}
-        >
-          <Form.Item
-            name="name"
-            label="Customer Name"
-          >
+        <Form form={form} layout="vertical" onFinish={handleCreateCustomer}>
+          <Form.Item name="name" label="Customer Name">
             <Input placeholder="e.g. John Smith (optional)" />
           </Form.Item>
 
-          <Form.Item
-            name="gender"
-            label="Gender"
-          >
+          <Form.Item name="gender" label="Gender">
             <Select
               placeholder="Select gender (optional)"
               allowClear
@@ -521,17 +585,11 @@ export const Customers: React.FC = () => {
             />
           </Form.Item>
 
-          <Form.Item
-            name="phone"
-            label="Phone"
-          >
+          <Form.Item name="phone" label="Phone">
             <Input placeholder="e.g. +1 555 123 4567" />
           </Form.Item>
 
-          <Form.Item
-            name="email"
-            label="Email"
-          >
+          <Form.Item name="email" label="Email">
             <Input type="email" placeholder="e.g. john@example.com" />
           </Form.Item>
         </Form>
@@ -555,7 +613,9 @@ export const Customers: React.FC = () => {
 
       <Modal
         title={
-          similarSourceId ? `Similar to Customer #${similarSourceId}` : 'Similar Customers'
+          similarSourceId
+            ? `Similar to Customer #${similarSourceId}`
+            : 'Similar Customers'
         }
         open={similarVisible}
         onCancel={() => setSimilarVisible(false)}
@@ -564,7 +624,9 @@ export const Customers: React.FC = () => {
         {similarLoading ? (
           <div className="py-8 text-center">Loading…</div>
         ) : similarList.length === 0 ? (
-          <div className="py-8 text-center text-gray-500">No similar customers found above threshold.</div>
+          <div className="py-8 text-center text-gray-500">
+            No similar customers found above threshold.
+          </div>
         ) : (
           <List
             dataSource={similarList}
@@ -579,15 +641,21 @@ export const Customers: React.FC = () => {
                     onClick={() => doMerge(item.customer_id)}
                   >
                     Merge into Source
-                  </Button>
+                  </Button>,
                 ]}
               >
                 <List.Item.Meta
-                  title={<span>#{item.customer_id} {item.name ? `— ${item.name}` : ''}</span>}
+                  title={
+                    <span>
+                      #{item.customer_id} {item.name ? `— ${item.name}` : ''}
+                    </span>
+                  }
                   description={
                     <Space>
                       <Tag color="blue">visits: {item.visit_count}</Tag>
-                      <Tag color="green">similarity: {(item.max_similarity * 100).toFixed(1)}%</Tag>
+                      <Tag color="green">
+                        similarity: {(item.max_similarity * 100).toFixed(1)}%
+                      </Tag>
                     </Space>
                   }
                 />

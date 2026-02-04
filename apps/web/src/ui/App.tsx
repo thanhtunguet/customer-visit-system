@@ -1,10 +1,20 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom';
 import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from '../components/Layout';
 import { LoginForm } from '../components/LoginForm';
 import { TenantProvider } from '../contexts/TenantContext';
-import { SystemAdminRoute, TenantManagementRoute, SiteManagementRoute, TenantAdminRoute } from '../components/RoleBasedRoute';
+import {
+  SystemAdminRoute,
+  TenantManagementRoute,
+  SiteManagementRoute,
+  TenantAdminRoute,
+} from '../components/RoleBasedRoute';
 import { Dashboard } from '../pages/Dashboard';
 import { Sites } from '../pages/Sites';
 import { Cameras } from '../pages/Cameras';
@@ -19,7 +29,9 @@ import ApiKeys from '../pages/ApiKeys';
 import '../styles.css';
 
 // Protected Route component
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const token = localStorage.getItem('access_token');
   return token ? <>{children}</> : <Navigate to="/login" replace />;
 };
@@ -42,116 +54,118 @@ export function App() {
       <AntApp>
         <TenantProvider>
           <Router>
-        <div className="min-h-screen bg-gray-50">
-          <Routes>
-            {/* Public Routes */}
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <LoginForm />
-                </PublicRoute>
-              }
-            />
+            <div className="min-h-screen bg-gray-50">
+              <Routes>
+                {/* Public Routes */}
+                <Route
+                  path="/login"
+                  element={
+                    <PublicRoute>
+                      <LoginForm />
+                    </PublicRoute>
+                  }
+                />
 
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route 
-                path="sites" 
-                element={
-                  <SiteManagementRoute>
-                    <Sites />
-                  </SiteManagementRoute>
-                } 
-              />
-              
-              {/* Implemented pages */}
-              <Route 
-                path="cameras" 
-                element={
-                  <TenantAdminRoute>
-                    <Cameras />
-                  </TenantAdminRoute>
-                } 
-              />
-              <Route 
-                path="workers" 
-                element={
-                  <TenantAdminRoute>
-                    <Workers />
-                  </TenantAdminRoute>
-                } 
-              />
-              <Route 
-                path="staff" 
-                element={
-                  <TenantAdminRoute>
-                    <StaffPage />
-                  </TenantAdminRoute>
-                } 
-              />
-              <Route 
-                path="customers" 
-                element={
-                  <TenantAdminRoute>
-                    <Customers />
-                  </TenantAdminRoute>
-                } 
-              />
-              <Route path="visits" element={<VisitsPage />} />
-              
-              {/* Placeholder routes for other pages */}
-              <Route 
-                path="reports" 
-                element={
-                  <TenantAdminRoute>
-                    <Reports />
-                  </TenantAdminRoute>
-                } 
-              />
-              <Route 
-                path="tenants" 
-                element={
-                  <TenantManagementRoute>
-                    <TenantsPage />
-                  </TenantManagementRoute>
-                } 
-              />
-              <Route 
-                path="users" 
-                element={
-                  <SystemAdminRoute>
-                    <Users />
-                  </SystemAdminRoute>
-                } 
-              />
-              <Route 
-                path="api-keys" 
-                element={
-                  <TenantAdminRoute>
-                    <ApiKeys />
-                  </TenantAdminRoute>
-                } 
-              />
-            </Route>
+                {/* Protected Routes */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <AppLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route
+                    path="sites"
+                    element={
+                      <SiteManagementRoute>
+                        <Sites />
+                      </SiteManagementRoute>
+                    }
+                  />
 
-            {/* Catch all route */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </div>
+                  {/* Implemented pages */}
+                  <Route
+                    path="cameras"
+                    element={
+                      <TenantAdminRoute>
+                        <Cameras />
+                      </TenantAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="workers"
+                    element={
+                      <TenantAdminRoute>
+                        <Workers />
+                      </TenantAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="staff"
+                    element={
+                      <TenantAdminRoute>
+                        <StaffPage />
+                      </TenantAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="customers"
+                    element={
+                      <TenantAdminRoute>
+                        <Customers />
+                      </TenantAdminRoute>
+                    }
+                  />
+                  <Route path="visits" element={<VisitsPage />} />
+
+                  {/* Placeholder routes for other pages */}
+                  <Route
+                    path="reports"
+                    element={
+                      <TenantAdminRoute>
+                        <Reports />
+                      </TenantAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="tenants"
+                    element={
+                      <TenantManagementRoute>
+                        <TenantsPage />
+                      </TenantManagementRoute>
+                    }
+                  />
+                  <Route
+                    path="users"
+                    element={
+                      <SystemAdminRoute>
+                        <Users />
+                      </SystemAdminRoute>
+                    }
+                  />
+                  <Route
+                    path="api-keys"
+                    element={
+                      <TenantAdminRoute>
+                        <ApiKeys />
+                      </TenantAdminRoute>
+                    }
+                  />
+                </Route>
+
+                {/* Catch all route */}
+                <Route
+                  path="*"
+                  element={<Navigate to="/dashboard" replace />}
+                />
+              </Routes>
+            </div>
           </Router>
         </TenantProvider>
       </AntApp>
     </ConfigProvider>
   );
 }
-

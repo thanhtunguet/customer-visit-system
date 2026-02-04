@@ -9,7 +9,7 @@ import {
   List,
   Typography,
   Tag,
-  Select
+  Select,
 } from 'antd';
 import type { UploadChangeParam, UploadFile } from 'antd/es/upload/interface';
 import {
@@ -18,7 +18,7 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   UserOutlined,
-  UserAddOutlined
+  UserAddOutlined,
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 
@@ -58,7 +58,7 @@ interface ImageUploadModalProps {
 export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
   visible,
   onClose,
-  onCustomersChange
+  onCustomersChange,
 }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -113,8 +113,6 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     onClose();
   };
 
-
-
   const handleUpload = async (files: File[]) => {
     if (files.length === 0 || !selectedSiteId) return;
 
@@ -124,49 +122,55 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
 
     try {
       // Use the API to process all images at once
-      const response = await apiClient.processUploadedImages(files, selectedSiteId);
-      
+      const response = await apiClient.processUploadedImages(
+        files,
+        selectedSiteId
+      );
+
       // Convert API response to our ProcessingResult format
-      const processingResults: ProcessingResult[] = response.results.map((apiResult, index) => ({
-        success: apiResult.success,
-        customerId: apiResult.customer_id,
-        customerName: apiResult.customer_name,
-        confidence: apiResult.confidence,
-        isNewCustomer: apiResult.is_new_customer,
-        error: apiResult.error,
-        imageName: files[index]?.name || `image_${index + 1}`
-      }));
-      
+      const processingResults: ProcessingResult[] = response.results.map(
+        (apiResult, index) => ({
+          success: apiResult.success,
+          customerId: apiResult.customer_id,
+          customerName: apiResult.customer_name,
+          confidence: apiResult.confidence,
+          isNewCustomer: apiResult.is_new_customer,
+          error: apiResult.error,
+          imageName: files[index]?.name || `image_${index + 1}`,
+        })
+      );
+
       setResults(processingResults);
-      
+
       // Update progress to complete
       setUploadProgress({
         current: files.length,
         total: files.length,
-        currentFileName: 'Complete'
+        currentFileName: 'Complete',
       });
-      
+
       // Refresh customers list if any were created or updated
       if (response.successful_count > 0) {
         onCustomersChange();
       }
-      
+
       // Clear file list to disable the Process Images button
       setFileList([]);
       setProcessingComplete(true);
-      
     } catch (error: unknown) {
       console.error('Failed to process images:', error);
-      
+
       // Create error results for all files
       const errorResults: ProcessingResult[] = files.map((file) => ({
         success: false,
-        error: error instanceof Error 
-          ? error.message 
-          : (error as ApiError)?.response?.data?.detail || 'Failed to process image',
-        imageName: file.name
+        error:
+          error instanceof Error
+            ? error.message
+            : (error as ApiError)?.response?.data?.detail ||
+              'Failed to process image',
+        imageName: file.name,
       }));
-      
+
       setResults(errorResults);
       setProcessingComplete(true);
     } finally {
@@ -174,8 +178,12 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     }
   };
 
-  const handleFileChange = ({ fileList: newFileList }: UploadChangeParam<UploadFile>) => {
-    const files = newFileList.map((file: UploadFile) => file.originFileObj || file).filter(Boolean) as File[];
+  const handleFileChange = ({
+    fileList: newFileList,
+  }: UploadChangeParam<UploadFile>) => {
+    const files = newFileList
+      .map((file: UploadFile) => file.originFileObj || file)
+      .filter(Boolean) as File[];
     setFileList(files);
   };
 
@@ -199,14 +207,17 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     if (!result.success) {
       return <Text type="danger">{result.error}</Text>;
     }
-    
+
     if (result.isNewCustomer) {
       return (
         <div>
-          <Text strong style={{ color: '#52c41a' }}>New Customer Created</Text>
+          <Text strong style={{ color: '#52c41a' }}>
+            New Customer Created
+          </Text>
           <br />
           <Text type="secondary">
-            Customer ID: {result.customerId} • Confidence: {((result.confidence || 0) * 100).toFixed(1)}%
+            Customer ID: {result.customerId} • Confidence:{' '}
+            {((result.confidence || 0) * 100).toFixed(1)}%
           </Text>
         </div>
       );
@@ -214,19 +225,29 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
 
     return (
       <div>
-        <Text strong style={{ color: '#1890ff' }}>Existing Customer Recognized</Text>
+        <Text strong style={{ color: '#1890ff' }}>
+          Existing Customer Recognized
+        </Text>
         <br />
-        <Text>{result.customerName} (ID: {result.customerId})</Text>
+        <Text>
+          {result.customerName} (ID: {result.customerId})
+        </Text>
         <br />
-        <Text type="secondary">Confidence: {((result.confidence || 0) * 100).toFixed(1)}%</Text>
+        <Text type="secondary">
+          Confidence: {((result.confidence || 0) * 100).toFixed(1)}%
+        </Text>
       </div>
     );
   };
 
-  const successCount = results.filter(r => r.success).length;
-  const errorCount = results.filter(r => !r.success).length;
-  const newCustomersCount = results.filter(r => r.success && r.isNewCustomer).length;
-  const recognizedCount = results.filter(r => r.success && !r.isNewCustomer).length;
+  const successCount = results.filter((r) => r.success).length;
+  const errorCount = results.filter((r) => !r.success).length;
+  const newCustomersCount = results.filter(
+    (r) => r.success && r.isNewCustomer
+  ).length;
+  const recognizedCount = results.filter(
+    (r) => r.success && !r.isNewCustomer
+  ).length;
 
   return (
     <Modal
@@ -240,14 +261,18 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
         </Button>,
         <Button
           key="process"
-          type={processingComplete ? "default" : "primary"}
+          type={processingComplete ? 'default' : 'primary'}
           onClick={startProcessing}
           loading={uploading}
-          disabled={fileList.length === 0 || !selectedSiteId || processingComplete}
-          icon={processingComplete ? <CheckCircleOutlined /> : <UploadOutlined />}
+          disabled={
+            fileList.length === 0 || !selectedSiteId || processingComplete
+          }
+          icon={
+            processingComplete ? <CheckCircleOutlined /> : <UploadOutlined />
+          }
         >
-          {processingComplete ? "Processing Complete" : "Process Images"}
-        </Button>
+          {processingComplete ? 'Processing Complete' : 'Process Images'}
+        </Button>,
       ]}
     >
       <div className="space-y-4">
@@ -268,7 +293,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
             style={{ width: '100%' }}
             disabled={uploading}
           >
-            {sites.map(site => (
+            {sites.map((site) => (
               <Select.Option key={site.site_id} value={site.site_id}>
                 {site.name}
               </Select.Option>
@@ -288,9 +313,12 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
           <p className="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p className="ant-upload-text">Click or drag images to this area to upload</p>
+          <p className="ant-upload-text">
+            Click or drag images to this area to upload
+          </p>
           <p className="ant-upload-hint">
-            Support for multiple image selection. Images should contain clear faces for best results.
+            Support for multiple image selection. Images should contain clear
+            faces for best results.
           </p>
         </Dragger>
 
@@ -316,14 +344,15 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
           <div>
             <Title level={5}>Processing Images...</Title>
             <Progress
-              percent={Math.round((uploadProgress.current / uploadProgress.total) * 100)}
-              status={uploading ? "active" : "success"}
+              percent={Math.round(
+                (uploadProgress.current / uploadProgress.total) * 100
+              )}
+              status={uploading ? 'active' : 'success'}
             />
             <Text type="secondary">
-              {uploadProgress.currentFileName && uploading 
-                ? `Processing: ${uploadProgress.currentFileName}` 
-                : `${uploadProgress.current} of ${uploadProgress.total} images processed`
-              }
+              {uploadProgress.currentFileName && uploading
+                ? `Processing: ${uploadProgress.currentFileName}`
+                : `${uploadProgress.current} of ${uploadProgress.total} images processed`}
             </Text>
           </div>
         )}
@@ -339,23 +368,15 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
                   </Tag>
                 )}
                 {newCustomersCount > 0 && (
-                  <Tag color="green">
-                    {newCustomersCount} New Customers
-                  </Tag>
+                  <Tag color="green">{newCustomersCount} New Customers</Tag>
                 )}
                 {recognizedCount > 0 && (
-                  <Tag color="blue">
-                    {recognizedCount} Recognized
-                  </Tag>
+                  <Tag color="blue">{recognizedCount} Recognized</Tag>
                 )}
-                {errorCount > 0 && (
-                  <Tag color="error">
-                    {errorCount} Failed
-                  </Tag>
-                )}
+                {errorCount > 0 && <Tag color="error">{errorCount} Failed</Tag>}
               </Space>
             </div>
-            
+
             <List
               size="small"
               dataSource={results}

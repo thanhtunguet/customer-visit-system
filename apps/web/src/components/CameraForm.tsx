@@ -10,7 +10,10 @@ interface CameraFormProps {
   selectedSite: number | null;
 }
 
-export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSite }) => {
+export const CameraForm: React.FC<CameraFormProps> = ({
+  form: _form,
+  selectedSite,
+}) => {
   const [webcams, setWebcams] = useState<WebcamInfo[]>([]);
   const [webcamsLoading, setWebcamsLoading] = useState(false);
   const [webcamSource, setWebcamSource] = useState<'workers' | 'none'>('none');
@@ -18,7 +21,7 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
 
   const loadWebcams = async (): Promise<void> => {
     if (!selectedSite) return;
-    
+
     try {
       setWebcamsLoading(true);
       const response = await apiClient.getWebcams(selectedSite);
@@ -45,23 +48,22 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
         label="Camera Type"
         rules={[{ required: true, message: 'Please select camera type!' }]}
       >
-        <Radio.Group onChange={async (e: RadioChangeEvent) => {
-          if (e.target.value === CameraType.WEBCAM) {
-            await loadWebcams();
-          }
-        }}>
+        <Radio.Group
+          onChange={async (e: RadioChangeEvent) => {
+            if (e.target.value === CameraType.WEBCAM) {
+              await loadWebcams();
+            }
+          }}
+        >
           <Radio value={CameraType.RTSP}>RTSP Camera</Radio>
           <Radio value={CameraType.WEBCAM}>Webcam</Radio>
         </Radio.Group>
       </Form.Item>
 
-      <Form.Item
-        noStyle
-        shouldUpdate={true}
-      >
+      <Form.Item noStyle shouldUpdate={true}>
         {({ getFieldValue }) => {
           const cameraType = getFieldValue('camera_type');
-          
+
           if (cameraType === CameraType.RTSP) {
             return (
               <Form.Item
@@ -73,14 +75,19 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
               </Form.Item>
             );
           }
-          
+
           if (cameraType === CameraType.WEBCAM) {
             return (
               <Form.Item
                 name="device_index"
                 label="Webcam Device"
                 tooltip="Select the physical webcam device. Device index matches system enumeration."
-                rules={[{ required: true, message: 'Please select or enter a webcam device index!' }]}
+                rules={[
+                  {
+                    required: true,
+                    message: 'Please select or enter a webcam device index!',
+                  },
+                ]}
               >
                 <WebcamDeviceSelector
                   webcams={webcams}
@@ -97,7 +104,7 @@ export const CameraForm: React.FC<CameraFormProps> = ({ form: _form, selectedSit
               </Form.Item>
             );
           }
-          
+
           return null;
         }}
       </Form.Item>

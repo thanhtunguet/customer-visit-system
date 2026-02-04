@@ -14,7 +14,7 @@ import {
   Badge,
   Progress,
   Select,
-  App
+  App,
 } from 'antd';
 import {
   UploadOutlined,
@@ -24,7 +24,7 @@ import {
   StarOutlined,
   StarFilled,
   CameraOutlined,
-  SwitcherOutlined
+  SwitcherOutlined,
 } from '@ant-design/icons';
 import { StaffFaceImage } from '../types/api';
 import { apiClient } from '../services/api';
@@ -51,27 +51,27 @@ const LandmarksOverlay: React.FC<LandmarksOverlayProps> = ({
   imageHeight,
   naturalWidth,
   naturalHeight,
-  showConnections = false
+  showConnections = false,
 }) => {
   const scaleX = imageWidth / naturalWidth;
   const scaleY = imageHeight / naturalHeight;
 
   return (
     <svg
-      style={{ 
-        position: 'absolute', 
-        left: 0, 
-        top: 0, 
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
         width: imageWidth,
         height: imageHeight,
-        pointerEvents: 'none'
+        pointerEvents: 'none',
       }}
       viewBox={`0 0 ${imageWidth} ${imageHeight}`}
     >
       {landmarks.map(([x, y], idx) => {
         const scaledX = x * scaleX;
         const scaledY = y * scaleY;
-        
+
         return (
           <circle
             key={idx}
@@ -88,23 +88,23 @@ const LandmarksOverlay: React.FC<LandmarksOverlayProps> = ({
       {showConnections && landmarks.length === 5 && (
         <g stroke="rgba(34, 197, 94, 0.6)" strokeWidth={1} fill="none">
           {/* Eye landmarks connection */}
-          <line 
-            x1={landmarks[0][0] * scaleX} 
+          <line
+            x1={landmarks[0][0] * scaleX}
             y1={landmarks[0][1] * scaleY}
-            x2={landmarks[1][0] * scaleX} 
+            x2={landmarks[1][0] * scaleX}
             y2={landmarks[1][1] * scaleY}
           />
           {/* Nose to mouth connection */}
-          <line 
-            x1={landmarks[2][0] * scaleX} 
+          <line
+            x1={landmarks[2][0] * scaleX}
             y1={landmarks[2][1] * scaleY}
-            x2={landmarks[3][0] * scaleX} 
+            x2={landmarks[3][0] * scaleX}
             y2={landmarks[3][1] * scaleY}
           />
-          <line 
-            x1={landmarks[2][0] * scaleX} 
+          <line
+            x1={landmarks[2][0] * scaleX}
             y1={landmarks[2][1] * scaleY}
-            x2={landmarks[4][0] * scaleX} 
+            x2={landmarks[4][0] * scaleX}
             y2={landmarks[4][1] * scaleY}
           />
         </g>
@@ -117,7 +117,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   staffId,
   staffName,
   faceImages,
-  onImagesChange
+  onImagesChange,
 }) => {
   const [uploading, setUploading] = useState(false);
   const { message } = App.useApp();
@@ -127,23 +127,43 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     currentFileName?: string;
     canCancel?: boolean;
   } | null>(null);
-  const [uploadController, setUploadController] = useState<AbortController | null>(null);
+  const [uploadController, setUploadController] =
+    useState<AbortController | null>(null);
   const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
   const [recalculatingAll, setRecalculatingAll] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<string>('');
   const [previewTitle, setPreviewTitle] = useState<string>('');
-  const [previewLandmarks, setPreviewLandmarks] = useState<number[][] | null>(null);
-  const [renderSize, setRenderSize] = useState<{ width: number; height: number; naturalWidth: number; naturalHeight: number }>({
+  const [previewLandmarks, setPreviewLandmarks] = useState<number[][] | null>(
+    null
+  );
+  const [renderSize, setRenderSize] = useState<{
+    width: number;
+    height: number;
+    naturalWidth: number;
+    naturalHeight: number;
+  }>({
     width: 0,
     height: 0,
     naturalWidth: 0,
     naturalHeight: 0,
   });
-  const [thumbnailSizes, setThumbnailSizes] = useState<Record<string, { width: number; height: number; naturalWidth: number; naturalHeight: number }>>({});
+  const [thumbnailSizes, setThumbnailSizes] = useState<
+    Record<
+      string,
+      {
+        width: number;
+        height: number;
+        naturalWidth: number;
+        naturalHeight: number;
+      }
+    >
+  >({});
   const [cameraModalVisible, setCameraModalVisible] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
+    []
+  );
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [capturingPhoto, setCapturingPhoto] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -164,7 +184,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   const handleUpload = async (file: File, isPrimary: boolean = false) => {
     try {
       setUploading(true);
-      
+
       // Convert file to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -178,7 +198,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       onImagesChange();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to upload image');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to upload image'
+      );
     } finally {
       setUploading(false);
     }
@@ -190,132 +212,180 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
 
     const CHUNK_SIZE = 3; // Process 3 images at a time to avoid timeout
     const MAX_RETRIES = 2;
-    
+
     const controller = new AbortController();
-    
+
     try {
       setUploading(true);
       setUploadController(controller);
       setUploadProgress({ current: 0, total: files.length, canCancel: true });
-      
+
       let successCount = 0;
       let errorCount = 0;
       const failedFiles: string[] = [];
-      
+
       // Process files in chunks
-      for (let chunkStart = 0; chunkStart < files.length; chunkStart += CHUNK_SIZE) {
-        const chunk = files.slice(chunkStart, Math.min(chunkStart + CHUNK_SIZE, files.length));
-        
+      for (
+        let chunkStart = 0;
+        chunkStart < files.length;
+        chunkStart += CHUNK_SIZE
+      ) {
+        const chunk = files.slice(
+          chunkStart,
+          Math.min(chunkStart + CHUNK_SIZE, files.length)
+        );
+
         // Convert chunk to base64 with progress tracking
         const chunkPromises = chunk.map(async (file, index) => {
           const globalIndex = chunkStart + index;
-          setUploadProgress({ 
-            current: globalIndex, 
-            total: files.length, 
-            currentFileName: file.name 
+          setUploadProgress({
+            current: globalIndex,
+            total: files.length,
+            currentFileName: file.name,
           });
-          
-          return new Promise<{ data: string; name: string; originalFile: File }>((resolve, reject) => {
+
+          return new Promise<{
+            data: string;
+            name: string;
+            originalFile: File;
+          }>((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () => resolve({ 
-              data: reader.result as string, 
-              name: file.name,
-              originalFile: file
-            });
+            reader.onload = () =>
+              resolve({
+                data: reader.result as string,
+                name: file.name,
+                originalFile: file,
+              });
             reader.onerror = reject;
             reader.readAsDataURL(file);
           });
         });
 
         const chunkData = await Promise.all(chunkPromises);
-        
+
         // Try bulk upload for this chunk first, then fall back to individual
         let chunkProcessed = false;
-        
+
         if (chunkData.length > 1) {
           try {
             const bulkData = chunkData.map((img, index) => ({
               image_data: img.data,
-              is_primary: faceImages.length === 0 && chunkStart === 0 && index === 0
+              is_primary:
+                faceImages.length === 0 && chunkStart === 0 && index === 0,
             }));
-            
+
             const bulkResult = await apiClient.uploadMultipleStaffFaceImages(
-              staffId, 
-              bulkData.map(d => d.image_data)
+              staffId,
+              bulkData.map((d) => d.image_data)
             );
-            
+
             // Check if bulk upload actually succeeded by verifying response
-            if (bulkResult && Array.isArray(bulkResult) && bulkResult.length > 0) {
+            if (
+              bulkResult &&
+              Array.isArray(bulkResult) &&
+              bulkResult.length > 0
+            ) {
               successCount += bulkResult.length;
               chunkProcessed = true;
-              
-              console.log(`Bulk upload succeeded for ${bulkResult.length} out of ${chunkData.length} images`);
-              
+
+              console.log(
+                `Bulk upload succeeded for ${bulkResult.length} out of ${chunkData.length} images`
+              );
+
               // If bulk upload was partial, we need to track which ones failed
               if (bulkResult.length < chunkData.length) {
                 const failedCount = chunkData.length - bulkResult.length;
                 errorCount += failedCount;
                 for (let i = bulkResult.length; i < chunkData.length; i++) {
-                  failedFiles.push(`${chunkData[i].name} (bulk upload partial failure)`);
+                  failedFiles.push(
+                    `${chunkData[i].name} (bulk upload partial failure)`
+                  );
                 }
               }
             } else {
-              console.warn('Bulk upload returned invalid or empty response, falling back to individual uploads');
+              console.warn(
+                'Bulk upload returned invalid or empty response, falling back to individual uploads'
+              );
             }
           } catch (bulkError) {
-            console.warn('Bulk upload failed for chunk, falling back to individual uploads:', bulkError);
+            console.warn(
+              'Bulk upload failed for chunk, falling back to individual uploads:',
+              bulkError
+            );
             // Don't set chunkProcessed = true here, so we fall back to individual processing
           }
         }
-        
+
         // If bulk upload failed completely or we have only one image, process individually
         if (!chunkProcessed) {
           for (let i = 0; i < chunkData.length; i++) {
             const img = chunkData[i];
             let uploaded = false;
-            
+
             // Retry logic for individual uploads with exponential backoff
-            for (let attempt = 0; attempt < MAX_RETRIES && !uploaded; attempt++) {
+            for (
+              let attempt = 0;
+              attempt < MAX_RETRIES && !uploaded;
+              attempt++
+            ) {
               try {
-                setUploadProgress({ 
-                  current: chunkStart + i, 
-                  total: files.length, 
-                  currentFileName: `${img.name}${attempt > 0 ? ` (retry ${attempt})` : ''}` 
+                setUploadProgress({
+                  current: chunkStart + i,
+                  total: files.length,
+                  currentFileName: `${img.name}${attempt > 0 ? ` (retry ${attempt})` : ''}`,
                 });
-                
-                const isPrimary = faceImages.length === 0 && chunkStart === 0 && i === 0;
-                await apiClient.uploadStaffFaceImage(staffId, img.data, isPrimary);
+
+                const isPrimary =
+                  faceImages.length === 0 && chunkStart === 0 && i === 0;
+                await apiClient.uploadStaffFaceImage(
+                  staffId,
+                  img.data,
+                  isPrimary
+                );
                 successCount++;
                 uploaded = true;
               } catch (error) {
-                const axiosError = error as { code?: string; message?: string; response?: { status?: number; data?: { detail?: string } } };
-                const isTimeoutError = axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout');
+                const axiosError = error as {
+                  code?: string;
+                  message?: string;
+                  response?: { status?: number; data?: { detail?: string } };
+                };
+                const isTimeoutError =
+                  axiosError.code === 'ECONNABORTED' ||
+                  axiosError.message?.includes('timeout');
                 const isServerError = (axiosError.response?.status ?? 0) >= 500;
-                
-                console.warn(`Upload attempt ${attempt + 1} failed for ${img.name}:`, error);
-                
+
+                console.warn(
+                  `Upload attempt ${attempt + 1} failed for ${img.name}:`,
+                  error
+                );
+
                 if (attempt === MAX_RETRIES - 1) {
                   errorCount++;
-                  failedFiles.push(`${img.name}${isTimeoutError ? ' (timeout)' : isServerError ? ' (server error)' : ''}`);
+                  failedFiles.push(
+                    `${img.name}${isTimeoutError ? ' (timeout)' : isServerError ? ' (server error)' : ''}`
+                  );
                 } else {
                   // Exponential backoff: 1s, 2s, 4s...
                   const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-                  await new Promise(resolve => setTimeout(resolve, delay));
+                  await new Promise((resolve) => setTimeout(resolve, delay));
                 }
               }
             }
           }
         }
-        
+
         // Small delay between chunks to prevent overwhelming the server
         if (chunkStart + CHUNK_SIZE < files.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
-      
+
       // Show final results
       if (successCount > 0 && errorCount === 0) {
-        message.success(`All ${successCount} face images uploaded successfully`);
+        message.success(
+          `All ${successCount} face images uploaded successfully`
+        );
       } else if (successCount > 0) {
         message.warning(
           `${successCount} images uploaded successfully, ${errorCount} failed${
@@ -323,15 +393,19 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
           }`
         );
       } else {
-        message.error(`Failed to upload all images${
-          failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''
-        }`);
+        message.error(
+          `Failed to upload all images${
+            failedFiles.length > 0 ? `: ${failedFiles.join(', ')}` : ''
+          }`
+        );
       }
-      
+
       onImagesChange();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to upload images');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to upload images'
+      );
     } finally {
       setUploading(false);
       setUploadProgress(null);
@@ -354,13 +428,13 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   const getAvailableCameras = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = devices.filter(device => device.kind === 'videoinput');
+      const cameras = devices.filter((device) => device.kind === 'videoinput');
       setAvailableCameras(cameras);
-      
+
       if (cameras.length > 0 && !selectedCameraId) {
         setSelectedCameraId(cameras[0].deviceId);
       }
-      
+
       return cameras;
     } catch (error) {
       console.error('Error getting cameras:', error);
@@ -370,42 +444,47 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   }, [selectedCameraId, message]);
 
   // Start camera stream
-  const startCamera = useCallback(async (deviceId?: string) => {
-    try {
-      // Stop existing stream first
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
+  const startCamera = useCallback(
+    async (deviceId?: string) => {
+      try {
+        // Stop existing stream first
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+        }
+
+        const constraints: MediaStreamConstraints = {
+          video: {
+            deviceId: deviceId ? { exact: deviceId } : undefined,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: deviceId ? undefined : 'user',
+          },
+          audio: false,
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setCameraStream(stream);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+
+        return stream;
+      } catch (error) {
+        console.error('Error starting camera:', error);
+        message.error(
+          'Failed to start camera. Please check camera permissions.'
+        );
+        return null;
       }
-
-      const constraints: MediaStreamConstraints = {
-        video: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: deviceId ? undefined : 'user'
-        },
-        audio: false
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setCameraStream(stream);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-
-      return stream;
-    } catch (error) {
-      console.error('Error starting camera:', error);
-      message.error('Failed to start camera. Please check camera permissions.');
-      return null;
-    }
-  }, [cameraStream, message]);
+    },
+    [cameraStream, message]
+  );
 
   // Stop camera stream
   const stopCamera = useCallback(() => {
     if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
+      cameraStream.getTracks().forEach((track) => track.stop());
       setCameraStream(null);
     }
     if (videoRef.current) {
@@ -468,7 +547,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       closeCameraModal();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to capture photo');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to capture photo'
+      );
     } finally {
       setCapturingPhoto(false);
     }
@@ -482,7 +563,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       onImagesChange();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to delete image');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to delete image'
+      );
     }
   };
 
@@ -491,11 +574,15 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
     try {
       setRecalculatingId(imageId);
       const result = await apiClient.recalculateFaceEmbedding(staffId, imageId);
-      message.success(`${result.message} (Confidence: ${(result.processing_info.confidence * 100).toFixed(1)}%)`);
+      message.success(
+        `${result.message} (Confidence: ${(result.processing_info.confidence * 100).toFixed(1)}%)`
+      );
       onImagesChange();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to recalculate embedding');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to recalculate embedding'
+      );
     } finally {
       setRecalculatingId(null);
     }
@@ -510,7 +597,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
 
     try {
       setRecalculatingAll(true);
-      
+
       let successCount = 0;
       let failureCount = 0;
       const errors: string[] = [];
@@ -520,23 +607,30 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
         try {
           await apiClient.recalculateFaceEmbedding(staffId, image.image_id);
           successCount++;
-          
+
           // Show progress for each successful recalculation
-          message.info(`Recalculated ${image.image_id.slice(0, 8)}... (${successCount}/${faceImages.length})`);
+          message.info(
+            `Recalculated ${image.image_id.slice(0, 8)}... (${successCount}/${faceImages.length})`
+          );
         } catch (error) {
-          const axiosError = error as { response?: { data?: { detail?: string } } };
+          const axiosError = error as {
+            response?: { data?: { detail?: string } };
+          };
           failureCount++;
-          const errorMsg = axiosError.response?.data?.detail || 'Failed to recalculate';
+          const errorMsg =
+            axiosError.response?.data?.detail || 'Failed to recalculate';
           errors.push(`${image.image_id.slice(0, 8)}: ${errorMsg}`);
         }
 
         // Small delay between requests to prevent rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       // Show final results
       if (successCount === faceImages.length) {
-        message.success(`Successfully recalculated all ${successCount} face images`);
+        message.success(
+          `Successfully recalculated all ${successCount} face images`
+        );
       } else if (successCount > 0) {
         message.warning(
           `Recalculated ${successCount} images successfully, ${failureCount} failed. ${
@@ -544,14 +638,15 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
           }`
         );
       } else {
-        message.error(`Failed to recalculate all images. ${
-          errors.length > 0 ? `Errors: ${errors.join(', ')}` : ''
-        }`);
+        message.error(
+          `Failed to recalculate all images. ${
+            errors.length > 0 ? `Errors: ${errors.join(', ')}` : ''
+          }`
+        );
       }
 
       // Refresh the image list
       onImagesChange();
-      
     } catch (error) {
       console.error('Failed to recalculate face images:', error);
       message.error('Failed to recalculate face images');
@@ -573,7 +668,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Face Images ({faceImages.length})</h3>
+        <h3 className="text-lg font-medium">
+          Face Images ({faceImages.length})
+        </h3>
         <Space>
           <Upload
             accept="image/*"
@@ -591,11 +688,15 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             }}
             disabled={uploading}
           >
-            <Button type="primary" icon={<UploadOutlined />} loading={uploading}>
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              loading={uploading}
+            >
               Add Images
             </Button>
           </Upload>
-          
+
           {faceImages.length === 0 && (
             <Upload
               accept="image/*"
@@ -612,14 +713,14 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             </Upload>
           )}
 
-          <Button 
+          <Button
             icon={<CameraOutlined />}
             onClick={openCameraModal}
             disabled={uploading}
           >
             Take Photo
           </Button>
-          
+
           {faceImages.length > 0 && (
             <Tooltip title="Recalculate facial landmarks and embeddings for all images to improve accuracy">
               <Popconfirm
@@ -630,8 +731,8 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                 cancelText="Cancel"
                 okButtonProps={{ danger: true }}
               >
-                <Button 
-                  icon={<ReloadOutlined />} 
+                <Button
+                  icon={<ReloadOutlined />}
                   loading={recalculatingAll}
                   disabled={uploading || recalculatingId !== null}
                 >
@@ -648,16 +749,20 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-blue-900">
-              Uploading Images ({uploadProgress.current + 1} of {uploadProgress.total})
+              Uploading Images ({uploadProgress.current + 1} of{' '}
+              {uploadProgress.total})
             </span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-blue-700">
-                {Math.round(((uploadProgress.current + 1) / uploadProgress.total) * 100)}%
+                {Math.round(
+                  ((uploadProgress.current + 1) / uploadProgress.total) * 100
+                )}
+                %
               </span>
               {uploadProgress.canCancel && (
-                <Button 
-                  size="small" 
-                  danger 
+                <Button
+                  size="small"
+                  danger
                   onClick={cancelUpload}
                   className="text-xs px-2 py-1"
                 >
@@ -666,8 +771,10 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               )}
             </div>
           </div>
-          <Progress 
-            percent={Math.round(((uploadProgress.current + 1) / uploadProgress.total) * 100)}
+          <Progress
+            percent={Math.round(
+              ((uploadProgress.current + 1) / uploadProgress.total) * 100
+            )}
             status="active"
             strokeColor="#3b82f6"
             className="mb-2"
@@ -695,8 +802,8 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             </div>
           </div>
           <div className="text-xs text-orange-600">
-            This process will update facial landmarks and regenerate embeddings for better accuracy.
-            Please wait...
+            This process will update facial landmarks and regenerate embeddings
+            for better accuracy. Please wait...
           </div>
         </div>
       )}
@@ -726,14 +833,14 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                     style={{ cursor: 'pointer' }}
                     onLoad={(e) => {
                       const img = e.currentTarget as HTMLImageElement;
-                      setThumbnailSizes(prev => ({
+                      setThumbnailSizes((prev) => ({
                         ...prev,
                         [image.image_id]: {
                           width: img.clientWidth,
                           height: img.clientHeight,
                           naturalWidth: img.naturalWidth,
                           naturalHeight: img.naturalHeight,
-                        }
+                        },
                       }));
                     }}
                   />
@@ -743,7 +850,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                       imageWidth={thumbnailSizes[image.image_id].width}
                       imageHeight={thumbnailSizes[image.image_id].height}
                       naturalWidth={thumbnailSizes[image.image_id].naturalWidth}
-                      naturalHeight={thumbnailSizes[image.image_id].naturalHeight}
+                      naturalHeight={
+                        thumbnailSizes[image.image_id].naturalHeight
+                      }
                       showConnections={false}
                     />
                   )}
@@ -781,13 +890,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                   cancelText="No"
                 >
                   <Tooltip title="Delete Image">
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                    />
+                    <Button type="text" danger icon={<DeleteOutlined />} />
                   </Tooltip>
-                </Popconfirm>
+                </Popconfirm>,
               ]}
             >
               <div className="space-y-2">
@@ -795,15 +900,13 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                   <span className="text-xs text-gray-500 font-mono">
                     {image.image_id.slice(0, 8)}...
                   </span>
-                  {image.is_primary && (
-                    <Tag color="gold">Primary</Tag>
-                  )}
+                  {image.is_primary && <Tag color="gold">Primary</Tag>}
                 </div>
-                
+
                 <div className="text-xs text-gray-400">
                   Uploaded: {new Date(image.created_at).toLocaleDateString()}
                 </div>
-                
+
                 {image.face_landmarks && (
                   <div className="text-xs text-green-600">
                     ✓ Landmarks detected ({image.face_landmarks.length} points)
@@ -842,7 +945,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             <Button
               icon={<SwitcherOutlined />}
               onClick={() => {
-                const currentIndex = availableCameras.findIndex(cam => cam.deviceId === selectedCameraId);
+                const currentIndex = availableCameras.findIndex(
+                  (cam) => cam.deviceId === selectedCameraId
+                );
                 const nextIndex = (currentIndex + 1) % availableCameras.length;
                 if (availableCameras[nextIndex]) {
                   switchCamera(availableCameras[nextIndex].deviceId);
@@ -853,23 +958,28 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             >
               Switch
             </Button>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               icon={<CameraOutlined />}
               onClick={() => capturePhoto(faceImages.length === 0)}
               loading={capturingPhoto}
               size="large"
             >
-              {faceImages.length === 0 ? 'Capture Primary Photo' : 'Capture Photo'}
+              {faceImages.length === 0
+                ? 'Capture Primary Photo'
+                : 'Capture Photo'}
             </Button>
             <Button onClick={closeCameraModal} disabled={capturingPhoto}>
               Cancel
             </Button>
-          </Space>
+          </Space>,
         ]}
       >
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative bg-black rounded-lg overflow-hidden" style={{ width: '640px', height: '480px' }}>
+          <div
+            className="relative bg-black rounded-lg overflow-hidden"
+            style={{ width: '640px', height: '480px' }}
+          >
             <video
               ref={videoRef}
               autoPlay
@@ -895,10 +1005,12 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
               </div>
             )}
           </div>
-          
+
           <div className="text-sm text-gray-600 text-center">
             <p>Position your face in the center of the frame</p>
-            <p>Make sure you have good lighting and look directly at the camera</p>
+            <p>
+              Make sure you have good lighting and look directly at the camera
+            </p>
           </div>
         </div>
 
@@ -915,7 +1027,10 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
         width="auto"
         centered
       >
-        <div className="relative inline-block" style={{ maxWidth: '100%', maxHeight: '70vh' }}>
+        <div
+          className="relative inline-block"
+          style={{ maxWidth: '100%', maxHeight: '70vh' }}
+        >
           <img
             src={previewImage}
             alt="Preview"
@@ -935,16 +1050,18 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
             }}
           />
 
-          {previewLandmarks && renderSize.width > 0 && renderSize.height > 0 && (
-            <LandmarksOverlay
-              landmarks={previewLandmarks}
-              imageWidth={renderSize.width}
-              imageHeight={renderSize.height}
-              naturalWidth={renderSize.naturalWidth}
-              naturalHeight={renderSize.naturalHeight}
-              showConnections={true}
-            />
-          )}
+          {previewLandmarks &&
+            renderSize.width > 0 &&
+            renderSize.height > 0 && (
+              <LandmarksOverlay
+                landmarks={previewLandmarks}
+                imageWidth={renderSize.width}
+                imageHeight={renderSize.height}
+                naturalWidth={renderSize.naturalWidth}
+                naturalHeight={renderSize.naturalHeight}
+                showConnections={true}
+              />
+            )}
         </div>
       </Modal>
     </div>

@@ -1,10 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Table, Button, Modal, Form, Input, Space, Popconfirm, 
-  Typography, Alert, Switch, Card, App
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Space,
+  Popconfirm,
+  Typography,
+  Alert,
+  Switch,
+  Card,
+  App,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, ShopOutlined
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ShopOutlined,
 } from '@ant-design/icons';
 import { ColumnsType } from 'antd/es/table';
 import { AuthUser, Tenant, TenantCreate } from '../types/api';
@@ -45,17 +58,15 @@ export const TenantsPage: React.FC = () => {
     checkUserRole();
   }, [checkUserRole]);
 
-
-
   const showModal = (tenant?: Tenant) => {
     setEditingTenant(tenant || null);
     setIsModalVisible(true);
-    
+
     if (tenant) {
       form.setFieldsValue({
         tenant_id: tenant.tenant_id,
         name: tenant.name,
-        description: tenant.description
+        description: tenant.description,
       });
     } else {
       form.resetFields();
@@ -77,14 +88,16 @@ export const TenantsPage: React.FC = () => {
         await apiClient.createTenant(values);
         message.success('Tenant created successfully');
       }
-      
+
       setIsModalVisible(false);
       setEditingTenant(null);
       form.resetFields();
       refreshTenants();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to save tenant');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to save tenant'
+      );
     }
   };
 
@@ -95,22 +108,27 @@ export const TenantsPage: React.FC = () => {
       refreshTenants();
     } catch (error) {
       const axiosError = error as { response?: { data?: { detail?: string } } };
-      message.error(axiosError.response?.data?.detail || 'Failed to delete tenant');
+      message.error(
+        axiosError.response?.data?.detail || 'Failed to delete tenant'
+      );
     }
   };
 
-  const handleToggleStatus = async (tenantId: string, currentStatus: boolean) => {
+  const handleToggleStatus = async (
+    tenantId: string,
+    currentStatus: boolean
+  ) => {
     const newStatus = !currentStatus;
     const action = newStatus ? 'activate' : 'deactivate';
-    
+
     Modal.confirm({
       title: `${action.charAt(0).toUpperCase() + action.slice(1)} Tenant`,
       content: `Are you sure you want to ${action} this tenant? This will ${newStatus ? 'enable' : 'disable'} all operations for this tenant organization.`,
       okText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
       cancelText: 'Cancel',
-      okButtonProps: { 
-        danger: !newStatus,  // Red button for deactivation
-        type: newStatus ? 'primary' : 'default'
+      okButtonProps: {
+        danger: !newStatus, // Red button for deactivation
+        type: newStatus ? 'primary' : 'default',
       },
       onOk: async () => {
         try {
@@ -118,10 +136,14 @@ export const TenantsPage: React.FC = () => {
           message.success(`Tenant ${action}d successfully`);
           refreshTenants();
         } catch (error) {
-          const axiosError = error as { response?: { data?: { detail?: string } } };
-          message.error(axiosError.response?.data?.detail || `Failed to ${action} tenant`);
+          const axiosError = error as {
+            response?: { data?: { detail?: string } };
+          };
+          message.error(
+            axiosError.response?.data?.detail || `Failed to ${action} tenant`
+          );
         }
-      }
+      },
     });
   };
 
@@ -138,9 +160,15 @@ export const TenantsPage: React.FC = () => {
             className="mb-4"
           />
           <div className="text-sm text-gray-600">
-            <p><strong>Current User:</strong> {currentUser?.sub || 'Unknown'}</p>
-            <p><strong>Role:</strong> {currentUser?.role || 'Unknown'}</p>
-            <p><strong>Tenant:</strong> {currentUser?.tenant_id || 'Unknown'}</p>
+            <p>
+              <strong>Current User:</strong> {currentUser?.sub || 'Unknown'}
+            </p>
+            <p>
+              <strong>Role:</strong> {currentUser?.role || 'Unknown'}
+            </p>
+            <p>
+              <strong>Tenant:</strong> {currentUser?.tenant_id || 'Unknown'}
+            </p>
           </div>
         </Card>
       </div>
@@ -160,15 +188,14 @@ export const TenantsPage: React.FC = () => {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string) => (
-        <span className="font-medium">{text}</span>
-      ),
+      render: (text: string) => <span className="font-medium">{text}</span>,
     },
     {
       title: 'Description',
       dataIndex: 'description',
       key: 'description',
-      render: (text?: string) => text || <span className="text-gray-400">—</span>,
+      render: (text?: string) =>
+        text || <span className="text-gray-400">—</span>,
     },
     {
       title: 'Status',
@@ -284,19 +311,17 @@ export const TenantsPage: React.FC = () => {
             label="Tenant ID"
             rules={[
               { required: true, message: 'Please enter tenant ID' },
-              { 
-                pattern: /^[a-z0-9-]+$/, 
-                message: 'Tenant ID can only contain lowercase letters, numbers, and hyphens' 
+              {
+                pattern: /^[a-z0-9-]+$/,
+                message:
+                  'Tenant ID can only contain lowercase letters, numbers, and hyphens',
               },
               { min: 2, message: 'Tenant ID must be at least 2 characters' },
-              { max: 50, message: 'Tenant ID must be less than 50 characters' }
+              { max: 50, message: 'Tenant ID must be less than 50 characters' },
             ]}
             extra="Unique identifier for the tenant (e.g., 'acme-corp', 'demo-tenant')"
           >
-            <Input
-              placeholder="e.g., acme-corp"
-              disabled={!!editingTenant}
-            />
+            <Input placeholder="e.g., acme-corp" disabled={!!editingTenant} />
           </Form.Item>
 
           <Form.Item
@@ -305,7 +330,7 @@ export const TenantsPage: React.FC = () => {
             rules={[
               { required: true, message: 'Please enter tenant name' },
               { min: 2, message: 'Name must be at least 2 characters' },
-              { max: 100, message: 'Name must be less than 100 characters' }
+              { max: 100, message: 'Name must be less than 100 characters' },
             ]}
           >
             <Input placeholder="e.g., Acme Corporation" />
@@ -315,7 +340,10 @@ export const TenantsPage: React.FC = () => {
             name="description"
             label="Description"
             rules={[
-              { max: 500, message: 'Description must be less than 500 characters' }
+              {
+                max: 500,
+                message: 'Description must be less than 500 characters',
+              },
             ]}
           >
             <Input.TextArea
@@ -325,9 +353,7 @@ export const TenantsPage: React.FC = () => {
           </Form.Item>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button onClick={handleCancel}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancel}>Cancel</Button>
             <Button type="primary" htmlType="submit">
               {editingTenant ? 'Update Tenant' : 'Create Tenant'}
             </Button>

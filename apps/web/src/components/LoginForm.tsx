@@ -11,10 +11,12 @@ interface ApiError {
   response?: {
     status?: number;
     data?: {
-      detail?: string | Array<{
-        loc: string[];
-        msg: string;
-      }>;
+      detail?:
+        | string
+        | Array<{
+            loc: string[];
+            msg: string;
+          }>;
     };
   };
   message?: string;
@@ -25,7 +27,9 @@ export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.TENANT_ADMIN);
+  const [selectedRole, setSelectedRole] = useState<UserRole>(
+    UserRole.TENANT_ADMIN
+  );
 
   const handleSubmit = async (values: LoginRequest) => {
     setLoading(true);
@@ -33,10 +37,11 @@ export const LoginForm: React.FC = () => {
 
     try {
       // For system admin, don't require tenant_id
-      const loginData = selectedRole === UserRole.SYSTEM_ADMIN 
-        ? { ...values, tenant_id: undefined } 
-        : values;
-      
+      const loginData =
+        selectedRole === UserRole.SYSTEM_ADMIN
+          ? { ...values, tenant_id: undefined }
+          : values;
+
       await apiClient.login(loginData);
       navigate('/dashboard');
     } catch (err: unknown) {
@@ -45,22 +50,22 @@ export const LoginForm: React.FC = () => {
       console.log('Error response:', apiError.response);
       console.log('Error status:', apiError.response?.status);
       console.log('Error data:', apiError.response?.data);
-      
+
       const errorData = (err as ApiError)?.response?.data;
       const status = (err as ApiError)?.response?.status;
-      
+
       // Handle different error scenarios
       if (status === 401) {
         // Unauthorized - invalid credentials
         setFieldErrors({
           username: 'Invalid username or password',
-          password: 'Invalid username or password'
+          password: 'Invalid username or password',
         });
       } else if (status === 422) {
         // Validation error - check if it's field-specific
         if (errorData?.detail) {
           const errors: Record<string, string> = {};
-          
+
           if (Array.isArray(errorData.detail)) {
             // Handle validation errors array
             errorData.detail.forEach((error) => {
@@ -73,25 +78,41 @@ export const LoginForm: React.FC = () => {
             // Handle string detail
             if (errorData.detail.includes('tenant')) {
               errors.tenant_id = 'Invalid tenant ID';
-            } else if (errorData.detail.includes('role') || errorData.detail.includes('permission')) {
+            } else if (
+              errorData.detail.includes('role') ||
+              errorData.detail.includes('permission')
+            ) {
               errors.role = 'Invalid role or insufficient permissions';
             } else {
-              errors.username = typeof errorData.detail === 'string' ? errorData.detail : 'Login error';
+              errors.username =
+                typeof errorData.detail === 'string'
+                  ? errorData.detail
+                  : 'Login error';
             }
           }
-          
+
           // If no specific field errors, show general error on username field
           if (Object.keys(errors).length === 0) {
-            errors.username = typeof errorData.detail === 'string' ? errorData.detail : 'Validation error';
+            errors.username =
+              typeof errorData.detail === 'string'
+                ? errorData.detail
+                : 'Validation error';
           }
-          
+
           setFieldErrors(errors);
         } else {
-          setFieldErrors({ username: 'Validation error. Please check your input.' });
+          setFieldErrors({
+            username: 'Validation error. Please check your input.',
+          });
         }
       } else if (errorData?.detail) {
         // Other errors with detail message
-        setFieldErrors({ username: typeof errorData.detail === 'string' ? errorData.detail : 'Login error' });
+        setFieldErrors({
+          username:
+            typeof errorData.detail === 'string'
+              ? errorData.detail
+              : 'Login error',
+        });
       } else {
         // Generic error
         setFieldErrors({ username: 'Login failed. Please try again.' });
@@ -108,12 +129,8 @@ export const LoginForm: React.FC = () => {
           <Title level={2} className="text-blue-600 mb-2">
             Customer Visits System
           </Title>
-          <Text type="secondary">
-            Sign in to your account
-          </Text>
+          <Text type="secondary">Sign in to your account</Text>
         </div>
-
-
 
         <Form
           form={form}
@@ -123,17 +140,17 @@ export const LoginForm: React.FC = () => {
           size="large"
           initialValues={{
             role: UserRole.TENANT_ADMIN,
-            tenant_id: 't-dev'
+            tenant_id: 't-dev',
           }}
         >
-        <Form.Item
+          <Form.Item
             name="role"
             label="Role"
             rules={[{ required: true, message: 'Please select role!' }]}
             validateStatus={fieldErrors.role ? 'error' : ''}
             help={fieldErrors.role}
           >
-            <Select 
+            <Select
               placeholder="Select your role"
               onChange={(value) => {
                 setSelectedRole(value);
@@ -143,12 +160,18 @@ export const LoginForm: React.FC = () => {
                 }
               }}
             >
-              <Select.Option value={UserRole.SYSTEM_ADMIN}>System Admin</Select.Option>
-              <Select.Option value={UserRole.TENANT_ADMIN}>Tenant Admin</Select.Option>
-              <Select.Option value={UserRole.SITE_MANAGER}>Site Manager</Select.Option>
+              <Select.Option value={UserRole.SYSTEM_ADMIN}>
+                System Admin
+              </Select.Option>
+              <Select.Option value={UserRole.TENANT_ADMIN}>
+                Tenant Admin
+              </Select.Option>
+              <Select.Option value={UserRole.SITE_MANAGER}>
+                Site Manager
+              </Select.Option>
             </Select>
           </Form.Item>
-          
+
           {selectedRole !== UserRole.SYSTEM_ADMIN && (
             <Form.Item
               name="tenant_id"
@@ -157,10 +180,7 @@ export const LoginForm: React.FC = () => {
               validateStatus={fieldErrors.tenant_id ? 'error' : ''}
               help={fieldErrors.tenant_id}
             >
-              <Input
-                prefix={<ShopOutlined />}
-                placeholder="Enter tenant ID"
-              />
+              <Input prefix={<ShopOutlined />} placeholder="Enter tenant ID" />
             </Form.Item>
           )}
 
@@ -171,10 +191,7 @@ export const LoginForm: React.FC = () => {
             validateStatus={fieldErrors.username ? 'error' : ''}
             help={fieldErrors.username}
           >
-            <Input
-              prefix={<UserOutlined />}
-              placeholder="Enter username"
-            />
+            <Input prefix={<UserOutlined />} placeholder="Enter username" />
           </Form.Item>
 
           <Form.Item
@@ -190,8 +207,6 @@ export const LoginForm: React.FC = () => {
             />
           </Form.Item>
 
-          
-
           <Form.Item className="mb-0">
             <Button
               type="primary"
@@ -204,8 +219,6 @@ export const LoginForm: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
-
-        
       </Card>
     </div>
   );

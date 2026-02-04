@@ -11,13 +11,12 @@ import {
   Tag,
   Tooltip,
   App,
-
 } from 'antd';
 import {
   DeleteOutlined,
   PictureOutlined,
   EyeOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import dayjs from 'dayjs';
@@ -25,7 +24,8 @@ import dayjs from 'dayjs';
 // const { Text } = Typography;
 
 // SVG placeholder for missing images
-const IMAGE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBhdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+const IMAGE_PLACEHOLDER =
+  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkltYWdlIG5vdCBhdmFpbGFibGU8L3RleHQ+PC9zdmc+';
 
 interface ApiError {
   response?: {
@@ -56,7 +56,7 @@ interface CustomerFaceGalleryProps {
 export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   customerId,
   customerName: _customerName,
-  onImagesChange
+  onImagesChange,
 }) => {
   const [images, setImages] = useState<CustomerFaceImage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,10 +64,11 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
+    null
+  );
   const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
 
-  
   // Ref to track if user is holding Shift/Ctrl/Cmd
   const isMultiSelectRef = useRef(false);
 
@@ -83,11 +84,14 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
       setImages(response.images || []);
 
       // Load image URLs for each image
-      response.images?.forEach(image => {
+      response.images?.forEach((image) => {
         loadImageUrl(image.image_id, image.image_path);
       });
     } catch (err: unknown) {
-      setError((err as ApiError)?.response?.data?.detail || 'Failed to load face images');
+      setError(
+        (err as ApiError)?.response?.data?.detail ||
+          'Failed to load face images'
+      );
     } finally {
       setLoading(false);
     }
@@ -123,46 +127,48 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
   const loadImageUrl = async (imageId: number, imagePath: string) => {
     try {
       const url = await apiClient.getImageUrl(imagePath);
-      setImageUrls(prev => ({ ...prev, [imageId]: url }));
+      setImageUrls((prev) => ({ ...prev, [imageId]: url }));
     } catch (error) {
       console.error('Failed to load image:', error);
-      setImageUrls(prev => ({ ...prev, [imageId]: IMAGE_PLACEHOLDER }));
+      setImageUrls((prev) => ({ ...prev, [imageId]: IMAGE_PLACEHOLDER }));
     }
   };
 
+  const handleImageClick = useCallback(
+    (imageId: number, index: number, event: React.MouseEvent) => {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+      const isShift = event.shiftKey;
 
-  const handleImageClick = useCallback((imageId: number, index: number, event: React.MouseEvent) => {
-    const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-    const isShift = event.shiftKey;
+      if (isShift && lastSelectedIndex !== null) {
+        // Shift+click: select range
+        const start = Math.min(lastSelectedIndex, index);
+        const end = Math.max(lastSelectedIndex, index);
+        const newSelected = new Set(selectedImages);
 
-    if (isShift && lastSelectedIndex !== null) {
-      // Shift+click: select range
-      const start = Math.min(lastSelectedIndex, index);
-      const end = Math.max(lastSelectedIndex, index);
-      const newSelected = new Set(selectedImages);
-      
-      for (let i = start; i <= end; i++) {
-        if (images[i]) {
-          newSelected.add(images[i].image_id);
+        for (let i = start; i <= end; i++) {
+          if (images[i]) {
+            newSelected.add(images[i].image_id);
+          }
         }
-      }
-      setSelectedImages(newSelected);
-    } else if (isCtrlOrCmd) {
-      // Ctrl/Cmd+click: toggle individual selection
-      const newSelected = new Set(selectedImages);
-      if (newSelected.has(imageId)) {
-        newSelected.delete(imageId);
+        setSelectedImages(newSelected);
+      } else if (isCtrlOrCmd) {
+        // Ctrl/Cmd+click: toggle individual selection
+        const newSelected = new Set(selectedImages);
+        if (newSelected.has(imageId)) {
+          newSelected.delete(imageId);
+        } else {
+          newSelected.add(imageId);
+        }
+        setSelectedImages(newSelected);
+        setLastSelectedIndex(index);
       } else {
-        newSelected.add(imageId);
+        // Normal click: select only this image
+        setSelectedImages(new Set([imageId]));
+        setLastSelectedIndex(index);
       }
-      setSelectedImages(newSelected);
-      setLastSelectedIndex(index);
-    } else {
-      // Normal click: select only this image
-      setSelectedImages(new Set([imageId]));
-      setLastSelectedIndex(index);
-    }
-  }, [selectedImages, lastSelectedIndex, images]);
+    },
+    [selectedImages, lastSelectedIndex, images]
+  );
 
   const handleDeleteSelected = async () => {
     if (selectedImages.size === 0) return;
@@ -170,33 +176,40 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
     try {
       setDeleting(true);
       const imageIds = Array.from(selectedImages);
-      
-      const response = await apiClient.deleteCustomerFaceImagesBatch(customerId, imageIds);
-      
+
+      const response = await apiClient.deleteCustomerFaceImagesBatch(
+        customerId,
+        imageIds
+      );
+
       // Log response for debugging
       console.log('Delete response:', response);
-      
-      message.success(`Successfully deleted ${response.deleted_count} face image${response.deleted_count > 1 ? 's' : ''}`);
-      
+
+      message.success(
+        `Successfully deleted ${response.deleted_count} face image${response.deleted_count > 1 ? 's' : ''}`
+      );
+
       // Clear selection and cached URLs
       setSelectedImages(new Set());
       setLastSelectedIndex(null);
-      
+
       // Clear cached image URLs for deleted images
-      setImageUrls(prev => {
+      setImageUrls((prev) => {
         const updated = { ...prev };
-        imageIds.forEach(id => delete updated[id]);
+        imageIds.forEach((id) => delete updated[id]);
         return updated;
       });
-      
+
       // Force reload images
       await loadImages();
-      
+
       if (onImagesChange) {
         onImagesChange();
       }
     } catch (err: unknown) {
-      message.error((err as ApiError)?.response?.data?.detail || 'Failed to delete images');
+      message.error(
+        (err as ApiError)?.response?.data?.detail || 'Failed to delete images'
+      );
     } finally {
       setDeleting(false);
     }
@@ -208,11 +221,14 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
       setSelectedImages(new Set());
     } else {
       // Select all
-      setSelectedImages(new Set(images.map(img => img.image_id)));
+      setSelectedImages(new Set(images.map((img) => img.image_id)));
     }
   };
 
-  const handleViewImage = (image: CustomerFaceImage, event: React.MouseEvent) => {
+  const handleViewImage = (
+    image: CustomerFaceImage,
+    event: React.MouseEvent
+  ) => {
     event.stopPropagation();
     const imageUrl = imageUrls[image.image_id];
     if (imageUrl && imageUrl !== IMAGE_PLACEHOLDER) {
@@ -230,18 +246,26 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
       </div>
       <div className="flex justify-between items-center">
         <span className="font-medium text-gray-200">Confidence:</span>
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-          image.confidence_score > 0.8 ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'
-        }`}>
+        <span
+          className={`px-2 py-0.5 rounded text-xs font-medium ${
+            image.confidence_score > 0.8
+              ? 'bg-green-600 text-white'
+              : 'bg-orange-600 text-white'
+          }`}
+        >
           {(image.confidence_score * 100).toFixed(1)}%
         </span>
       </div>
       {image.quality_score && (
         <div className="flex justify-between items-center">
           <span className="font-medium text-gray-200">Quality:</span>
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-            image.quality_score > 0.8 ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'
-          }`}>
+          <span
+            className={`px-2 py-0.5 rounded text-xs font-medium ${
+              image.quality_score > 0.8
+                ? 'bg-green-600 text-white'
+                : 'bg-orange-600 text-white'
+            }`}
+          >
             {(image.quality_score * 100).toFixed(1)}%
           </span>
         </div>
@@ -273,14 +297,14 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
 
   const renderImage = (image: CustomerFaceImage, index: number) => {
     const isSelected = selectedImages.has(image.image_id);
-    
+
     return (
       <Col xs={24} sm={12} md={8} lg={6} key={image.image_id}>
         <Card
           hoverable
           className={`transition-all cursor-pointer ${
-            isSelected 
-              ? 'ring-2 ring-blue-500 ring-offset-2 bg-blue-50' 
+            isSelected
+              ? 'ring-2 ring-blue-500 ring-offset-2 bg-blue-50'
               : 'hover:shadow-lg'
           }`}
           onClick={(e) => handleImageClick(image.image_id, index, e)}
@@ -311,7 +335,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
           }
           actions={[
             <Tooltip title={getImageTooltip(image)} key="details">
-              <InfoCircleOutlined 
+              <InfoCircleOutlined
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
@@ -319,11 +343,11 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
               />
             </Tooltip>,
             <Tooltip title="View image in new tab" key="view">
-              <EyeOutlined 
+              <EyeOutlined
                 onClick={(e) => handleViewImage(image, e)}
                 className="text-green-500 hover:text-green-600"
               />
-            </Tooltip>
+            </Tooltip>,
           ]}
         >
           {/* Removed Card.Meta to simplify layout - details are now in tooltip */}
@@ -358,126 +382,131 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
 
   return (
     <>
-    <div className="space-y-4">
-      {/* Header with selection controls */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Space>
-            <PictureOutlined />
-            <span className="font-medium">
-              Face Gallery ({images.length} images)
-            </span>
-          </Space>
-          
-          {images.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <Button 
-                size="small" 
-                onClick={handleSelectAll}
-                type={selectedImages.size === images.length ? "default" : "link"}
+      <div className="space-y-4">
+        {/* Header with selection controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Space>
+              <PictureOutlined />
+              <span className="font-medium">
+                Face Gallery ({images.length} images)
+              </span>
+            </Space>
+
+            {images.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="small"
+                  onClick={handleSelectAll}
+                  type={
+                    selectedImages.size === images.length ? 'default' : 'link'
+                  }
+                >
+                  {selectedImages.size === images.length
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </Button>
+
+                {selectedImages.size > 0 && (
+                  <Tag color="blue">{selectedImages.size} selected</Tag>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Delete selected button */}
+          {selectedImages.size > 0 && (
+            <Popconfirm
+              title={`Delete ${selectedImages.size} face image${selectedImages.size > 1 ? 's' : ''}?`}
+              description="This action cannot be undone."
+              onConfirm={handleDeleteSelected}
+              okText="Delete"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                loading={deleting}
+                size="small"
               >
-                {selectedImages.size === images.length ? 'Deselect All' : 'Select All'}
+                Delete Selected ({selectedImages.size})
               </Button>
-              
-              {selectedImages.size > 0 && (
-                <Tag color="blue">
-                  {selectedImages.size} selected
-                </Tag>
-              )}
-            </div>
+            </Popconfirm>
+          )}
+          {selectedImages.size > 0 && (
+            <Button
+              size="small"
+              onClick={() => {
+                modal.confirm({
+                  title: `Reassign ${selectedImages.size} image(s)`,
+                  content: (
+                    <div className="space-y-2 mt-4">
+                      <div>New customer ID</div>
+                      <input
+                        id="reassign-input"
+                        className="w-full border rounded px-2 py-1"
+                        placeholder="Enter customer id"
+                      />
+                    </div>
+                  ),
+                  okText: 'Reassign',
+                  onOk: async () => {
+                    const input = document.getElementById(
+                      'reassign-input'
+                    ) as HTMLInputElement;
+                    const targetId = parseInt(input?.value || '', 10);
+                    if (!targetId || selectedImages.size === 0) return;
+                    try {
+                      for (const imgId of Array.from(selectedImages)) {
+                        await apiClient.reassignFaceImage(imgId, targetId);
+                      }
+                      message.success('Images reassigned');
+                      setSelectedImages(new Set());
+                      await loadImages();
+                      onImagesChange?.();
+                    } catch (e: unknown) {
+                      message.error(
+                        (e as ApiError)?.response?.data?.detail ||
+                          'Failed to reassign images'
+                      );
+                    }
+                  },
+                });
+              }}
+            >
+              Reassign Selected…
+            </Button>
           )}
         </div>
 
-        {/* Delete selected button */}
-        {selectedImages.size > 0 && (
-          <Popconfirm
-            title={`Delete ${selectedImages.size} face image${selectedImages.size > 1 ? 's' : ''}?`}
-            description="This action cannot be undone."
-            onConfirm={handleDeleteSelected}
-            okText="Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              loading={deleting}
-              size="small"
-            >
-              Delete Selected ({selectedImages.size})
-            </Button>
-          </Popconfirm>
+        {/* Help text for multi-selection */}
+        {images.length > 1 && (
+          <Alert
+            message="Multi-Selection Help"
+            description="Click to select • Ctrl/⌘+Click to add to selection • Shift+Click to select range"
+            type="info"
+            showIcon
+            className="text-sm"
+          />
         )}
-        {selectedImages.size > 0 && (
-          <Button
-            size="small"
-            onClick={() => {
-              modal.confirm({
-                title: `Reassign ${selectedImages.size} image(s)`,
-                content: (
-                  <div className="space-y-2 mt-4">
-                    <div>New customer ID</div>
-                    <input
-                      id="reassign-input"
-                      className="w-full border rounded px-2 py-1"
-                      placeholder="Enter customer id"
-                    />
-                  </div>
-                ),
-                okText: 'Reassign',
-                onOk: async () => {
-                  const input = document.getElementById('reassign-input') as HTMLInputElement;
-                  const targetId = parseInt(input?.value || '', 10);
-                  if (!targetId || selectedImages.size === 0) return;
-                  try {
-                    for (const imgId of Array.from(selectedImages)) {
-                      await apiClient.reassignFaceImage(imgId, targetId);
-                    }
-                    message.success('Images reassigned');
-                    setSelectedImages(new Set());
-                    await loadImages();
-                    onImagesChange?.();
-                  } catch (e: unknown) {
-                    message.error((e as ApiError)?.response?.data?.detail || 'Failed to reassign images');
-                  }
-                }
-              });
-            }}
-          >
-            Reassign Selected…
-          </Button>
-        )}
-      </div>
 
-      {/* Help text for multi-selection */}
-      {images.length > 1 && (
-        <Alert
-          message="Multi-Selection Help"
-          description="Click to select • Ctrl/⌘+Click to add to selection • Shift+Click to select range"
-          type="info"
-          showIcon
-          className="text-sm"
-        />
-      )}
-
-      {/* Images grid */}
-      {images.length === 0 ? (
-        <div className="text-center py-12">
-          <PictureOutlined className="text-4xl text-gray-400 mb-4" />
-          <div className="text-gray-500">
-            <div className="font-medium">No face images yet</div>
-            <div className="text-sm mt-1">
-              Face images will be automatically captured and saved when this customer visits.
+        {/* Images grid */}
+        {images.length === 0 ? (
+          <div className="text-center py-12">
+            <PictureOutlined className="text-4xl text-gray-400 mb-4" />
+            <div className="text-gray-500">
+              <div className="font-medium">No face images yet</div>
+              <div className="text-sm mt-1">
+                Face images will be automatically captured and saved when this
+                customer visits.
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <Row gutter={[16, 16]}>
-          {images.map(renderImage)}
-        </Row>
-      )}
-    </div>
-
+        ) : (
+          <Row gutter={[16, 16]}>{images.map(renderImage)}</Row>
+        )}
+      </div>
     </>
   );
 };

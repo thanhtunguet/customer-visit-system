@@ -1,12 +1,123 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs } from 'react/jsx-runtime';
 import { Select, Input, Alert, Button } from 'antd';
-export const WebcamDeviceSelector = ({ webcams, webcamsLoading, webcamSource, manualInputMode, onManualInputModeChange, onDropdownVisibleChange, value, onChange }) => {
-    if (manualInputMode || webcamSource === 'none') {
-        return (_jsxs("div", { className: "space-y-3", children: [_jsx(Alert, { message: "Manual Input Required", description: "No workers are currently available to enumerate webcam devices. Please enter the device index manually (usually 0, 1, 2, etc.).", type: "warning", showIcon: true, style: { marginBottom: 8 } }), _jsx(Input, { type: "number", min: 0, max: 10, placeholder: "Enter device index (e.g. 0, 1, 2)", addonBefore: "Device Index", value: value, onChange: (e) => onChange?.(parseInt(e.target.value)) }), _jsxs("div", { className: "text-sm text-gray-600", children: [_jsx("strong", { children: "Common device indices:" }), _jsxs("ul", { className: "mt-1 ml-4 list-disc", children: [_jsxs("li", { children: [_jsx("code", { children: "0" }), " - First webcam (built-in camera)"] }), _jsxs("li", { children: [_jsx("code", { children: "1" }), " - Second webcam (external USB camera)"] }), _jsxs("li", { children: [_jsx("code", { children: "2" }), " - Third webcam"] })] })] }), webcamSource === 'workers' && (_jsx("div", { className: "text-right", children: _jsx(Button, { type: "link", size: "small", onClick: () => onManualInputModeChange(false), children: "\u2190 Back to device selection" }) }))] }));
-    }
-    return (_jsxs("div", { children: [_jsx(Select, { loading: webcamsLoading, placeholder: webcamsLoading ? 'Loading webcams from workers...' : 'Select a webcam device', showSearch: true, value: value, onChange: onChange, filterOption: (input, option) => option?.label?.toString().toLowerCase().indexOf(input.toLowerCase()) >= 0, onDropdownVisibleChange: onDropdownVisibleChange, dropdownRender: (menu) => (_jsxs("div", { children: [menu, _jsx("div", { style: { padding: 8, borderTop: '1px solid #f0f0f0' }, children: _jsx(Button, { type: "link", size: "small", onClick: () => onManualInputModeChange(true), style: { padding: 0 }, children: "Can't find your device? Enter manually" }) })] })), options: webcams.map((w) => ({
-                    value: w.device_index,
-                    disabled: !w.is_working || w.in_use,
-                    label: `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim()
-                })) }), webcamSource === 'workers' && (_jsx("div", { className: "text-xs text-green-600 mt-2", children: "\u2713 Device list loaded from workers. Workers are available for camera streaming." }))] }));
+export const WebcamDeviceSelector = ({
+  webcams,
+  webcamsLoading,
+  webcamSource,
+  manualInputMode,
+  onManualInputModeChange,
+  onDropdownVisibleChange,
+  value,
+  onChange,
+}) => {
+  if (manualInputMode || webcamSource === 'none') {
+    return _jsxs('div', {
+      className: 'space-y-3',
+      children: [
+        _jsx(Alert, {
+          message: 'Manual Input Required',
+          description:
+            'No workers are currently available to enumerate webcam devices. Please enter the device index manually (usually 0, 1, 2, etc.).',
+          type: 'warning',
+          showIcon: true,
+          style: { marginBottom: 8 },
+        }),
+        _jsx(Input, {
+          type: 'number',
+          min: 0,
+          max: 10,
+          placeholder: 'Enter device index (e.g. 0, 1, 2)',
+          addonBefore: 'Device Index',
+          value: value,
+          onChange: (e) => onChange?.(parseInt(e.target.value)),
+        }),
+        _jsxs('div', {
+          className: 'text-sm text-gray-600',
+          children: [
+            _jsx('strong', { children: 'Common device indices:' }),
+            _jsxs('ul', {
+              className: 'mt-1 ml-4 list-disc',
+              children: [
+                _jsxs('li', {
+                  children: [
+                    _jsx('code', { children: '0' }),
+                    ' - First webcam (built-in camera)',
+                  ],
+                }),
+                _jsxs('li', {
+                  children: [
+                    _jsx('code', { children: '1' }),
+                    ' - Second webcam (external USB camera)',
+                  ],
+                }),
+                _jsxs('li', {
+                  children: [
+                    _jsx('code', { children: '2' }),
+                    ' - Third webcam',
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        webcamSource === 'workers' &&
+          _jsx('div', {
+            className: 'text-right',
+            children: _jsx(Button, {
+              type: 'link',
+              size: 'small',
+              onClick: () => onManualInputModeChange(false),
+              children: '\u2190 Back to device selection',
+            }),
+          }),
+      ],
+    });
+  }
+  return _jsxs('div', {
+    children: [
+      _jsx(Select, {
+        loading: webcamsLoading,
+        placeholder: webcamsLoading
+          ? 'Loading webcams from workers...'
+          : 'Select a webcam device',
+        showSearch: true,
+        value: value,
+        onChange: onChange,
+        filterOption: (input, option) =>
+          option?.label
+            ?.toString()
+            .toLowerCase()
+            .indexOf(input.toLowerCase()) >= 0,
+        onDropdownVisibleChange: onDropdownVisibleChange,
+        dropdownRender: (menu) =>
+          _jsxs('div', {
+            children: [
+              menu,
+              _jsx('div', {
+                style: { padding: 8, borderTop: '1px solid #f0f0f0' },
+                children: _jsx(Button, {
+                  type: 'link',
+                  size: 'small',
+                  onClick: () => onManualInputModeChange(true),
+                  style: { padding: 0 },
+                  children: "Can't find your device? Enter manually",
+                }),
+              }),
+            ],
+          }),
+        options: webcams.map((w) => ({
+          value: w.device_index,
+          disabled: !w.is_working || w.in_use,
+          label:
+            `${w.in_use ? '🔒 ' : ''}Device ${w.device_index}${w.width && w.height ? ` (${w.width}x${w.height})` : ''}${w.fps ? ` ${Math.round(w.fps)}fps` : ''}${!w.is_working ? ' [Not Working]' : ''}`.trim(),
+        })),
+      }),
+      webcamSource === 'workers' &&
+        _jsx('div', {
+          className: 'text-xs text-green-600 mt-2',
+          children:
+            '\u2713 Device list loaded from workers. Workers are available for camera streaming.',
+        }),
+    ],
+  });
 };

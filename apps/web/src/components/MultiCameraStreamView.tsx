@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Space, Tag, Tooltip, Dropdown, MenuProps } from 'antd';
-import { 
+import {
   FullscreenOutlined,
   FullscreenExitOutlined,
   StopOutlined,
@@ -9,7 +9,7 @@ import {
   BorderOutlined,
   BlockOutlined,
   BorderlessTableOutlined,
-  EyeOutlined
+  EyeOutlined,
 } from '@ant-design/icons';
 import { WebRTCCameraStream } from './WebRTCCameraStream';
 import { Camera } from '../types/api';
@@ -28,7 +28,7 @@ const GRID_LAYOUTS = {
   '2x2': { cols: 2, rows: 2, maxCameras: 4, gridCols: 'grid-cols-2' },
   '3x3': { cols: 3, rows: 3, maxCameras: 9, gridCols: 'grid-cols-3' },
   '4x4': { cols: 4, rows: 4, maxCameras: 16, gridCols: 'grid-cols-4' },
-  'auto': { cols: 0, rows: 0, maxCameras: Infinity, gridCols: 'auto' }
+  auto: { cols: 0, rows: 0, maxCameras: Infinity, gridCols: 'auto' },
 };
 
 export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
@@ -36,13 +36,15 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
   cameras,
   streamStatuses,
   onStreamStateChange,
-  onStopStream
+  onStopStream,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [gridLayout, setGridLayout] = useState<GridLayout>('auto');
 
   // Get active cameras
-  const activeCameras = cameras.filter(camera => streamStatuses[camera.camera_id]);
+  const activeCameras = cameras.filter(
+    (camera) => streamStatuses[camera.camera_id]
+  );
 
   // Calculate optimal grid layout for auto mode
   const getAutoGridLayout = useCallback((count: number) => {
@@ -99,12 +101,21 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('mozfullscreenchange', handleFullscreenChange);
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      document.removeEventListener(
+        'webkitfullscreenchange',
+        handleFullscreenChange
+      );
+      document.removeEventListener(
+        'mozfullscreenchange',
+        handleFullscreenChange
+      );
+      document.removeEventListener(
+        'MSFullscreenChange',
+        handleFullscreenChange
+      );
     };
   }, []);
 
@@ -124,41 +135,43 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
       key: 'auto',
       icon: <AppstoreOutlined />,
       label: 'Auto Layout',
-      onClick: () => setGridLayout('auto')
+      onClick: () => setGridLayout('auto'),
     },
     {
       key: '2x2',
       icon: <BorderOutlined />,
       label: '2×2 Grid (4 cameras)',
       disabled: activeCameras.length === 0,
-      onClick: () => setGridLayout('2x2')
+      onClick: () => setGridLayout('2x2'),
     },
     {
       key: '3x3',
       icon: <BlockOutlined />,
       label: '3×3 Grid (9 cameras)',
       disabled: activeCameras.length === 0,
-      onClick: () => setGridLayout('3x3')
+      onClick: () => setGridLayout('3x3'),
     },
     {
       key: '4x4',
       icon: <BorderlessTableOutlined />,
       label: '4×4 Grid (16 cameras)',
       disabled: activeCameras.length === 0,
-      onClick: () => setGridLayout('4x4')
-    }
+      onClick: () => setGridLayout('4x4'),
+    },
   ];
 
   const camerasToDisplay = getCamerasToDisplay();
 
   return (
-    <div 
-      id="multi-camera-container" 
+    <div
+      id="multi-camera-container"
       className={`space-y-4 ${isFullscreen ? 'bg-black p-4' : ''}`}
       style={{ height: isFullscreen ? '100vh' : 'auto' }}
     >
       {/* Toolbar */}
-      <div className={`flex items-center justify-between ${isFullscreen ? 'text-white' : ''}`}>
+      <div
+        className={`flex items-center justify-between ${isFullscreen ? 'text-white' : ''}`}
+      >
         <div className="flex items-center space-x-3">
           <Space>
             <EyeOutlined style={{ color: isFullscreen ? '#fff' : '#1890ff' }} />
@@ -166,27 +179,39 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
               All Active Camera Streams ({activeCameras.length})
             </span>
           </Space>
-          
-          {gridLayout !== 'auto' && camerasToDisplay.length < activeCameras.length && (
-            <Tag color="orange">
-              Showing {camerasToDisplay.length} of {activeCameras.length} cameras
-            </Tag>
-          )}
+
+          {gridLayout !== 'auto' &&
+            camerasToDisplay.length < activeCameras.length && (
+              <Tag color="orange">
+                Showing {camerasToDisplay.length} of {activeCameras.length}{' '}
+                cameras
+              </Tag>
+            )}
         </div>
 
         <Space>
           <Dropdown menu={{ items: layoutMenuItems }} trigger={['click']}>
-            <Button 
+            <Button
               icon={<AppstoreOutlined />}
               type={isFullscreen ? 'default' : 'text'}
             >
-              {gridLayout === 'auto' ? 'Auto Layout' : `${gridLayout.toUpperCase()} Grid`}
+              {gridLayout === 'auto'
+                ? 'Auto Layout'
+                : `${gridLayout.toUpperCase()} Grid`}
             </Button>
           </Dropdown>
 
-          <Tooltip title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}>
+          <Tooltip
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
             <Button
-              icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+              icon={
+                isFullscreen ? (
+                  <FullscreenExitOutlined />
+                ) : (
+                  <FullscreenOutlined />
+                )
+              }
               onClick={handleFullscreenToggle}
               type={isFullscreen ? 'default' : 'text'}
             />
@@ -195,30 +220,36 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
       </div>
 
       {/* Camera Grid */}
-      <div 
+      <div
         className={`grid gap-4 ${getGridClass()}`}
-        style={{ 
+        style={{
           height: isFullscreen ? 'calc(100vh - 80px)' : '80vh',
           maxHeight: isFullscreen ? 'calc(100vh - 80px)' : '80vh',
-          overflowY: 'auto'
+          overflowY: 'auto',
         }}
       >
         {camerasToDisplay.map((camera) => (
-          <div 
-            key={camera.camera_id} 
+          <div
+            key={camera.camera_id}
             className={`${isFullscreen ? 'bg-gray-900' : 'border border-gray-200 bg-white'} rounded-lg p-4`}
-            style={{ 
+            style={{
               minHeight: isFullscreen ? '200px' : '300px',
-              height: 'fit-content'
+              height: 'fit-content',
             }}
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-2">
-                <VideoCameraOutlined className={isFullscreen ? 'text-blue-400' : 'text-blue-600'} />
-                <span className={`font-medium ${isFullscreen ? 'text-white' : ''}`}>
+                <VideoCameraOutlined
+                  className={isFullscreen ? 'text-blue-400' : 'text-blue-600'}
+                />
+                <span
+                  className={`font-medium ${isFullscreen ? 'text-white' : ''}`}
+                >
                   {camera.name}
                 </span>
-                <span className={`text-sm ${isFullscreen ? 'text-gray-400' : 'text-gray-500'}`}>
+                <span
+                  className={`text-sm ${isFullscreen ? 'text-gray-400' : 'text-gray-500'}`}
+                >
                   #{camera.camera_id}
                 </span>
                 <Tag color={camera.camera_type === 'rtsp' ? 'blue' : 'green'}>
@@ -235,8 +266,12 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
                 Stop
               </Button>
             </div>
-            
-            <div style={{ height: isFullscreen ? 'calc((100vh - 180px) / 2)' : '250px' }}>
+
+            <div
+              style={{
+                height: isFullscreen ? 'calc((100vh - 180px) / 2)' : '250px',
+              }}
+            >
               <WebRTCCameraStream
                 siteId={siteId}
                 cameraId={camera.camera_id}
@@ -251,10 +286,14 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
         ))}
 
         {camerasToDisplay.length === 0 && (
-          <div className={`col-span-full text-center py-8 ${isFullscreen ? 'text-gray-400' : 'text-gray-500'}`}>
+          <div
+            className={`col-span-full text-center py-8 ${isFullscreen ? 'text-gray-400' : 'text-gray-500'}`}
+          >
             <VideoCameraOutlined className="text-4xl mb-4" />
             <div className="text-lg">No Active Streams</div>
-            <div className="text-sm">Start camera streams from the main table to view them here</div>
+            <div className="text-sm">
+              Start camera streams from the main table to view them here
+            </div>
           </div>
         )}
       </div>
@@ -262,10 +301,13 @@ export const MultiCameraStreamView: React.FC<MultiCameraStreamViewProps> = ({
       {/* Layout Info */}
       {isFullscreen && gridLayout !== 'auto' && (
         <div className="text-center text-gray-400 text-sm">
-          <div>Press ESC to exit fullscreen • Layout: {gridLayout.toUpperCase()}</div>
+          <div>
+            Press ESC to exit fullscreen • Layout: {gridLayout.toUpperCase()}
+          </div>
           {camerasToDisplay.length < activeCameras.length && (
             <div className="mt-1">
-              Displaying {camerasToDisplay.length} of {activeCameras.length} active cameras
+              Displaying {camerasToDisplay.length} of {activeCameras.length}{' '}
+              active cameras
             </div>
           )}
         </div>

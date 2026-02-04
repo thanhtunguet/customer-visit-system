@@ -8,14 +8,14 @@ import {
   Alert,
   Button,
   Space,
-  Typography
+  Typography,
 } from 'antd';
 import {
   UserOutlined,
   PictureOutlined,
   EditOutlined,
   PhoneOutlined,
-  MailOutlined
+  MailOutlined,
 } from '@ant-design/icons';
 import { Customer } from '../types/api';
 import { apiClient } from '../services/api';
@@ -56,11 +56,13 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   visible,
   customerId,
   onClose,
-  onEdit
+  onEdit,
 }) => {
   const [loading, setLoading] = useState(false);
   const [customerData, setCustomerData] = useState<Customer | null>(null);
-  const [galleryStats, setGalleryStats] = useState<CustomerGalleryStats | null>(null);
+  const [galleryStats, setGalleryStats] = useState<CustomerGalleryStats | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('details');
 
@@ -73,7 +75,10 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
       const data = await apiClient.getCustomer(customerId);
       setCustomerData(data);
     } catch (err: unknown) {
-      setError((err as ApiError)?.response?.data?.detail || 'Failed to load customer details');
+      setError(
+        (err as ApiError)?.response?.data?.detail ||
+          'Failed to load customer details'
+      );
       setCustomerData(null);
     } finally {
       setLoading(false);
@@ -84,7 +89,9 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
     if (!customerId) return;
 
     try {
-      const stats = await apiClient.get<CustomerGalleryStats>(`/customers/${customerId}/face-gallery-stats`);
+      const stats = await apiClient.get<CustomerGalleryStats>(
+        `/customers/${customerId}/face-gallery-stats`
+      );
       setGalleryStats(stats);
     } catch (err: unknown) {
       console.warn('Failed to load gallery stats:', err);
@@ -122,8 +129,13 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
     if (!gender || gender === 'unknown') {
       return <Tag>Unknown</Tag>;
     }
-    const color = gender === 'male' ? 'blue' : gender === 'female' ? 'pink' : 'gray';
-    return <Tag color={color}>{gender.charAt(0).toUpperCase() + gender.slice(1)}</Tag>;
+    const color =
+      gender === 'male' ? 'blue' : gender === 'female' ? 'pink' : 'gray';
+    return (
+      <Tag color={color}>
+        {gender.charAt(0).toUpperCase() + gender.slice(1)}
+      </Tag>
+    );
   };
 
   const tabItems = [
@@ -142,10 +154,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               {customerData.name || `Customer #${customerData.customer_id}`}
             </Title>
             {onEdit && (
-              <Button
-                icon={<EditOutlined />}
-                onClick={handleEdit}
-              >
+              <Button icon={<EditOutlined />} onClick={handleEdit}>
                 Edit Customer
               </Button>
             )}
@@ -155,7 +164,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
             <Descriptions.Item label="Customer ID">
               <span className="font-mono">#{customerData.customer_id}</span>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Name">
               {customerData.name ? (
                 <span className="font-medium">{customerData.name}</span>
@@ -163,17 +172,17 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                 <span className="text-gray-400 italic">No name provided</span>
               )}
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Gender">
               {renderGenderTag(customerData.gender)}
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Age Range">
               {customerData.estimated_age_range || (
                 <span className="text-gray-400">Unknown</span>
               )}
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Contact">
               <Space direction="vertical" size="small">
                 {customerData.phone && (
@@ -197,28 +206,34 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                 )}
               </Space>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Visit Statistics">
               <Space direction="vertical" size="small">
                 <div>
                   <Text strong>Total Visits:</Text> {customerData.visit_count}
                 </div>
                 <div>
-                  <Text strong>First Seen:</Text> {' '}
-                  {dayjs(customerData.first_seen).format('MMMM D, YYYY [at] h:mm A')}
+                  <Text strong>First Seen:</Text>{' '}
+                  {dayjs(customerData.first_seen).format(
+                    'MMMM D, YYYY [at] h:mm A'
+                  )}
                 </div>
                 {customerData.last_seen && (
                   <div>
-                    <Text strong>Last Seen:</Text> {' '}
-                    {dayjs(customerData.last_seen).format('MMMM D, YYYY [at] h:mm A')}
+                    <Text strong>Last Seen:</Text>{' '}
+                    {dayjs(customerData.last_seen).format(
+                      'MMMM D, YYYY [at] h:mm A'
+                    )}
                   </div>
                 )}
               </Space>
             </Descriptions.Item>
-            
+
             <Descriptions.Item label="Recognition Status">
               {galleryStats && galleryStats.total_images > 0 ? (
-                <Tag color="green">Enrolled ({galleryStats.total_images} faces)</Tag>
+                <Tag color="green">
+                  Enrolled ({galleryStats.total_images} faces)
+                </Tag>
               ) : (
                 <Tag color="orange">Limited Recognition Data</Tag>
               )}
@@ -228,18 +243,23 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               <Descriptions.Item label="Face Gallery Stats">
                 <Space direction="vertical" size="small">
                   <div>
-                    <Text strong>Images:</Text> {galleryStats.total_images} / {galleryStats.gallery_limit}
+                    <Text strong>Images:</Text> {galleryStats.total_images} /{' '}
+                    {galleryStats.gallery_limit}
                   </div>
                   <div>
-                    <Text strong>Avg Confidence:</Text> {(galleryStats.avg_confidence * 100).toFixed(1)}%
+                    <Text strong>Avg Confidence:</Text>{' '}
+                    {(galleryStats.avg_confidence * 100).toFixed(1)}%
                   </div>
                   <div>
-                    <Text strong>Best Match:</Text> {(galleryStats.max_confidence * 100).toFixed(1)}%
+                    <Text strong>Best Match:</Text>{' '}
+                    {(galleryStats.max_confidence * 100).toFixed(1)}%
                   </div>
                   {galleryStats.first_image_date && (
                     <div>
-                      <Text strong>First Image:</Text> {' '}
-                      {dayjs(galleryStats.first_image_date).format('MMM D, YYYY')}
+                      <Text strong>First Image:</Text>{' '}
+                      {dayjs(galleryStats.first_image_date).format(
+                        'MMM D, YYYY'
+                      )}
                     </div>
                   )}
                 </Space>
@@ -256,7 +276,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
             />
           )}
         </div>
-      )
+      ),
     },
     {
       key: 'faces',
@@ -272,14 +292,14 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           customerName={customerData.name}
           onImagesChange={handleGalleryChange}
         />
-      )
-    }
+      ),
+    },
   ];
 
   return (
     <Modal
       title={
-        customerData 
+        customerData
           ? `Customer Details - ${customerData.name || `#${customerData.customer_id}`}`
           : 'Customer Details'
       }

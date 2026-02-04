@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout as AntLayout, Menu, Avatar, Dropdown, Button, Typography, Space, Select, App } from 'antd';
-import { 
-  DashboardOutlined, 
-  TeamOutlined, 
-  ShopOutlined, 
+import {
+  Layout as AntLayout,
+  Menu,
+  Avatar,
+  Dropdown,
+  Button,
+  Typography,
+  Space,
+  Select,
+  App,
+} from 'antd';
+import {
+  DashboardOutlined,
+  TeamOutlined,
+  ShopOutlined,
   CameraOutlined,
   UserOutlined,
   BarChartOutlined,
@@ -12,7 +22,6 @@ import {
   UsergroupAddOutlined,
   KeyOutlined,
   CloudServerOutlined,
-  
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
@@ -31,7 +40,8 @@ export const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('__global__');
+  const [selectedTenantId, setSelectedTenantId] =
+    useState<string>('__global__');
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
 
   const loadCurrentUser = useCallback(async () => {
@@ -67,8 +77,6 @@ export const AppLayout: React.FC = () => {
     }
   }, [user, loadTenants]);
 
-
-
   const handleTenantChange = async (tenantId: string | undefined) => {
     try {
       // Only system admins can switch views
@@ -78,17 +86,20 @@ export const AppLayout: React.FC = () => {
       }
 
       // Convert '__global__' or undefined to null for API
-      const actualTenantId = (tenantId === '__global__' || tenantId === undefined) ? null : tenantId;
+      const actualTenantId =
+        tenantId === '__global__' || tenantId === undefined ? null : tenantId;
 
       // Use the switchView API to get new token
       await apiClient.switchView(actualTenantId);
       // Convert back to '__global__' for state (to match Select component expectation)
       setSelectedTenantId(actualTenantId ?? '__global__');
-      
+
       if (actualTenantId) {
-        const tenant = tenants.find(t => t.tenant_id === actualTenantId);
-        message.success(`Switched to tenant: ${tenant?.name || actualTenantId}`);
-        
+        const tenant = tenants.find((t) => t.tenant_id === actualTenantId);
+        message.success(
+          `Switched to tenant: ${tenant?.name || actualTenantId}`
+        );
+
         // If user is on a global page, redirect to tenant dashboard
         const currentPath = location.pathname;
         if (currentPath === '/tenants' || currentPath === '/users') {
@@ -97,16 +108,25 @@ export const AppLayout: React.FC = () => {
         }
       } else {
         message.success('Switched to global view (all tenants)');
-        
+
         // If user is on a tenant-specific page, redirect to global page
         const currentPath = location.pathname;
-        const tenantSpecificPaths = ['/dashboard', '/sites', '/cameras', '/workers', '/staff', '/customers', '/visits', '/reports'];
+        const tenantSpecificPaths = [
+          '/dashboard',
+          '/sites',
+          '/cameras',
+          '/workers',
+          '/staff',
+          '/customers',
+          '/visits',
+          '/reports',
+        ];
         if (tenantSpecificPaths.includes(currentPath)) {
           navigate('/tenants');
           return;
         }
       }
-      
+
       // Refresh current page data for context switch
       window.location.reload();
     } catch (error) {
@@ -184,7 +204,7 @@ export const AppLayout: React.FC = () => {
   // Filter menu items based on user role and tenant context
   const getFilteredMenuItems = () => {
     if (!user) return [];
-    
+
     if (user.role === UserRole.SYSTEM_ADMIN) {
       // System admin menu depends on tenant selection
       if (selectedTenantId !== '__global__') {
@@ -199,12 +219,12 @@ export const AppLayout: React.FC = () => {
       return tenantSpecificMenuItems;
     } else if (user.role === UserRole.SITE_MANAGER) {
       // Site manager can only see site-specific features, no tenant/sites management
-      return tenantSpecificMenuItems.filter(item => 
-        !['/sites', '/tenants'].includes(item.key as string)
+      return tenantSpecificMenuItems.filter(
+        (item) => !['/sites', '/tenants'].includes(item.key as string)
       );
     } else {
       // Worker role - very limited access
-      return tenantSpecificMenuItems.filter(item => 
+      return tenantSpecificMenuItems.filter((item) =>
         ['/dashboard', '/visits'].includes(item.key as string)
       );
     }
@@ -217,17 +237,26 @@ export const AppLayout: React.FC = () => {
       label: `${user?.sub || 'User'} (${user?.role})`,
       disabled: true,
     },
-    ...(user?.role === UserRole.SYSTEM_ADMIN && selectedTenantId !== '__global__' ? [{
-      key: 'tenant-context',
-      icon: <ShopOutlined />,
-      label: `Context: ${tenants.find(t => t.tenant_id === selectedTenantId)?.name || selectedTenantId}`,
-      disabled: true,
-    }] : user?.role === UserRole.SYSTEM_ADMIN ? [{
-      key: 'tenant-context',
-      icon: <ShopOutlined />,
-      label: 'Context: Global View',
-      disabled: true,
-    }] : []),
+    ...(user?.role === UserRole.SYSTEM_ADMIN &&
+    selectedTenantId !== '__global__'
+      ? [
+          {
+            key: 'tenant-context',
+            icon: <ShopOutlined />,
+            label: `Context: ${tenants.find((t) => t.tenant_id === selectedTenantId)?.name || selectedTenantId}`,
+            disabled: true,
+          },
+        ]
+      : user?.role === UserRole.SYSTEM_ADMIN
+        ? [
+            {
+              key: 'tenant-context',
+              icon: <ShopOutlined />,
+              label: 'Context: Global View',
+              disabled: true,
+            },
+          ]
+        : []),
     {
       type: 'divider' as const,
     },
@@ -266,16 +295,19 @@ export const AppLayout: React.FC = () => {
       >
         <div className="p-4">
           <div className="text-center">
-            <h1 className={`font-bold text-blue-600 transition-all ${
-              collapsed ? 'text-sm' : 'text-lg'
-            }`}>
+            <h1
+              className={`font-bold text-blue-600 transition-all ${
+                collapsed ? 'text-sm' : 'text-lg'
+              }`}
+            >
               {collapsed ? 'CV' : 'Customer Visits'}
             </h1>
             {!collapsed && user?.role === UserRole.SYSTEM_ADMIN && (
               <div className="text-xs text-gray-500 mt-1">
                 {selectedTenantId !== '__global__' ? (
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                    {tenants.find(t => t.tenant_id === selectedTenantId)?.name || 'Tenant View'}
+                    {tenants.find((t) => t.tenant_id === selectedTenantId)
+                      ?.name || 'Tenant View'}
                   </span>
                 ) : (
                   <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded">
@@ -286,7 +318,7 @@ export const AppLayout: React.FC = () => {
             )}
           </div>
         </div>
-        
+
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
@@ -295,7 +327,7 @@ export const AppLayout: React.FC = () => {
           className="border-r-0"
         />
       </Sider>
-      
+
       <AntLayout>
         <Header className="bg-white shadow-sm px-4 flex items-center justify-between">
           <Space>
@@ -306,12 +338,18 @@ export const AppLayout: React.FC = () => {
             >
               {collapsed ? '→' : '←'}
             </Button>
-            
+
             {user?.role === UserRole.SYSTEM_ADMIN && (
               <Space>
-                <Text strong className="text-gray-700">Tenant:</Text>
+                <Text strong className="text-gray-700">
+                  Tenant:
+                </Text>
                 <Select
-                  value={selectedTenantId === '__global__' ? undefined : selectedTenantId}
+                  value={
+                    selectedTenantId === '__global__'
+                      ? undefined
+                      : selectedTenantId
+                  }
                   onChange={handleTenantChange}
                   onClear={() => handleTenantChange('__global__')}
                   placeholder="Select tenant"
@@ -320,16 +358,16 @@ export const AppLayout: React.FC = () => {
                   allowClear
                   options={[
                     { value: '__global__', label: 'All Tenants (Global View)' },
-                    ...tenants.map(tenant => ({
+                    ...tenants.map((tenant) => ({
                       value: tenant.tenant_id,
                       label: `${tenant.name} (${tenant.tenant_id})`,
-                    }))
+                    })),
                   ]}
                 />
               </Space>
             )}
           </Space>
-          
+
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
             <Button type="text" className="flex items-center">
               <Avatar size="small" icon={<UserOutlined />} className="mr-2" />
@@ -337,12 +375,12 @@ export const AppLayout: React.FC = () => {
             </Button>
           </Dropdown>
         </Header>
-        
+
         <Content className="p-6 bg-gray-50">
           <Outlet />
         </Content>
       </AntLayout>
-      
+
       <ChangePasswordModal
         open={changePasswordModalOpen}
         onClose={() => setChangePasswordModalOpen(false)}

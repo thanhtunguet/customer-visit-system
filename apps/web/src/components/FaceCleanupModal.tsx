@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Typography, Button, Slider, Alert, Space, Statistic, Row, Col, message, Spin } from 'antd';
+import {
+  Modal,
+  Typography,
+  Button,
+  Slider,
+  Alert,
+  Space,
+  Statistic,
+  Row,
+  Col,
+  message,
+  Spin,
+} from 'antd';
 import { DeleteOutlined, ClearOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Customer } from '../types/api';
@@ -37,7 +49,7 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
   visible,
   customer,
   onClose,
-  onCleanupComplete
+  onCleanupComplete,
 }) => {
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -50,23 +62,28 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
 
     try {
       setLoading(true);
-      const result = await apiClient.getCustomerFaceImages(customer.customer_id);
+      const result = await apiClient.getCustomerFaceImages(
+        customer.customer_id
+      );
 
       // Calculate stats from face images
       const images = result.images;
       if (images.length > 0) {
-        const confidenceScores = images.map(img => img.confidence_score);
-        const qualityScores = images.map(img => img.quality_score);
+        const confidenceScores = images.map((img) => img.confidence_score);
+        const qualityScores = images.map((img) => img.quality_score);
 
         const statsData: CustomerStats = {
           customer_id: customer.customer_id,
           total_images: images.length,
-          avg_confidence: confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length,
+          avg_confidence:
+            confidenceScores.reduce((a, b) => a + b, 0) /
+            confidenceScores.length,
           max_confidence: Math.max(...confidenceScores),
           min_confidence: Math.min(...confidenceScores),
-          avg_quality: qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length,
+          avg_quality:
+            qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length,
           first_image_date: images[images.length - 1]?.created_at,
-          latest_image_date: images[0]?.created_at
+          latest_image_date: images[0]?.created_at,
         };
 
         setStats(statsData);
@@ -90,16 +107,24 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
 
     try {
       setCleaning(true);
-      const result = await apiClient.cleanupLowConfidenceFaces(customer.customer_id, {
-        min_confidence: confidenceThreshold,
-        max_to_remove: maxToRemove
-      });
-      
-      message.success(`Successfully removed ${result.removed_count} low-confidence face detections`);
+      const result = await apiClient.cleanupLowConfidenceFaces(
+        customer.customer_id,
+        {
+          min_confidence: confidenceThreshold,
+          max_to_remove: maxToRemove,
+        }
+      );
+
+      message.success(
+        `Successfully removed ${result.removed_count} low-confidence face detections`
+      );
       onCleanupComplete();
       onClose();
     } catch (error: unknown) {
-      message.error((error as ApiError)?.response?.data?.detail || 'Failed to cleanup face detections');
+      message.error(
+        (error as ApiError)?.response?.data?.detail ||
+          'Failed to cleanup face detections'
+      );
       console.error('Error cleaning up faces:', error);
     } finally {
       setCleaning(false);
@@ -148,8 +173,15 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
           message="Face Detection Cleanup"
           description={
             <div>
-              <p><strong>Customer:</strong> {customer.name || `Customer ${customer.customer_id}`}</p>
-              <p>Remove low-confidence face detections to improve data quality. This will delete both the detection records and associated images.</p>
+              <p>
+                <strong>Customer:</strong>{' '}
+                {customer.name || `Customer ${customer.customer_id}`}
+              </p>
+              <p>
+                Remove low-confidence face detections to improve data quality.
+                This will delete both the detection records and associated
+                images.
+              </p>
             </div>
           }
           type="info"
@@ -167,26 +199,36 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
               <Title level={4}>Current Face Gallery Statistics</Title>
               <Row gutter={16}>
                 <Col span={8}>
-                  <Statistic 
-                    title="Total Images" 
+                  <Statistic
+                    title="Total Images"
                     value={stats.total_images}
                     valueStyle={{ color: '#1890ff' }}
                   />
                 </Col>
                 <Col span={8}>
-                  <Statistic 
-                    title="Avg Confidence" 
+                  <Statistic
+                    title="Avg Confidence"
                     value={Math.round(stats.avg_confidence * 100)}
                     suffix="%"
-                    valueStyle={{ color: stats.avg_confidence >= 0.8 ? '#52c41a' : stats.avg_confidence >= 0.6 ? '#faad14' : '#ff4d4f' }}
+                    valueStyle={{
+                      color:
+                        stats.avg_confidence >= 0.8
+                          ? '#52c41a'
+                          : stats.avg_confidence >= 0.6
+                            ? '#faad14'
+                            : '#ff4d4f',
+                    }}
                   />
                 </Col>
                 <Col span={8}>
-                  <Statistic 
-                    title="Min Confidence" 
+                  <Statistic
+                    title="Min Confidence"
                     value={Math.round(stats.min_confidence * 100)}
                     suffix="%"
-                    valueStyle={{ color: stats.min_confidence >= 0.7 ? '#52c41a' : '#ff4d4f' }}
+                    valueStyle={{
+                      color:
+                        stats.min_confidence >= 0.7 ? '#52c41a' : '#ff4d4f',
+                    }}
                   />
                 </Col>
               </Row>
@@ -196,7 +238,10 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
               <Title level={5}>Cleanup Parameters</Title>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <div>
-                  <Text strong>Confidence Threshold: {Math.round(confidenceThreshold * 100)}%</Text>
+                  <Text strong>
+                    Confidence Threshold:{' '}
+                    {Math.round(confidenceThreshold * 100)}%
+                  </Text>
                   <Slider
                     min={0.3}
                     max={0.9}
@@ -207,9 +252,12 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
                       0.3: '30%',
                       0.5: '50%',
                       0.7: '70%',
-                      0.9: '90%'
+                      0.9: '90%',
                     }}
-                    tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
+                    tooltip={{
+                      formatter: (value) =>
+                        `${Math.round((value || 0) * 100)}%`,
+                    }}
                   />
                   <Text type="secondary">
                     Remove face detections with confidence below this threshold
@@ -228,7 +276,7 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
                       1: '1',
                       10: '10',
                       25: '25',
-                      50: '50'
+                      50: '50',
                     }}
                   />
                   <Text type="secondary">
@@ -242,8 +290,17 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
               message="Estimated Impact"
               description={
                 <div>
-                  <p><strong>Approximately {estimateDeletions()} detections</strong> will be removed based on current parameters.</p>
-                  <p><strong>This action cannot be undone!</strong> Removed detections and their associated images will be permanently deleted.</p>
+                  <p>
+                    <strong>
+                      Approximately {estimateDeletions()} detections
+                    </strong>{' '}
+                    will be removed based on current parameters.
+                  </p>
+                  <p>
+                    <strong>This action cannot be undone!</strong> Removed
+                    detections and their associated images will be permanently
+                    deleted.
+                  </p>
                 </div>
               }
               type="warning"

@@ -37,19 +37,21 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     confirm_password: string;
   }) => {
     setLoading(true);
-    
+
     try {
       await apiClient.changeMyPassword({
         current_password: values.current_password,
         new_password: values.new_password,
       });
-      
+
       message.success('Password changed successfully');
       form.resetFields();
       onClose();
     } catch (error: unknown) {
-      const errorMessage = (error as ApiError)?.response?.data?.detail || 'Failed to change password';
-      
+      const errorMessage =
+        (error as ApiError)?.response?.data?.detail ||
+        'Failed to change password';
+
       // Handle specific validation errors
       if (errorMessage.includes('Current password is incorrect')) {
         form.setFields([
@@ -130,7 +132,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             { min: 8, message: 'Password must be at least 8 characters long' },
             {
               pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])/,
-              message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+              message:
+                'Password must contain at least one uppercase letter, one lowercase letter, and one number',
             },
           ]}
         >
@@ -166,14 +169,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
         <Form.Item className="mb-0 mt-6">
           <div className="flex gap-2 justify-end">
-            <Button onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={loading}
-            >
+            <Button onClick={handleCancel}>Cancel</Button>
+            <Button type="primary" htmlType="submit" loading={loading}>
               Change Password
             </Button>
           </div>
