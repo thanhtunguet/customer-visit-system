@@ -461,7 +461,7 @@ class ApiClient {
       created_at: string;
       visit_id?: string;
       face_bbox?: number[];
-      detection_metadata?: Record<string, any>;
+      detection_metadata?: Record<string, unknown>;
     }>;
   }> {
     const response = await this.client.get(`/customers/${customerId}/face-images`);
@@ -773,7 +773,7 @@ class ApiClient {
       ip_address?: string;
       worker_name: string;
       worker_version?: string;
-      capabilities?: Record<string, any>;
+      capabilities?: Record<string, unknown>;
       status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
       site_id?: number;
       camera_id?: number;
@@ -801,7 +801,7 @@ class ApiClient {
     ip_address?: string;
     worker_name: string;
     worker_version?: string;
-    capabilities?: Record<string, any>;
+    capabilities?: Record<string, unknown>;
     status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
     site_id?: number;
     camera_id?: number;
@@ -1016,7 +1016,7 @@ class ApiClient {
     completed_at?: string;
     progress: number;
     message: string;
-    result?: any;
+    result?: Record<string, unknown>;
     error?: string;
   }> {
     const response = await this.client.get(`/jobs/${jobId}`);
@@ -1037,7 +1037,7 @@ class ApiClient {
       completed_at?: string;
       progress: number;
       message: string;
-      result?: any;
+      result?: Record<string, unknown>;
       error?: string;
     }>;
     total: number;
@@ -1052,22 +1052,22 @@ class ApiClient {
   }
 
   // Generic HTTP methods for flexibility
-  async get<T = any>(url: string, params?: any): Promise<T> {
+  async get<T = unknown>(url: string, params?: Record<string, unknown>): Promise<T> {
     const response = await this.client.get(url, { params });
     return response.data;
   }
 
-  async post<T = any>(url: string, data?: any): Promise<T> {
+  async post<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
     const response = await this.client.post(url, data);
     return response.data;
   }
 
-  async put<T = any>(url: string, data?: any): Promise<T> {
+  async put<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
     const response = await this.client.put(url, data);
     return response.data;
   }
 
-  async delete<T = any>(url: string): Promise<T> {
+  async delete<T = unknown>(url: string): Promise<T> {
     const response = await this.client.delete(url);
     return response.data;
   }

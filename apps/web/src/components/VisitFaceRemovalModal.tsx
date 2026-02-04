@@ -53,7 +53,7 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
         .sort((a, b) => (a.confidence_score || 0) - (b.confidence_score || 0)) as VisitWithFace[];
       
       setVisits(visitsWithFaces);
-    } catch (error: any) {
+    } catch (error) {
       message.error('Failed to load customer visits');
       console.error('Error loading visits:', error);
     } finally {
@@ -88,7 +88,7 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
       } else {
         message.error('Failed to remove any face detections');
       }
-    } catch (error: any) {
+    } catch (error) {
       message.error('Failed to remove face detections');
       console.error('Error removing visits:', error);
     } finally {

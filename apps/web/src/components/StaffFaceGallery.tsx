@@ -151,7 +151,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
 
   // Convert image path to full URL
   const getImageUrl = (imagePath: string) => {
-    const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
+    const baseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:8080';
     const token = localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/files/${imagePath}`);
     if (token) {
@@ -176,8 +176,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       await apiClient.uploadStaffFaceImage(staffId, base64, isPrimary);
       message.success('Face image uploaded successfully');
       onImagesChange();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to upload image');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to upload image');
     } finally {
       setUploading(false);
     }
@@ -286,9 +287,10 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                 await apiClient.uploadStaffFaceImage(staffId, img.data, isPrimary);
                 successCount++;
                 uploaded = true;
-              } catch (error: any) {
-                const isTimeoutError = error.code === 'ECONNABORTED' || error.message.includes('timeout');
-                const isServerError = error.response?.status >= 500;
+              } catch (error) {
+                const axiosError = error as { code?: string; message?: string; response?: { status?: number; data?: { detail?: string } } };
+                const isTimeoutError = axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout');
+                const isServerError = (axiosError.response?.status ?? 0) >= 500;
                 
                 console.warn(`Upload attempt ${attempt + 1} failed for ${img.name}:`, error);
                 
@@ -327,8 +329,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       }
       
       onImagesChange();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to upload images');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to upload images');
     } finally {
       setUploading(false);
       setUploadProgress(null);
@@ -463,8 +466,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       message.success('Photo captured and uploaded successfully');
       onImagesChange();
       closeCameraModal();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to capture photo');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to capture photo');
     } finally {
       setCapturingPhoto(false);
     }
@@ -476,8 +480,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       await apiClient.deleteStaffFaceImage(staffId, imageId);
       message.success('Face image deleted successfully');
       onImagesChange();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to delete image');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to delete image');
     }
   };
 
@@ -488,8 +493,9 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       const result = await apiClient.recalculateFaceEmbedding(staffId, imageId);
       message.success(`${result.message} (Confidence: ${(result.processing_info.confidence * 100).toFixed(1)}%)`);
       onImagesChange();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to recalculate embedding');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to recalculate embedding');
     } finally {
       setRecalculatingId(null);
     }
@@ -517,9 +523,10 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
           
           // Show progress for each successful recalculation
           message.info(`Recalculated ${image.image_id.slice(0, 8)}... (${successCount}/${faceImages.length})`);
-        } catch (error: any) {
+        } catch (error) {
+          const axiosError = error as { response?: { data?: { detail?: string } } };
           failureCount++;
-          const errorMsg = error.response?.data?.detail || 'Failed to recalculate';
+          const errorMsg = axiosError.response?.data?.detail || 'Failed to recalculate';
           errors.push(`${image.image_id.slice(0, 8)}: ${errorMsg}`);
         }
 
@@ -545,7 +552,8 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       // Refresh the image list
       onImagesChange();
       
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Failed to recalculate face images:', error);
       message.error('Failed to recalculate face images');
     } finally {
       setRecalculatingAll(false);

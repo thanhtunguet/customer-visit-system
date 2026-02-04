@@ -2,7 +2,7 @@
 # Multi-stage Dockerfile for API service
 
 # Build stage
-FROM python:3.14-slim AS builder
+FROM python:3.11-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -10,6 +10,14 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     libpq-dev \
+    zlib1g-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up Python environment
@@ -22,12 +30,20 @@ COPY apps/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Production stage
-FROM python:3.14-slim AS production
+FROM python:3.11-slim AS production
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     libpq5 \
     curl \
+    zlib1g \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libtiff6 \
+    libfreetype6 \
+    liblcms2-2 \
+    libwebp7 \
+    libopenjp2-7 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

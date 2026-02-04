@@ -99,10 +99,11 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
         setLogs([]);
       }
       setTimeout(scrollToBottom, 100); // Allow DOM to update
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error loading logs:', err);
-      console.error('Error response:', err.response);
-      const errorMsg = err.response?.data?.detail || 'Failed to load logs';
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      console.error('Error response:', axiosError.response);
+      const errorMsg = axiosError.response?.data?.detail || 'Failed to load logs';
       setError(errorMsg);
       notification.error({
         message: 'Log Loading Failed',
@@ -152,7 +153,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
         }
       });
       
-      eventSource.addEventListener('error', (event: any) => {
+      eventSource.addEventListener('error', (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
           setError(data.message || 'Stream error occurred');
@@ -171,7 +172,8 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
       
       eventSourceRef.current = eventSource;
       
-    } catch (err: any) {
+    } catch (err) {
+      console.error('Failed to start log stream:', err);
       setError('Failed to start log stream');
       notification.error({
         message: 'Stream Failed',
@@ -197,10 +199,11 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
         message: 'Test Logs Generated',
         description: 'Test log entries have been generated'
       });
-    } catch (err: any) {
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
       notification.error({
         message: 'Test Failed',
-        description: err.response?.data?.detail || 'Failed to generate test logs'
+        description: axiosError.response?.data?.detail || 'Failed to generate test logs'
       });
     }
   };

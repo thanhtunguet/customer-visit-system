@@ -12,6 +12,14 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     libgl1 \
     libglu1-mesa \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavfilter-dev \
     gcc \
     g++ \
     curl \
@@ -42,4 +50,3 @@ ENV DETECTOR_TYPE=mock
 ENV EMBEDDER_TYPE=mock
 
 CMD ["python", "-m", "app.main"]
-

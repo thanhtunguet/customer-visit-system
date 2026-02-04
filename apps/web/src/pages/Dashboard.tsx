@@ -43,9 +43,16 @@ export const Dashboard: React.FC = () => {
     totalStaff: 0,
     activeSites: 0,
   });
-  // const [chartData, setChartData] = useState<any[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
-  const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
+  const [visitorTrends, setVisitorTrends] = useState<{
+    date: string;
+    fullDate: string;
+    totalVisits: number;
+    customerVisits: number;
+    staffVisits: number;
+    uniqueVisitors: number;
+    repeatVisitors: number;
+  }[]>([]);
   // const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,8 +133,9 @@ export const Dashboard: React.FC = () => {
         database: healthCheck.status === 'ok' ? 'online' : 'error' // API health implies DB health
       });
 
-    } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard data');
+    } catch (err) {
+      const error = err as Error;
+      setError(error.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }

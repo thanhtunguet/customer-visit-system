@@ -81,21 +81,54 @@ export const Reports: React.FC = () => {
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week' | 'month'>('day');
   
   // Real data states
-  // const [realVisitorReport, setRealVisitorReport] = useState<any[]>([]);
   const [realStats, setRealStats] = useState({
     totalVisits: 0,
     totalCustomers: 0,
     totalStaff: 0,
     avgDailyVisits: 0
   });
-  const [realDemographics, setRealDemographics] = useState<any>(null);
+  const [realDemographics, setRealDemographics] = useState<{
+    visitorType?: { type: string; count: number }[];
+    gender?: { gender: string; count: number }[];
+    ageGroup?: { age_group: string; count: number }[];
+  } | null>(null);
   
   // Real data states - no seed data fallbacks
-  const [visitorTrends, setVisitorTrends] = useState<any[]>([]);
-  const [hourlyData, setHourlyData] = useState<any[]>([]);
-  const [dayOfWeekData, setDayOfWeekData] = useState<any[]>([]);
-  const [siteData, setSiteData] = useState<any[]>([]);
-  const [peakHours, setPeakHours] = useState<any[]>([]);
+  const [visitorTrends, setVisitorTrends] = useState<{
+    date: string;
+    fullDate: string;
+    totalVisits: number;
+    customerVisits: number;
+    staffVisits: number;
+    uniqueVisitors: number;
+    repeatVisitors: number;
+  }[]>([]);
+  const [hourlyData, setHourlyData] = useState<{
+    hour: number;
+    label: string;
+    visits: number;
+    density: number;
+  }[]>([]);
+  const [dayOfWeekData, setDayOfWeekData] = useState<{
+    day: string;
+    totalVisits: number;
+    customers: number;
+    staff: number;
+  }[]>([]);
+  const [siteData, setSiteData] = useState<{
+    site: string;
+    visits: number;
+    avgDuration: number;
+    satisfactionScore: number;
+    conversionRate: number;
+  }[]>([]);
+  const [peakHours, setPeakHours] = useState<{
+    hour: number;
+    label: string;
+    timeRange: string;
+    visits: number;
+    percentage: number;
+  }[]>([]);
 
   // Use only real demographics data
   const demographics = realDemographics || { 
@@ -119,7 +152,7 @@ export const Reports: React.FC = () => {
       setLoading(true);
 
       // Prepare API parameters
-      const params: any = {
+      const params: Record<string, string | undefined> = {
         granularity,
         start_date: dateRange[0] ? dayjs(dateRange[0]).toISOString() : undefined,
         end_date: dateRange[1] ? dayjs(dateRange[1]).toISOString() : undefined,

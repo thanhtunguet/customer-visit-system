@@ -36,8 +36,9 @@ export const Sites: React.FC = () => {
       setError(null);
       const sitesData = await apiClient.getSites();
       setSites(sitesData);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load sites');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load sites');
     } finally {
       setLoading(false);
     }
@@ -54,8 +55,9 @@ export const Sites: React.FC = () => {
       setEditingSite(null);
       form.resetFields();
       await loadSites();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save site');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to save site');
     }
   };
 
@@ -72,8 +74,9 @@ export const Sites: React.FC = () => {
     try {
       await apiClient.deleteSite(site.site_id);
       await loadSites();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete site');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to delete site');
     }
   };
 

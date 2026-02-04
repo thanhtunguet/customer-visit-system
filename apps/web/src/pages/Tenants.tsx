@@ -7,7 +7,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, ShopOutlined
 } from '@ant-design/icons';
 import { ColumnsType } from 'antd/es/table';
-import { Tenant, TenantCreate } from '../types/api';
+import { AuthUser, Tenant, TenantCreate } from '../types/api';
 import { apiClient } from '../services/api';
 import { useTenants } from '../contexts/TenantContext';
 
@@ -22,7 +22,7 @@ export const TenantsPage: React.FC = () => {
 
   // Check if current user is system admin
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     checkUserRole();
@@ -82,8 +82,9 @@ export const TenantsPage: React.FC = () => {
       setEditingTenant(null);
       form.resetFields();
       refreshTenants();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to save tenant');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to save tenant');
     }
   };
 
@@ -92,8 +93,9 @@ export const TenantsPage: React.FC = () => {
       await apiClient.deleteTenant(tenantId);
       message.success('Tenant deleted successfully');
       refreshTenants();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to delete tenant');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to delete tenant');
     }
   };
 
@@ -115,8 +117,9 @@ export const TenantsPage: React.FC = () => {
           await apiClient.toggleTenantStatus(tenantId, newStatus);
           message.success(`Tenant ${action}d successfully`);
           refreshTenants();
-        } catch (error: any) {
-          message.error(error.response?.data?.detail || `Failed to ${action} tenant`);
+        } catch (error) {
+          const axiosError = error as { response?: { data?: { detail?: string } } };
+          message.error(axiosError.response?.data?.detail || `Failed to ${action} tenant`);
         }
       }
     });

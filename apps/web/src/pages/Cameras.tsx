@@ -72,7 +72,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
           // Update stream and processing statuses from initial response
           const processingStatuses: Record<string, boolean> = {};
           if (streamingData.cameras && Array.isArray(streamingData.cameras)) {
-            streamingData.cameras.forEach((cameraInfo: any) => {
+            streamingData.cameras.forEach((cameraInfo: { camera_id: string; stream_active?: boolean; processing_active?: boolean }) => {
               statuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
               processingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
             });
@@ -108,7 +108,7 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
                 const newStatuses: Record<string, boolean> = {};
                 const newProcessingStatuses: Record<string, boolean> = {};
                 if (data.data.cameras && Array.isArray(data.data.cameras)) {
-                  data.data.cameras.forEach((cameraInfo: any) => {
+                  data.data.cameras.forEach((cameraInfo: { camera_id: string; stream_active?: boolean; processing_active?: boolean }) => {
                     newStatuses[cameraInfo.camera_id] = cameraInfo.stream_active || false;
                     newProcessingStatuses[cameraInfo.camera_id] = cameraInfo.processing_active || false;
                   });
@@ -176,8 +176,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       if (sitesData.length > 0) {
         setSelectedSite(sitesData[0].site_id);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load sites');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load sites');
     } finally {
       setLoading(false);
     }
@@ -189,8 +190,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       setError(null);
       const camerasData = await apiClient.getCameras(siteId);
       setCameras(camerasData);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load cameras');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load cameras');
     } finally {
       setLoading(false);
     }
@@ -207,8 +209,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       setEditingCamera(null);
       form.resetFields();
       await loadCameras(selectedSite);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save camera');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to save camera');
     }
   };
 
@@ -227,8 +230,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
     try {
       await apiClient.deleteCamera(selectedSite, camera.camera_id);
       await loadCameras(selectedSite);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete camera');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to delete camera');
     }
   };
 
@@ -261,8 +265,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       await apiClient.stopCameraStream(selectedSite, camera.camera_id);
       setStreamStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
       message.success(`Stopped stream for ${camera.name}`);
-    } catch (err: any) {
-      message.error(`Failed to stop stream: ${err.response?.data?.detail || err.message}`);
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
+      message.error(`Failed to stop stream: ${axiosError.response?.data?.detail || axiosError.message}`);
     }
   };
 
@@ -271,8 +276,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       await apiClient.startCameraProcessing(selectedSite!, camera.camera_id);
       setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: true }));
       message.success(`Started face recognition processing for ${camera.name}`);
-    } catch (err: any) {
-      message.error(`Failed to start processing: ${err.response?.data?.detail || err.message}`);
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
+      message.error(`Failed to start processing: ${axiosError.response?.data?.detail || axiosError.message}`);
     }
   };
 
@@ -281,8 +287,9 @@ const [processingStatuses, setProcessingStatuses] = useState<Record<string, bool
       await apiClient.stopCameraProcessing(selectedSite!, camera.camera_id);
       setProcessingStatuses(prev => ({ ...prev, [camera.camera_id]: false }));
       message.success(`Stopped face recognition processing for ${camera.name}`);
-    } catch (err: any) {
-      message.error(`Failed to stop processing: ${err.response?.data?.detail || err.message}`);
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } }; message?: string };
+      message.error(`Failed to stop processing: ${axiosError.response?.data?.detail || axiosError.message}`);
     }
   };
 

@@ -52,8 +52,9 @@ export const Customers: React.FC = () => {
       setError(null);
       const customersData = await apiClient.getCustomers({ limit: 1000 });
       setCustomers(customersData);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load customers');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load customers');
     } finally {
       setLoading(false);
     }
@@ -70,8 +71,9 @@ export const Customers: React.FC = () => {
       setEditingCustomer(null);
       form.resetFields();
       await loadCustomers();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save customer');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to save customer');
     }
   };
 
@@ -90,8 +92,9 @@ export const Customers: React.FC = () => {
     try {
       await apiClient.deleteCustomer(customer.customer_id);
       await loadCustomers();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete customer');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to delete customer');
     }
   };
 
@@ -127,8 +130,9 @@ export const Customers: React.FC = () => {
           await apiClient.mergeCustomers(similarSourceId, targetId);
           setSimilarVisible(false);
           await loadCustomers();
-        } catch (err: any) {
-          setError(err.response?.data?.detail || 'Failed to merge customers');
+        } catch (err) {
+          const axiosError = err as { response?: { data?: { detail?: string } } };
+          setError(axiosError.response?.data?.detail || 'Failed to merge customers');
         }
       }
     });
@@ -166,8 +170,9 @@ export const Customers: React.FC = () => {
           await apiClient.bulkDeleteCustomers(selectedRowKeys);
           setSelectedRowKeys([]);
           await loadCustomers();
-        } catch (err: any) {
-          setError(err.response?.data?.detail || 'Failed to delete selected customers');
+        } catch (err) {
+          const axiosError = err as { response?: { data?: { detail?: string } } };
+          setError(axiosError.response?.data?.detail || 'Failed to delete selected customers');
         } finally {
           setBulkDeleteLoading(false);
         }
@@ -207,8 +212,9 @@ export const Customers: React.FC = () => {
         await loadCustomers();
       }, 5000);
       
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to start bulk merge');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to start bulk merge');
     } finally {
       setBulkMergeLoading(false);
     }
@@ -233,9 +239,10 @@ export const Customers: React.FC = () => {
       } else {
         setError(`No face images found to backfill for customer ${customer.name || customer.customer_id}`);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Backfill failed:', err);
-      setError(err.response?.data?.detail || `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`);
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || `Failed to backfill avatar for customer ${customer.name || customer.customer_id}`);
     } finally {
       setBackfillLoading(prev => {
         const newSet = new Set(prev);

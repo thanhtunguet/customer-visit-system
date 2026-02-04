@@ -80,8 +80,9 @@ export const Users: React.FC = () => {
       setCreateModalVisible(false);
       createForm.resetFields();
       loadUsers();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to create user');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to create user');
     }
   };
 
@@ -95,8 +96,9 @@ export const Users: React.FC = () => {
       editForm.resetFields();
       setSelectedUser(null);
       loadUsers();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to update user');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to update user');
     }
   };
 
@@ -109,8 +111,9 @@ export const Users: React.FC = () => {
       setPasswordModalVisible(false);
       passwordForm.resetFields();
       setSelectedUser(null);
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to change password');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to change password');
     }
   };
 
@@ -119,8 +122,9 @@ export const Users: React.FC = () => {
       await apiClient.toggleUserStatus(user.user_id);
       message.success(`User ${user.is_active ? 'disabled' : 'enabled'} successfully`);
       loadUsers();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to toggle user status');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to toggle user status');
     }
   };
 
@@ -129,8 +133,9 @@ export const Users: React.FC = () => {
       await apiClient.deleteUser(user.user_id);
       message.success('User deleted successfully');
       loadUsers();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to delete user');
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string } } };
+      message.error(axiosError.response?.data?.detail || 'Failed to delete user');
     }
   };
 

@@ -56,8 +56,9 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
       setError(null);
       const data = await apiClient.getStaffWithFaces(staffId);
       setStaffData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load staff details');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load staff details');
       setStaffData(null);
     } finally {
       setLoading(false);

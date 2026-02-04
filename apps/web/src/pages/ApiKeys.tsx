@@ -67,9 +67,10 @@ const ApiKeys: React.FC = () => {
       
       const data = await apiClient.getApiKeys();
       setApiKeys(data);
-    } catch (error: any) {
-      console.error('API Keys load error:', error.response?.data || error.message);
-      if (error.response?.status === 400) {
+    } catch (error) {
+      const axiosError = error as { response?: { data?: { detail?: string }; status?: number }; message?: string };
+      console.error('API Keys load error:', axiosError.response?.data || axiosError.message);
+      if (axiosError.response?.status === 400) {
         message.error('Please switch to a tenant view to manage API keys');
       } else {
         message.error('Failed to load API keys: ' + (error.response?.data?.detail || error.message));
@@ -95,9 +96,10 @@ const ApiKeys: React.FC = () => {
       createForm.resetFields();
       message.success('API key created successfully!');
       loadApiKeys();
-    } catch (error: any) {
+    } catch (error) {
       console.error('API key creation error:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Unknown error';
+      const axiosError = error as { response?: { data?: { detail?: string } }; message?: string };
+      const errorMessage = axiosError.response?.data?.detail || axiosError.message || 'Unknown error';
       message.error('Failed to create API key: ' + errorMessage);
     }
   };
@@ -112,8 +114,9 @@ const ApiKeys: React.FC = () => {
       editForm.resetFields();
       message.success('API key updated successfully!');
       loadApiKeys();
-    } catch (error: any) {
-      message.error('Failed to update API key: ' + error.message);
+    } catch (error) {
+      const err = error as Error;
+      message.error('Failed to update API key: ' + err.message);
     }
   };
 
@@ -122,8 +125,9 @@ const ApiKeys: React.FC = () => {
       await apiClient.deleteApiKey(keyId);
       message.success('API key deleted successfully!');
       loadApiKeys();
-    } catch (error: any) {
-      message.error('Failed to delete API key: ' + error.message);
+    } catch (error) {
+      const err = error as Error;
+      message.error('Failed to delete API key: ' + err.message);
     }
   };
 

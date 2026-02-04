@@ -45,8 +45,9 @@ export const StaffPage: React.FC = () => {
       ]);
       setStaff(staffData);
       setSites(sitesData);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load data');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -63,8 +64,9 @@ export const StaffPage: React.FC = () => {
       setEditingStaff(null);
       form.resetFields();
       await loadData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save staff member');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to save staff member');
     }
   };
 
@@ -94,8 +96,9 @@ export const StaffPage: React.FC = () => {
     try {
       await apiClient.deleteStaff(staffMember.staff_id);
       await loadData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete staff member');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { detail?: string } } };
+      setError(axiosError.response?.data?.detail || 'Failed to delete staff member');
     }
   };
 
