@@ -1,27 +1,45 @@
-from fastapi.testclient import TestClient
+import json
+from unittest.mock import patch
 
-from apps.api.app.main import app
+import pytest
+from httpx import AsyncClient
+
+from apps.api.app.core.security import mint_jwt
+from apps.api.app.services.face_service import face_service
 
 
-def test_ingest_face():
-    client = TestClient(app)
-    # Get token
-    tok = client.post(
-        "/v1/auth/token",
-        json={"grant_type": "api_key", "api_key": "dev-api-key", "tenant_id": "t1"},
-    ).json()["access_token"]
+@pytest.mark.asyncio
+async def test_ingest_face(async_client: AsyncClient):
+    tok = mint_jwt(sub="worker", role="worker", tenant_id="t1")
     evt = {
         "tenant_id": "t1",
-        "site_id": "s1",
-        "camera_id": "c1",
+        "site_id": 1,
+        "camera_id": 1,
         "timestamp": "2024-01-01T00:00:00Z",
         "embedding": [0.0] * 512,
         "bbox": [0, 0, 10, 10],
+        "confidence": 0.9,
         "is_staff_local": False,
     }
-    r = client.post(
-        "/v1/events/face", json=evt, headers={"Authorization": f"Bearer {tok}"}
-    )
+
+    mock_result = {
+        "match": "unknown",
+        "person_id": None,
+        "similarity": 0.0,
+        "visit_id": None,
+        "person_type": "customer",
+    }
+
+    with patch.object(
+        face_service, "process_face_event_with_image", return_value=mock_result
+    ):
+        r = await async_client.post(
+            "/v1/events/face",
+            data={"event_data": json.dumps(evt)},
+            files={"face_image": ("face.jpg", b"fake", "image/jpeg")},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+
     assert r.status_code == 200
     body = r.json()
-    assert body["tenant_id"] == "t1"
+    assert body["match"] == "unknown"

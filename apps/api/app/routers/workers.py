@@ -11,9 +11,8 @@ from fastapi import (APIRouter, Depends, HTTPException, Request, WebSocket,
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
-from ..core.database import get_db, get_db_session
+from ..core.database import get_db_session
 from ..core.security import get_current_user
 from ..models.database import Camera, Worker
 from ..services.worker_shutdown_service import (ShutdownSignal,
@@ -205,8 +204,8 @@ async def broadcast_worker_status_update(worker: Worker, tenant_id: str):
         logger.error(f"Error broadcasting worker status update: {e}")
 
 
-def assign_camera_to_worker(
-    db: Session, tenant_id: str, site_id: int, worker_id: str
+async def assign_camera_to_worker(
+    db: AsyncSession, tenant_id: str, site_id: int, worker_id: str
 ) -> Optional[Camera]:
     """
     Assign an available camera to a worker. Enforces one-camera-per-worker constraint.
@@ -222,26 +221,24 @@ def assign_camera_to_worker(
     """
 
     # Find all cameras in the site for this tenant
-    available_cameras = (
-        db.query(Camera)
-        .filter(
+    result = await db.execute(
+        select(Camera).where(
             and_(
                 Camera.tenant_id == tenant_id,
                 Camera.site_id == site_id,
                 Camera.is_active,
             )
         )
-        .all()
     )
+    available_cameras = result.scalars().all()
 
     if not available_cameras:
         return None
 
     # Find cameras that are not currently assigned to any active worker
     assigned_camera_ids = set()
-    active_workers = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.tenant_id == tenant_id,
                 Worker.site_id == site_id,
@@ -251,8 +248,8 @@ def assign_camera_to_worker(
                 ),  # Consider these as active
             )
         )
-        .all()
     )
+    active_workers = result.scalars().all()
 
     for worker in active_workers:
         if (
@@ -269,7 +266,7 @@ def assign_camera_to_worker(
     return None
 
 
-def release_worker_camera(db: Session, worker_id: str):
+async def release_worker_camera(db: AsyncSession, worker_id: str):
     """
     Release camera assignment from a worker (e.g., when worker goes offline)
 
@@ -277,11 +274,14 @@ def release_worker_camera(db: Session, worker_id: str):
         db: Database session
         worker_id: Worker ID to release camera from
     """
-    worker = db.query(Worker).filter(Worker.worker_id == worker_id).first()
+    result = await db.execute(
+        select(Worker).where(Worker.worker_id == worker_id)
+    )
+    worker = result.scalar_one_or_none()
     if worker:
         worker.camera_id = None
         worker.status = "offline"
-        db.commit()
+        await db.commit()
 
 
 def get_client_ip(request: Request) -> str:
@@ -327,7 +327,7 @@ def calculate_uptime_minutes(worker: Worker) -> Optional[int]:
 async def register_worker(
     request: Request,
     registration: WorkerRegistrationRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Register a new worker and automatically assign an available camera from the specified site"""
@@ -348,20 +348,19 @@ async def register_worker(
     client_ip = get_client_ip(request)
 
     # Check if worker with same hostname already exists for this tenant
-    existing_worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.tenant_id == current_user.tenant_id,
                 Worker.hostname == registration.hostname,
             )
         )
-        .first()
     )
+    existing_worker = result.scalar_one_or_none()
 
     if existing_worker:
         # For existing worker, reassign camera if needed
-        assigned_camera = assign_camera_to_worker(
+        assigned_camera = await assign_camera_to_worker(
             db, current_user.tenant_id, registration.site_id, existing_worker.worker_id
         )
 
@@ -383,8 +382,8 @@ async def register_worker(
         existing_worker.registration_time = datetime.utcnow()
         existing_worker.updated_at = datetime.utcnow()
 
-        db.commit()
-        db.refresh(existing_worker)
+        await db.commit()
+        await db.refresh(existing_worker)
 
         # Trigger WebSocket update for existing worker
         await broadcast_worker_status_update(existing_worker, current_user.tenant_id)
@@ -424,18 +423,18 @@ async def register_worker(
     )
 
     db.add(new_worker)
-    db.flush()  # Get the worker_id without committing
+    await db.flush()  # Get the worker_id without committing
 
     # Assign an available camera to this worker
-    assigned_camera = assign_camera_to_worker(
+    assigned_camera = await assign_camera_to_worker(
         db, current_user.tenant_id, registration.site_id, new_worker.worker_id
     )
 
     if assigned_camera:
         new_worker.camera_id = assigned_camera.camera_id
 
-    db.commit()
-    db.refresh(new_worker)
+    await db.commit()
+    await db.refresh(new_worker)
 
     # Trigger WebSocket update for new worker
     await broadcast_worker_status_update(new_worker, current_user.tenant_id)
@@ -584,7 +583,7 @@ async def send_heartbeat(
 @router.post("/workers/{worker_id}/request-camera")
 async def request_camera_assignment(
     worker_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Request camera assignment for a worker"""
@@ -597,16 +596,15 @@ async def request_camera_assignment(
         )
 
     # Find worker
-    worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.worker_id == worker_id,
                 Worker.tenant_id == current_user.tenant_id,
             )
         )
-        .first()
     )
+    worker = result.scalar_one_or_none()
 
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -617,7 +615,7 @@ async def request_camera_assignment(
         )
 
     # Try to assign a camera
-    assigned_camera = assign_camera_to_worker(
+    assigned_camera = await assign_camera_to_worker(
         db, current_user.tenant_id, worker.site_id, worker_id
     )
 
@@ -625,8 +623,8 @@ async def request_camera_assignment(
         worker.camera_id = assigned_camera.camera_id
         worker.status = "idle"
         worker.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(worker)
+        await db.commit()
+        await db.refresh(worker)
 
         # Broadcast worker update
         await broadcast_worker_status_update(worker, current_user.tenant_id)
@@ -650,7 +648,7 @@ async def list_workers(
     status: Optional[str] = None,
     site_id: Optional[int] = None,
     include_offline: bool = True,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """List all workers with their status"""
@@ -658,18 +656,19 @@ async def list_workers(
     current_user = UserInfo(**current_user_dict)
 
     # Build query
-    query = db.query(Worker).filter(Worker.tenant_id == current_user.tenant_id)
+    query = select(Worker).where(Worker.tenant_id == current_user.tenant_id)
 
     if status:
-        query = query.filter(Worker.status == status)
+        query = query.where(Worker.status == status)
 
     if site_id:
-        query = query.filter(Worker.site_id == site_id)
+        query = query.where(Worker.site_id == site_id)
 
     if not include_offline:
-        query = query.filter(Worker.status != "offline")
+        query = query.where(Worker.status != "offline")
 
-    workers = query.order_by(Worker.last_heartbeat.desc().nullslast()).all()
+    result = await db.execute(query.order_by(Worker.last_heartbeat.desc().nullslast()))
+    workers = result.scalars().all()
 
     # Build response data
     worker_responses = []
@@ -726,23 +725,22 @@ async def list_workers(
 @router.get("/workers/{worker_id}", response_model=WorkerStatusResponse)
 async def get_worker_status(
     worker_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Get specific worker status"""
 
     current_user = UserInfo(**current_user_dict)
 
-    worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.worker_id == worker_id,
                 Worker.tenant_id == current_user.tenant_id,
             )
         )
-        .first()
     )
+    worker = result.scalar_one_or_none()
 
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -780,7 +778,7 @@ async def get_worker_status(
 async def deregister_worker(
     worker_id: str,
     force: bool = False,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Deregister a worker with graceful shutdown"""
@@ -793,16 +791,15 @@ async def deregister_worker(
             status_code=403, detail="Only admins or workers can deregister workers"
         )
 
-    worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.worker_id == worker_id,
                 Worker.tenant_id == current_user.tenant_id,
             )
         )
-        .first()
     )
+    worker = result.scalar_one_or_none()
 
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -845,7 +842,7 @@ async def deregister_worker(
     await broadcast_worker_status_update(worker, current_user.tenant_id)
 
     db.delete(worker)
-    db.commit()
+    await db.commit()
 
     # Broadcast list refresh to update frontend
     await connection_manager.broadcast_worker_list_update(current_user.tenant_id)
@@ -860,7 +857,7 @@ async def deregister_worker(
 @router.post("/workers/cleanup-stale")
 async def cleanup_stale_workers(
     minutes_threshold: int = 5,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Cleanup workers that haven't sent heartbeat for specified minutes"""
@@ -876,17 +873,16 @@ async def cleanup_stale_workers(
     threshold_time = datetime.utcnow() - timedelta(minutes=minutes_threshold)
 
     # Update workers to offline status if they haven't sent heartbeat
-    stale_workers = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.tenant_id == current_user.tenant_id,
                 Worker.status.in_(["idle", "processing", "online"]),
                 Worker.last_heartbeat < threshold_time,
             )
         )
-        .all()
     )
+    stale_workers = result.scalars().all()
 
     updated_count = 0
     for worker in stale_workers:
@@ -895,7 +891,7 @@ async def cleanup_stale_workers(
         worker.updated_at = datetime.utcnow()
         updated_count += 1
 
-    db.commit()
+    await db.commit()
 
     return {
         "message": f"Updated {updated_count} stale workers to offline status",
@@ -941,7 +937,7 @@ async def force_worker_cleanup(
 async def shutdown_worker(
     worker_id: str,
     shutdown_request: WorkerShutdownRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Request worker to shutdown gracefully"""
@@ -953,16 +949,15 @@ async def shutdown_worker(
         raise HTTPException(status_code=403, detail="Only admins can shutdown workers")
 
     # Validate worker exists and belongs to tenant
-    worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.worker_id == worker_id,
                 Worker.tenant_id == current_user.tenant_id,
             )
         )
-        .first()
     )
+    worker = result.scalar_one_or_none()
 
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -1005,7 +1000,7 @@ class WorkerStopSignalRequest(BaseModel):
 async def receive_worker_stop_signal(
     worker_id: str,
     stop_signal: WorkerStopSignalRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """
@@ -1029,16 +1024,15 @@ async def receive_worker_stop_signal(
         )
 
     # Find worker
-    worker = (
-        db.query(Worker)
-        .filter(
+    result = await db.execute(
+        select(Worker).where(
             and_(
                 Worker.worker_id == worker_id,
                 Worker.tenant_id == current_user.tenant_id,
             )
         )
-        .first()
     )
+    worker = result.scalar_one_or_none()
 
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -1085,8 +1079,8 @@ async def receive_worker_stop_signal(
         logger.error(f"❌ Error removing worker from registry: {e}")
 
     # 4. Update database
-    db.commit()
-    db.refresh(worker)
+    await db.commit()
+    await db.refresh(worker)
 
     # 5. Broadcast worker status update to frontend
     try:

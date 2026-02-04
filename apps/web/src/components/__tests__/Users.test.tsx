@@ -205,18 +205,14 @@ describe('Users Component', () => {
       fireEvent.click(screen.getByText('Create User'));
     });
 
-    // Check that all role options are available
-    await waitFor(() => {
-      const roleSelect = screen.getByText('Select user role');
-      fireEvent.click(roleSelect);
-    });
+    // Open role dropdown and check all role options are available
+    const roleSelect = screen.getByText('Select user role');
+    fireEvent.mouseDown(roleSelect);
 
-    await waitFor(() => {
-      expect(screen.getByText('System Admin')).toBeInTheDocument();
-      expect(screen.getByText('Tenant Admin')).toBeInTheDocument();
-      expect(screen.getByText('Site Manager')).toBeInTheDocument();
-      expect(screen.getByText('Worker')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('System Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Tenant Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Site Manager')).toBeInTheDocument();
+    expect(await screen.findByText('Worker')).toBeInTheDocument();
   });
 
   it('shows last login correctly', async () => {

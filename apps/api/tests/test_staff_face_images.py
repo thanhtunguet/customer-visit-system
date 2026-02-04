@@ -13,7 +13,10 @@ from apps.api.app.services.face_processing_service import \
 
 @pytest.mark.asyncio
 async def test_upload_staff_face_image_success(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test successful staff face image upload."""
     # Mock face processing service
@@ -34,7 +37,7 @@ async def test_upload_staff_face_image_success(
         return_value=processing_result,
     ):
         with patch("app.main.milvus_client.insert_embedding") as mock_milvus:
-            response = await async_client.post(
+            response = await async_client_mock_db.post(
                 f"/v1/staff/{test_staff_data['staff_id']}/faces",
                 json={
                     "image_data": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBw==",
@@ -58,7 +61,7 @@ async def test_upload_staff_face_image_success(
 
 @pytest.mark.asyncio
 async def test_upload_staff_face_image_no_face_detected(
-    async_client: AsyncClient, test_token: str, test_staff_data
+    async_client_mock_db: AsyncClient, test_token: str, test_staff_data
 ):
     """Test face image upload when no face is detected."""
     processing_result = {
@@ -72,7 +75,7 @@ async def test_upload_staff_face_image_no_face_detected(
         "process_staff_face_image",
         return_value=processing_result,
     ):
-        response = await async_client.post(
+        response = await async_client_mock_db.post(
             f"/v1/staff/{test_staff_data['staff_id']}/faces",
             json={
                 "image_data": "data:image/jpeg;base64,invalid_image_data",
@@ -87,7 +90,10 @@ async def test_upload_staff_face_image_no_face_detected(
 
 @pytest.mark.asyncio
 async def test_get_staff_face_images(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test retrieving staff face images."""
     # Mock face images in database
@@ -118,7 +124,7 @@ async def test_get_staff_face_images(
         face_images
     )
 
-    response = await async_client.get(
+    response = await async_client_mock_db.get(
         f"/v1/staff/{test_staff_data['staff_id']}/faces",
         headers={"Authorization": f"Bearer {test_token}"},
     )
@@ -136,7 +142,10 @@ async def test_get_staff_face_images(
 
 @pytest.mark.asyncio
 async def test_get_staff_with_faces(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test retrieving staff details with face images."""
     # Mock staff member
@@ -168,7 +177,7 @@ async def test_get_staff_with_faces(
         face_images
     )
 
-    response = await async_client.get(
+    response = await async_client_mock_db.get(
         f"/v1/staff/{test_staff_data['staff_id']}/details",
         headers={"Authorization": f"Bearer {test_token}"},
     )
@@ -184,7 +193,10 @@ async def test_get_staff_with_faces(
 
 @pytest.mark.asyncio
 async def test_delete_staff_face_image(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test deleting a staff face image."""
     # Mock face image
@@ -202,7 +214,7 @@ async def test_delete_staff_face_image(
         with patch(
             "app.main.milvus_client.delete_embedding_by_metadata"
         ) as mock_milvus:
-            response = await async_client.delete(
+            response = await async_client_mock_db.delete(
                 f"/v1/staff/{test_staff_data['staff_id']}/faces/img-1",
                 headers={"Authorization": f"Bearer {test_token}"},
             )
@@ -218,7 +230,10 @@ async def test_delete_staff_face_image(
 
 @pytest.mark.asyncio
 async def test_recalculate_face_embedding(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test recalculating face landmarks and embedding."""
     # Mock face image
@@ -252,7 +267,7 @@ async def test_recalculate_face_embedding(
         ):
             with patch("app.main.milvus_client.delete_embedding_by_metadata"):
                 with patch("app.main.milvus_client.insert_embedding"):
-                    response = await async_client.put(
+                    response = await async_client_mock_db.put(
                         f"/v1/staff/{test_staff_data['staff_id']}/faces/img-1/recalculate",
                         headers={"Authorization": f"Bearer {test_token}"},
                     )
@@ -265,7 +280,10 @@ async def test_recalculate_face_embedding(
 
 @pytest.mark.asyncio
 async def test_face_recognition_test(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test face recognition testing functionality."""
     # Mock staff member
@@ -340,7 +358,7 @@ async def test_face_recognition_test(
     with patch.object(
         face_processing_service, "test_face_recognition", return_value=test_result
     ):
-        response = await async_client.post(
+        response = await async_client_mock_db.post(
             f"/v1/staff/{test_staff_data['staff_id']}/test-recognition",
             json={
                 "test_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBw=="
@@ -360,7 +378,10 @@ async def test_face_recognition_test(
 
 @pytest.mark.asyncio
 async def test_face_recognition_test_no_face_detected(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test face recognition test when no face is detected in test image."""
     staff = Staff(
@@ -379,7 +400,7 @@ async def test_face_recognition_test_no_face_detected(
     with patch.object(
         face_processing_service, "test_face_recognition", return_value=test_result
     ):
-        response = await async_client.post(
+        response = await async_client_mock_db.post(
             f"/v1/staff/{test_staff_data['staff_id']}/test-recognition",
             json={"test_image": "data:image/jpeg;base64,invalid_image_data"},
             headers={"Authorization": f"Bearer {test_token}"},
@@ -391,12 +412,15 @@ async def test_face_recognition_test_no_face_detected(
 
 @pytest.mark.asyncio
 async def test_staff_face_image_not_found(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test accessing non-existent face image."""
     mock_db_session.execute.return_value.scalar_one_or_none.return_value = None
 
-    response = await async_client.delete(
+    response = await async_client_mock_db.delete(
         f"/v1/staff/{test_staff_data['staff_id']}/faces/non-existent",
         headers={"Authorization": f"Bearer {test_token}"},
     )
@@ -407,7 +431,10 @@ async def test_staff_face_image_not_found(
 
 @pytest.mark.asyncio
 async def test_set_primary_image_updates_others(
-    async_client: AsyncClient, test_token: str, mock_db_session, test_staff_data
+    async_client_mock_db: AsyncClient,
+    test_token: str,
+    mock_db_session,
+    test_staff_data,
 ):
     """Test that setting an image as primary updates other primary images."""
     processing_result = {
@@ -426,7 +453,7 @@ async def test_set_primary_image_updates_others(
         return_value=processing_result,
     ):
         with patch("app.main.milvus_client.insert_embedding"):
-            response = await async_client.post(
+            response = await async_client_mock_db.post(
                 f"/v1/staff/{test_staff_data['staff_id']}/faces",
                 json={
                     "image_data": "data:image/jpeg;base64,valid_image_data",

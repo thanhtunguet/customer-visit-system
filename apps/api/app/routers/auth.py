@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
-from ..core.database import get_db, get_db_session
+from ..core.database import get_db_session
 from ..core.security import (get_current_active_user, get_tenant_context,
                              mint_jwt, require_system_admin)
 from ..models.database import ApiKey, User, UserRole
@@ -40,7 +40,7 @@ def _get_effective_tenant_id(user: User, tenant_context: Optional[str]) -> str:
 
 
 @router.post("/auth/token", response_model=TokenResponse)
-async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
+async def issue_token(payload: TokenRequest, db: AsyncSession = Depends(get_db_session)):
     if payload.grant_type == "api_key":
         # API key authentication for workers
         if not payload.api_key:
@@ -50,15 +50,14 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
         hashed_key = hashlib.sha256(payload.api_key.encode()).hexdigest()
 
         # Look up API key in database
-        api_key_record = (
-            db.query(ApiKey)
-            .filter(
+        result = await db.execute(
+            select(ApiKey).where(
                 ApiKey.hashed_key == hashed_key,
                 ApiKey.tenant_id == payload.tenant_id,
                 ApiKey.is_active,
             )
-            .first()
         )
+        api_key_record = result.scalar_one_or_none()
 
         if not api_key_record:
             raise HTTPException(status_code=401, detail="Invalid API key")
@@ -69,7 +68,7 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
 
         # Update last_used timestamp
         api_key_record.last_used = datetime.utcnow()
-        db.commit()
+        await db.commit()
 
         token = mint_jwt(
             sub="worker", role=api_key_record.role, tenant_id=api_key_record.tenant_id
@@ -82,7 +81,10 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Missing credentials")
 
         # Real user authentication
-        user = db.query(User).filter(User.username == payload.username).first()
+        result = await db.execute(
+            select(User).where(User.username == payload.username)
+        )
+        user = result.scalar_one_or_none()
         if not user or not user.verify_password(payload.password):
             raise HTTPException(status_code=401, detail="Invalid username or password")
 
@@ -91,7 +93,7 @@ async def issue_token(payload: TokenRequest, db: Session = Depends(get_db)):
 
         # Update last login
         user.last_login = datetime.utcnow()
-        db.commit()
+        await db.commit()
 
         # For system admins, allow optional tenant_id (global vs tenant view)
         # For tenant users, use their assigned tenant_id
@@ -155,7 +157,7 @@ async def change_my_password(
     # Set new password
     user.set_password(password_data.new_password)
     user.updated_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
 
     return {"message": "Password changed successfully"}
 
@@ -167,20 +169,21 @@ async def change_my_password(
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
     skip: int = 0,
     limit: int = 100,
 ):
     """List all users (system admin only)"""
-    users = db.query(User).offset(skip).limit(limit).all()
+    result = await db.execute(select(User).offset(skip).limit(limit))
+    users = result.scalars().all()
     return users
 
 
 @router.post("/users", response_model=UserResponse)
 async def create_user(
     user_data: UserCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Create a new user (system admin only)"""
@@ -207,11 +210,12 @@ async def create_user(
         )
 
     # Check if username or email already exists
-    existing_user = (
-        db.query(User)
-        .filter((User.username == user_data.username) | (User.email == user_data.email))
-        .first()
+    result = await db.execute(
+        select(User).where(
+            (User.username == user_data.username) | (User.email == user_data.email)
+        )
     )
+    existing_user = result.scalar_one_or_none()
 
     if existing_user:
         raise HTTPException(status_code=400, detail="Username or email already exists")
@@ -231,8 +235,8 @@ async def create_user(
     user.set_password(user_data.password)
 
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
@@ -240,11 +244,12 @@ async def create_user(
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Get user by ID (system admin only)"""
-    user = db.query(User).filter(User.user_id == user_id).first()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -255,11 +260,12 @@ async def get_user(
 async def update_user(
     user_id: str,
     user_data: UserUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Update user (system admin only)"""
-    user = db.query(User).filter(User.user_id == user_id).first()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -294,12 +300,16 @@ async def update_user(
 
     # Check for unique constraints if username or email is being changed
     if user_data.username and user_data.username != user.username:
-        existing = db.query(User).filter(User.username == user_data.username).first()
+        result = await db.execute(
+            select(User).where(User.username == user_data.username)
+        )
+        existing = result.scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=400, detail="Username already exists")
 
     if user_data.email and user_data.email != user.email:
-        existing = db.query(User).filter(User.email == user_data.email).first()
+        result = await db.execute(select(User).where(User.email == user_data.email))
+        existing = result.scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=400, detail="Email already exists")
 
@@ -308,8 +318,8 @@ async def update_user(
         setattr(user, field, value)
 
     user.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
@@ -318,17 +328,18 @@ async def update_user(
 async def change_user_password(
     user_id: str,
     password_data: UserPasswordUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Change user password (system admin only)"""
-    user = db.query(User).filter(User.user_id == user_id).first()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # System admin can change any password without current password
     user.set_password(password_data.new_password)
-    db.commit()
+    await db.commit()
 
     return {"message": "Password changed successfully"}
 
@@ -336,11 +347,12 @@ async def change_user_password(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Delete user (system admin only)"""
-    user = db.query(User).filter(User.user_id == user_id).first()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -349,7 +361,7 @@ async def delete_user(
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
     db.delete(user)
-    db.commit()
+    await db.commit()
 
     return {"message": "User deleted successfully"}
 
@@ -357,11 +369,12 @@ async def delete_user(
 @router.put("/users/{user_id}/toggle-status")
 async def toggle_user_status(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     admin: User = Depends(require_system_admin),
 ):
     """Toggle user active status (system admin only)"""
-    user = db.query(User).filter(User.user_id == user_id).first()
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -371,8 +384,8 @@ async def toggle_user_status(
 
     user.is_active = not user.is_active
     user.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
@@ -384,7 +397,7 @@ async def toggle_user_status(
 
 @router.get("/api-keys", response_model=List[ApiKeyResponse])
 async def list_api_keys(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user),
     tenant_context: Optional[str] = Depends(get_tenant_context),
     skip: int = 0,
@@ -393,13 +406,13 @@ async def list_api_keys(
     """List API keys for current user's tenant"""
     tenant_id = _get_effective_tenant_id(user, tenant_context)
 
-    api_keys = (
-        db.query(ApiKey)
-        .filter(ApiKey.tenant_id == tenant_id)
+    result = await db.execute(
+        select(ApiKey)
+        .where(ApiKey.tenant_id == tenant_id)
         .offset(skip)
         .limit(limit)
-        .all()
     )
+    api_keys = result.scalars().all()
 
     return api_keys
 
@@ -407,7 +420,7 @@ async def list_api_keys(
 @router.post("/api-keys", response_model=ApiKeyCreateResponse)
 async def create_api_key(
     api_key_data: ApiKeyCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user),
     tenant_context: Optional[str] = Depends(get_tenant_context),
 ):
@@ -434,8 +447,8 @@ async def create_api_key(
     )
 
     db.add(api_key)
-    db.commit()
-    db.refresh(api_key)
+    await db.commit()
+    await db.refresh(api_key)
 
     # Return response with plain text key (only time it's shown)
     return ApiKeyCreateResponse(
@@ -453,18 +466,19 @@ async def create_api_key(
 @router.get("/api-keys/{key_id}", response_model=ApiKeyResponse)
 async def get_api_key(
     key_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user),
     tenant_context: Optional[str] = Depends(get_tenant_context),
 ):
     """Get API key by ID"""
     tenant_id = _get_effective_tenant_id(user, tenant_context)
 
-    api_key = (
-        db.query(ApiKey)
-        .filter(ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id)
-        .first()
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id
+        )
     )
+    api_key = result.scalar_one_or_none()
 
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -476,7 +490,7 @@ async def get_api_key(
 async def update_api_key(
     key_id: str,
     api_key_data: ApiKeyUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user),
     tenant_context: Optional[str] = Depends(get_tenant_context),
 ):
@@ -489,11 +503,12 @@ async def update_api_key(
 
     tenant_id = _get_effective_tenant_id(user, tenant_context)
 
-    api_key = (
-        db.query(ApiKey)
-        .filter(ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id)
-        .first()
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id
+        )
     )
+    api_key = result.scalar_one_or_none()
 
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -502,8 +517,8 @@ async def update_api_key(
     for field, value in api_key_data.dict(exclude_unset=True).items():
         setattr(api_key, field, value)
 
-    db.commit()
-    db.refresh(api_key)
+    await db.commit()
+    await db.refresh(api_key)
 
     return api_key
 
@@ -511,7 +526,7 @@ async def update_api_key(
 @router.delete("/api-keys/{key_id}")
 async def delete_api_key(
     key_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_active_user),
     tenant_context: Optional[str] = Depends(get_tenant_context),
 ):
@@ -524,16 +539,17 @@ async def delete_api_key(
 
     tenant_id = _get_effective_tenant_id(user, tenant_context)
 
-    api_key = (
-        db.query(ApiKey)
-        .filter(ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id)
-        .first()
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.key_id == key_id, ApiKey.tenant_id == tenant_id
+        )
     )
+    api_key = result.scalar_one_or_none()
 
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
 
     db.delete(api_key)
-    db.commit()
+    await db.commit()
 
     return {"message": "API key deleted successfully"}

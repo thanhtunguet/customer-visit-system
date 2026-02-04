@@ -34,7 +34,19 @@ export const TenantsPage = () => {
   const [currentUser, setCurrentUser] = useState(null);
   useEffect(() => {
     if (isSystemAdmin) {
-      loadTenants();
+      loadTenants().catch((error) => {
+        var _a, _b;
+        const fallbackMessage =
+          (error == null ? void 0 : error.message) || 'Failed to load tenants';
+        message.error(
+          ((_b =
+            (_a = error == null ? void 0 : error.response) == null
+              ? void 0
+              : _a.data) == null
+            ? void 0
+            : _b.detail) || fallbackMessage
+        );
+      });
     }
   }, [isSystemAdmin, loadTenants]);
   const checkUserRole = useCallback(async () => {

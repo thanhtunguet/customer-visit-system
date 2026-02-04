@@ -7,9 +7,8 @@ from common.enums.commands import CommandPriority, WorkerCommand
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
-from ..core.database import get_db, get_db_session
+from ..core.database import get_db_session
 from ..core.security import get_current_user, get_current_user_for_stream
 from ..services.camera_delegation_service import camera_delegation_service
 from ..services.worker_command_service import worker_command_service
@@ -343,7 +342,7 @@ async def cleanup_stale_assignments(
 
 @router.post("/assignments/auto-assign")
 async def auto_assign_cameras(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     current_user_dict: dict = Depends(get_current_user),
 ):
     """Automatically assign cameras to idle workers"""
@@ -357,7 +356,7 @@ async def auto_assign_cameras(
         )
 
     try:
-        assigned_count = camera_delegation_service.reassign_cameras_automatically(
+        assigned_count = await camera_delegation_service.reassign_cameras_automatically(
             db=db, tenant_id=current_user.tenant_id
         )
 

@@ -47,6 +47,8 @@ class Database:
         sync_url = settings.database_url.replace(
             "postgresql+asyncpg://", "postgresql+psycopg2://"
         )
+        if sync_url.startswith("sqlite+aiosqlite://"):
+            sync_url = sync_url.replace("sqlite+aiosqlite://", "sqlite:///")
 
         # Configure sync engine based on database type
         sync_engine_kwargs = {
@@ -100,6 +102,8 @@ class Database:
 
     async def set_tenant_context(self, session: AsyncSession, tenant_id: str):
         """Set the tenant context for Row Level Security"""
+        if settings.database_url.startswith("sqlite"):
+            return
         await session.execute(text(f"SET app.tenant_id = '{tenant_id}'"))
 
 

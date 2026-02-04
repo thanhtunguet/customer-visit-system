@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.correlation import (get_or_create_correlation_id,
                                 get_structured_logger)
-from ..core.database import get_db
+from ..core.database import get_db_session
 from ..models.database import CameraSession
 from ..services.assignment_service import assignment_service
 from ..services.worker_registry import worker_registry
@@ -71,7 +71,7 @@ class LeaseStatusResponse(BaseModel):
 
 @router.post("/renew", response_model=LeaseRenewalResponse)
 async def renew_leases(
-    request: LeaseRenewalRequest, db: AsyncSession = Depends(get_db)
+    request: LeaseRenewalRequest, db: AsyncSession = Depends(get_db_session)
 ):
     """
     Renew leases for worker's active cameras
@@ -136,7 +136,7 @@ async def renew_leases(
 
 @router.post("/reclaim", response_model=LeaseReclaimResponse)
 async def reclaim_expired_leases(
-    db: AsyncSession = Depends(get_db), force: bool = False
+    db: AsyncSession = Depends(get_db_session), force: bool = False
 ):
     """
     Reclaim expired leases (>90s as per updated GPT plan)
@@ -170,7 +170,7 @@ async def reclaim_expired_leases(
 
 @router.get("/status", response_model=LeaseStatusResponse)
 async def get_lease_status(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
     tenant_id: Optional[str] = None,
     worker_id: Optional[str] = None,
 ):
@@ -261,7 +261,7 @@ async def get_lease_status(
 
 @router.delete("/cleanup")
 async def cleanup_terminated_leases(
-    db: AsyncSession = Depends(get_db), older_than_hours: int = 24
+    db: AsyncSession = Depends(get_db_session), older_than_hours: int = 24
 ):
     """
     Clean up old TERMINATED lease records
@@ -312,7 +312,7 @@ async def manual_assign_camera(
     tenant_id: str,
     site_id: int,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Manually trigger camera assignment for a worker
