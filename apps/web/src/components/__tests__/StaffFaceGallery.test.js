@@ -176,10 +176,10 @@ describe('StaffFaceGallery', () => {
     apiClient.recalculateFaceEmbedding.mockResolvedValue(mockRecalcResponse);
     render(_jsx(StaffFaceGallery, { ...mockProps }));
     // Find and click recalculate button
-    const reloadButtons = screen.getAllByRole('button');
-    const reloadButton = reloadButtons.find((button) =>
-      button.querySelector('.anticon-reload')
-    );
+    const reloadButtons = Array.from(
+      document.querySelectorAll('.ant-card button')
+    ).filter((button) => button.querySelector('.anticon-reload'));
+    const reloadButton = reloadButtons[0];
     if (reloadButton) {
       fireEvent.click(reloadButton);
       await waitFor(() => {

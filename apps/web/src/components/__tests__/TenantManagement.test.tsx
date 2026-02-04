@@ -84,8 +84,8 @@ describe('TenantManagement', () => {
       });
 
       expect(screen.getByText('Create Tenant')).toBeInTheDocument();
-      expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
-      expect(screen.getByText('Test Tenant 1')).toBeInTheDocument();
+      expect(await screen.findByText('test-tenant-1')).toBeInTheDocument();
+      expect(await screen.findByText('Test Tenant 1')).toBeInTheDocument();
     });
 
     it('should open create tenant modal when create button is clicked', async () => {

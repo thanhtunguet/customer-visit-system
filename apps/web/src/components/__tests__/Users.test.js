@@ -245,6 +245,9 @@ describe('Users Component - User Actions', () => {
         target: { value: 'password123' },
       });
     });
+    const roleSelect = screen.getByText('Select user role');
+    fireEvent.mouseDown(roleSelect);
+    fireEvent.click(await screen.findByText('System Admin'));
     // Submit form
     const submitButton = screen.getByRole('button', { name: 'Create User' });
     fireEvent.click(submitButton);
@@ -256,8 +259,8 @@ describe('Users Component - User Actions', () => {
         first_name: 'New',
         last_name: 'User',
         password: 'password123',
-        role: undefined, // Not selected in this test
-        tenant_id: undefined, // Not selected in this test
+        role: UserRole.SYSTEM_ADMIN,
+        tenant_id: undefined,
         is_active: true,
       });
     });
@@ -266,21 +269,16 @@ describe('Users Component - User Actions', () => {
     const updatedUser = { ...mockUsers[1], is_active: false };
     apiClient.toggleUserStatus.mockResolvedValue(updatedUser);
     render(_jsx(Users, {}));
-    await waitFor(() => {
-      // Find the toggle button for the second user (site manager)
-      const actionButtons = screen.getAllByRole('button');
-      const toggleButton = actionButtons.find((button) =>
-        button.getAttribute('aria-label')?.includes('Disable')
-      );
-      if (toggleButton) {
-        fireEvent.click(toggleButton);
-      }
-    });
+    const toggleButtons = Array.from(
+      document.querySelectorAll('button')
+    ).filter((button) => button.querySelector('.anticon-stop'));
+    const toggleButton = toggleButtons[0];
+    if (toggleButton) {
+      fireEvent.click(toggleButton);
+    }
     // Confirm the action
-    await waitFor(() => {
-      const confirmButton = screen.getByText('Yes');
-      fireEvent.click(confirmButton);
-    });
+    const confirmButton = await screen.findByText('Yes');
+    fireEvent.click(confirmButton);
     // Verify API was called
     await waitFor(() => {
       expect(apiClient.toggleUserStatus).toHaveBeenCalledWith('2');

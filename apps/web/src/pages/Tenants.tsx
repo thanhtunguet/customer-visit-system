@@ -39,7 +39,14 @@ export const TenantsPage: React.FC = () => {
 
   useEffect(() => {
     if (isSystemAdmin) {
-      loadTenants();
+      loadTenants().catch((error) => {
+        const axiosError = error as {
+          response?: { data?: { detail?: string } };
+        };
+        const fallbackMessage =
+          (error as Error)?.message || 'Failed to load tenants';
+        message.error(axiosError.response?.data?.detail || fallbackMessage);
+      });
     }
   }, [isSystemAdmin, loadTenants]);
 
