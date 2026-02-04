@@ -44,13 +44,13 @@ const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
 // Seed data for visits with image paths
-const SEED_VISITS: Visit[] = [
+const SEED_VISITS: Partial<Visit>[] = [
   {
     tenant_id: 't-dev',
     visit_id: 'v-001',
     person_id: 101,
     person_type: 'customer',
-    site_id: 's-main',
+    site_id: 1,
     camera_id: 1,
     timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
     confidence_score: 0.95,
@@ -61,7 +61,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-002',
     person_id: 102,
     person_type: 'customer',
-    site_id: 's-north',
+    site_id: 2,
     camera_id: 2,
     timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
     confidence_score: 0.87,
@@ -72,7 +72,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-003',
     person_id: 201,
     person_type: 'staff',
-    site_id: 's-main',
+    site_id: 1,
     camera_id: 1,
     timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
     confidence_score: 0.99,
@@ -83,7 +83,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-004',
     person_id: 103,
     person_type: 'customer',
-    site_id: 's-south',
+    site_id: 3,
     camera_id: 3,
     timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
     confidence_score: 0.92,
@@ -94,7 +94,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-005',
     person_id: 104,
     person_type: 'customer',
-    site_id: 's-main',
+    site_id: 1,
     camera_id: 1,
     timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
     confidence_score: 0.88,
@@ -105,7 +105,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-006',
     person_id: 105,
     person_type: 'customer',
-    site_id: 's-north',
+    site_id: 2,
     camera_id: 2,
     timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
     confidence_score: 0.91,
@@ -116,7 +116,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-007',
     person_id: 202,
     person_type: 'staff',
-    site_id: 's-south',
+    site_id: 3,
     camera_id: 3,
     timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
     confidence_score: 0.97,
@@ -127,7 +127,7 @@ const SEED_VISITS: Visit[] = [
     visit_id: 'v-008',
     person_id: 106,
     person_type: 'customer',
-    site_id: 's-main',
+    site_id: 1,
     camera_id: 1,
     timestamp: new Date(Date.now() - 1000 * 60 * 300).toISOString(),
     confidence_score: 0.85,
@@ -137,11 +137,11 @@ const SEED_VISITS: Visit[] = [
 
 // Seed data for sites
 const SEED_SITES: Site[] = [
-  { tenant_id: 't-dev', site_id: 's-main', name: 'Main Branch', created_at: new Date().toISOString() },
-  { tenant_id: 't-dev', site_id: 's-north', name: 'North Branch', created_at: new Date().toISOString() },
-  { tenant_id: 't-dev', site_id: 's-south', name: 'South Branch', created_at: new Date().toISOString() },
-  { tenant_id: 't-dev', site_id: 's-east', name: 'East Branch', created_at: new Date().toISOString() },
-  { tenant_id: 't-dev', site_id: 's-west', name: 'West Branch', created_at: new Date().toISOString() }
+  { tenant_id: 't-dev', site_id: 1, name: 'Main Branch', created_at: new Date().toISOString() },
+  { tenant_id: 't-dev', site_id: 2, name: 'North Branch', created_at: new Date().toISOString() },
+  { tenant_id: 't-dev', site_id: 3, name: 'South Branch', created_at: new Date().toISOString() },
+  { tenant_id: 't-dev', site_id: 4, name: 'East Branch', created_at: new Date().toISOString() },
+  { tenant_id: 't-dev', site_id: 5, name: 'West Branch', created_at: new Date().toISOString() }
 ];
 
 export const VisitsPage: React.FC = () => {

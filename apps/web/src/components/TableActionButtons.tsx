@@ -97,12 +97,20 @@ interface TableActionsProps {
   width?: number;
 }
 
-export const TableActions: React.FC<TableActionsProps> = ({ 
+interface ColumnConfig {
+  title: string;
+  key: string;
+  width: number;
+  fixed?: 'right' | 'left';
+  render: () => React.ReactNode;
+}
+
+export const TableActions = ({ 
   children, 
   fixed = true,
   width = 120
-}) => {
-  const columnConfig = {
+}: TableActionsProps): ColumnConfig => {
+  return {
     title: 'Actions',
     key: 'actions',
     width,
@@ -113,8 +121,6 @@ export const TableActions: React.FC<TableActionsProps> = ({
       </Space>
     ),
   };
-
-  return columnConfig;
 };
 
 // Higher-order component for creating action columns

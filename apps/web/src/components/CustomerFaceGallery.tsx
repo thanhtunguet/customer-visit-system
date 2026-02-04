@@ -43,7 +43,7 @@ interface CustomerFaceImage {
   quality_score: number;
   created_at: string;
   visit_id?: string;
-  face_bbox: number[];
+  face_bbox?: number[];
   detection_metadata?: Record<string, unknown>;
 }
 
@@ -303,7 +303,7 @@ export const CustomerFaceGallery: React.FC<CustomerFaceGalleryProps> = ({
                 </div>
               )}
               <div className="absolute top-2 right-2">
-                <Tag color="blue" size="small">
+                <Tag color="blue" className="text-xs">
                   #{image.image_id}
                 </Tag>
               </div>

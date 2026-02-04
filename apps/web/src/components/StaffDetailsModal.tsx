@@ -26,9 +26,9 @@ const { Title } = Typography;
 
 interface StaffDetailsModalProps {
   visible: boolean;
-  staffId: string | null;
+  staffId: number | null;
   onClose: () => void;
-  onEdit?: (staffId: string) => void;
+  onEdit?: (staffId: number) => void;
 }
 
 export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
@@ -127,10 +127,10 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
               <Space>
                 <span>{staffData.face_images.length} images</span>
                 {staffData.face_images.some(img => img.is_primary) && (
-                  <Tag color="gold" size="small">Has Primary</Tag>
+                  <Tag color="gold" className="text-xs">Has Primary</Tag>
                 )}
                 {staffData.face_images.length === 0 && (
-                  <Tag color="orange" size="small">No Face Data</Tag>
+                  <Tag color="orange" className="text-xs">No Face Data</Tag>
                 )}
               </Space>
             </Descriptions.Item>

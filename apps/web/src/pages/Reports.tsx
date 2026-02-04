@@ -285,15 +285,15 @@ export const Reports: React.FC = () => {
                 Math.round(((currentTotal - previousTotal) / previousTotal) * 100 * 10) / 10 : 0;
 
               return {
-                id: site.site_id?.toString() || site.site_name,
-                site: site.site_name,
+                id: site.site_id?.toString() || site.name,
+                site: site.name,
                 visits: currentTotal,
                 customers: Math.round(currentTotal * 0.8), // Approximate
                 staff: Math.round(currentTotal * 0.2), // Approximate  
                 growth: growth
               };
             } catch (siteError) {
-              console.warn(`Failed to load data for site ${site.site_name}:`, siteError);
+              console.warn(`Failed to load data for site ${site.name}:`, siteError);
               return null;
             }
           });
@@ -464,7 +464,7 @@ export const Reports: React.FC = () => {
             <YAxis />
             <RechartsTooltip 
               labelFormatter={(label) => `Date: ${label}`}
-              formatter={(value, name) => [value, name.replace(/([A-Z])/g, ' $1').trim()]}
+              formatter={(value, name) => [value, typeof name === 'string' ? name.replace(/([A-Z])/g, ' $1').trim() : name]}
             />
             <Area
               type="monotone"

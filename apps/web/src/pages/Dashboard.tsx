@@ -210,7 +210,7 @@ export const Dashboard: React.FC = () => {
                 <YAxis />
                 <RechartsTooltip 
                   labelFormatter={(label) => `Date: ${label}`}
-                  formatter={(value, name) => [value, name.replace(/([A-Z])/g, ' $1').trim()]}
+                  formatter={(value, name) => [value, typeof name === 'string' ? name.replace(/([A-Z])/g, ' $1').trim() : name]}
                 />
                 <Area
                   type="monotone"

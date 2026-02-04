@@ -15,7 +15,7 @@ import { WebRTCCameraStream } from './WebRTCCameraStream';
 import { Camera } from '../types/api';
 
 interface MultiCameraStreamViewProps {
-  siteId: string;
+  siteId: number | string | null;
   cameras: Camera[];
   streamStatuses: Record<string, boolean>;
   onStreamStateChange: (cameraId: string, isActive: boolean) => void;

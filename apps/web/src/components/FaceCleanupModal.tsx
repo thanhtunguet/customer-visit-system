@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Typography, Button, Slider, Alert, Space, Statistic, Row, Col, message, Spin } from 'antd';
-import { DeleteOutlined, CleanupOutlined } from '@ant-design/icons';
+import { DeleteOutlined, ClearOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
 import { Customer } from '../types/api';
 
@@ -119,7 +119,7 @@ export const FaceCleanupModal: React.FC<FaceCleanupModalProps> = ({
     <Modal
       title={
         <Space>
-          <CleanupOutlined />
+          <ClearOutlined />
           <span>Cleanup Low-Quality Face Detections</span>
         </Space>
       }

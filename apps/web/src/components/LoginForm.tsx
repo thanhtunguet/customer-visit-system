@@ -40,10 +40,11 @@ export const LoginForm: React.FC = () => {
       await apiClient.login(loginData);
       navigate('/dashboard');
     } catch (err: unknown) {
+      const apiError = err as ApiError;
       console.log('Login error:', err);
-      console.log('Error response:', err.response);
-      console.log('Error status:', err.response?.status);
-      console.log('Error data:', err.response?.data);
+      console.log('Error response:', apiError.response);
+      console.log('Error status:', apiError.response?.status);
+      console.log('Error data:', apiError.response?.data);
       
       const errorData = (err as ApiError)?.response?.data;
       const status = (err as ApiError)?.response?.status;
@@ -75,13 +76,13 @@ export const LoginForm: React.FC = () => {
             } else if (errorData.detail.includes('role') || errorData.detail.includes('permission')) {
               errors.role = 'Invalid role or insufficient permissions';
             } else {
-              errors.username = errorData.detail;
+              errors.username = typeof errorData.detail === 'string' ? errorData.detail : 'Login error';
             }
           }
           
           // If no specific field errors, show general error on username field
           if (Object.keys(errors).length === 0) {
-            errors.username = errorData.detail;
+            errors.username = typeof errorData.detail === 'string' ? errorData.detail : 'Validation error';
           }
           
           setFieldErrors(errors);
@@ -90,7 +91,7 @@ export const LoginForm: React.FC = () => {
         }
       } else if (errorData?.detail) {
         // Other errors with detail message
-        setFieldErrors({ username: errorData.detail });
+        setFieldErrors({ username: typeof errorData.detail === 'string' ? errorData.detail : 'Login error' });
       } else {
         // Generic error
         setFieldErrors({ username: 'Login failed. Please try again.' });

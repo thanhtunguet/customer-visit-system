@@ -33,7 +33,7 @@ interface ApiError {
 }
 
 interface FaceRecognitionTestProps {
-  staffId: string;
+  staffId: number;
   staffName: string;
 }
 
@@ -93,7 +93,13 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
     setError(null);
   };
 
-  const getSimilarityColor = (similarity: number) => {
+  const getSimilarityColor = (similarity: number): 'success' | 'exception' | 'active' => {
+    if (similarity >= 0.9) return 'success';
+    if (similarity >= 0.7) return 'active';
+    return 'exception';
+  };
+
+  const getSimilarityTagColor = (similarity: number): string => {
     if (similarity >= 0.9) return 'success';
     if (similarity >= 0.7) return 'warning';
     return 'error';
@@ -131,7 +137,7 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
         <Space>
           <span className="font-medium">{name}</span>
           {record.staff_id === staffId && (
-            <Tag color="blue" size="small">Target</Tag>
+            <Tag color="blue" className="text-xs">Target</Tag>
           )}
         </Space>
       ),
@@ -159,8 +165,8 @@ export const FaceRecognitionTest: React.FC<FaceRecognitionTestProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono">{(similarity * 100).toFixed(1)}%</span>
             <Tag 
-              color={getSimilarityColor(similarity)} 
-              size="small"
+              color={getSimilarityTagColor(similarity)} 
+              className="text-xs"
             >
               {getSimilarityText(similarity)}
             </Tag>

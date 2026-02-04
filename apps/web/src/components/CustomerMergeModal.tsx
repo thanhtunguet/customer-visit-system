@@ -101,9 +101,8 @@ export const CustomerMergeModal: React.FC<CustomerMergeModalProps> = ({
       title: 'Avatar',
       key: 'avatar',
       width: 60,
-      render: (record: SimilarCustomer) => (
+      render: () => (
         <AuthenticatedAvatar
-          customerId={record.customer_id}
           size={40}
           icon={<UserOutlined />}
         />

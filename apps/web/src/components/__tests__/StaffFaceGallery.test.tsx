@@ -1,29 +1,33 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 import { message } from 'antd';
 import { StaffFaceGallery } from '../StaffFaceGallery';
 import { apiClient } from '../../services/api';
 import { StaffFaceImage } from '../../types/api';
 
 // Mock the API client
-jest.mock('../../services/api', () => ({
+vi.mock('../../services/api', () => ({
   apiClient: {
-    uploadStaffFaceImage: jest.fn(),
-    uploadMultipleStaffFaceImages: jest.fn(),
-    deleteStaffFaceImage: jest.fn(),
-    recalculateFaceEmbedding: jest.fn(),
+    uploadStaffFaceImage: vi.fn(),
+    uploadMultipleStaffFaceImages: vi.fn(),
+    deleteStaffFaceImage: vi.fn(),
+    recalculateFaceEmbedding: vi.fn(),
   },
 }));
 
 // Mock antd message
-jest.mock('antd', () => ({
-  ...jest.requireActual('antd'),
-  message: {
-    success: jest.fn(),
-    error: jest.fn(),
-  },
-}));
+vi.mock('antd', async () => {
+  const actual = await vi.importActual('antd');
+  return {
+    ...actual,
+    message: {
+      success: vi.fn(),
+      error: vi.fn(),
+    },
+  };
+});
 
 // Mock environment variables
 Object.defineProperty(import.meta, 'env', {
@@ -55,19 +59,19 @@ const mockFaceImages: StaffFaceImage[] = [
 
 describe('StaffFaceGallery', () => {
   const mockProps = {
-    staffId: 123,
+    staffId: '123',
     staffName: 'John Doe',
     faceImages: mockFaceImages,
-    onImagesChange: jest.fn(),
+    onImagesChange: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Mock AbortController
-    global.AbortController = jest.fn(() => ({
-      abort: jest.fn(),
+    global.AbortController = vi.fn(() => ({
+      abort: vi.fn(),
       signal: {}
-    })) as any;
+    })) as unknown as typeof AbortController;
   });
 
   it('renders face gallery with images', () => {
@@ -99,7 +103,7 @@ describe('StaffFaceGallery', () => {
       created_at: '2023-01-03T00:00:00Z',
     };
 
-    (apiClient.uploadStaffFaceImage as jest.Mock).mockResolvedValue(mockUploadResponse);
+    (apiClient.uploadStaffFaceImage as Mock).mockResolvedValue(mockUploadResponse);
 
     render(<StaffFaceGallery {...mockProps} />);
 
@@ -132,7 +136,7 @@ describe('StaffFaceGallery', () => {
       },
     };
 
-    (apiClient.uploadStaffFaceImage as jest.Mock).mockRejectedValue(errorResponse);
+    (apiClient.uploadStaffFaceImage as Mock).mockRejectedValue(errorResponse);
 
     render(<StaffFaceGallery {...mockProps} />);
 
@@ -149,7 +153,7 @@ describe('StaffFaceGallery', () => {
   });
 
   it('handles image deletion successfully', async () => {
-    (apiClient.deleteStaffFaceImage as jest.Mock).mockResolvedValue({});
+    (apiClient.deleteStaffFaceImage as Mock).mockResolvedValue({});
 
     render(<StaffFaceGallery {...mockProps} />);
 
@@ -185,7 +189,7 @@ describe('StaffFaceGallery', () => {
       },
     };
 
-    (apiClient.recalculateFaceEmbedding as jest.Mock).mockResolvedValue(mockRecalcResponse);
+    (apiClient.recalculateFaceEmbedding as Mock).mockResolvedValue(mockRecalcResponse);
 
     render(<StaffFaceGallery {...mockProps} />);
 

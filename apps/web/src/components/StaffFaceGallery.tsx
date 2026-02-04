@@ -30,7 +30,7 @@ import { StaffFaceImage } from '../types/api';
 import { apiClient } from '../services/api';
 
 interface StaffFaceGalleryProps {
-  staffId: string;
+  staffId: number | string;
   staffName: string;
   faceImages: StaffFaceImage[];
   onImagesChange: () => void;

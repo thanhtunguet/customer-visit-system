@@ -83,7 +83,7 @@ const Workers: React.FC = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState<{
     total_count: number;
@@ -487,11 +487,11 @@ const Workers: React.FC = () => {
               {record.capabilities && (
                 <div className="text-xs mt-1">
                   {(record.capabilities.total_active_streams || 0) > 0 ? (
-                    <Tag color="green" size="small">
+                    <Tag color="green" className="text-xs">
                       Streaming ({record.capabilities.total_active_streams})
                     </Tag>
                   ) : (
-                    <Tag color="gray" size="small">Not streaming</Tag>
+                    <Tag color="gray" className="text-xs">Not streaming</Tag>
                   )}
                 </div>
               )}

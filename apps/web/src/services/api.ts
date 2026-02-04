@@ -8,7 +8,6 @@ import {
   ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate
 } from '../types/api';
 import { getTenantIdFromToken, isTokenExpired } from '../utils/jwt';
-import axios, { AxiosInstance } from 'axios';
 
 // Force use of window.location.origin in development to use Vite proxy
 const API_BASE_URL = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
@@ -200,6 +199,15 @@ class ApiClient {
     return response.data;
   }
 
+  async updateSite(siteId: number, site: Partial<SiteCreate>): Promise<Site> {
+    const response = await this.client.put<Site>(`/sites/${siteId}`, site);
+    return response.data;
+  }
+
+  async deleteSite(siteId: number): Promise<void> {
+    await this.client.delete(`/sites/${siteId}`);
+  }
+
   // Cameras
   async getCameras(siteId: number): Promise<Camera[]> {
     const response = await this.client.get<Camera[]>(`/sites/${siteId}/cameras`);
@@ -251,12 +259,12 @@ class ApiClient {
     return response.data;
   }
 
-  async stopCameraStream(siteId: string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
+  async stopCameraStream(siteId: number | string, cameraId: number): Promise<{ message: string; camera_id: number; stream_active: boolean }> {
     const response = await this.client.post(`/sites/${siteId}/cameras/${cameraId}/stream/stop`);
     return response.data;
   }
 
-  async getCameraStreamStatus(siteId: string, cameraId: number): Promise<{
+  async getCameraStreamStatus(siteId: number | string, cameraId: number): Promise<{
     camera_id: number;
     stream_active: boolean;
     processing_active?: boolean;
@@ -273,7 +281,7 @@ class ApiClient {
     return response.data;
   }
 
-  getCameraStreamUrl(siteId: string, cameraId: number): string {
+  getCameraStreamUrl(siteId: number | string, cameraId: number): string {
     const baseUrl = import.meta.env.DEV ? window.location.origin : (import.meta.env.VITE_API_URL || window.location.origin);
     const token = this.token || localStorage.getItem('access_token');
     const url = new URL(`${baseUrl}/v1/sites/${siteId}/cameras/${cameraId}/stream/feed`);
@@ -326,30 +334,30 @@ class ApiClient {
   }
 
   async updateStaff(
-    staffId: string,
+    staffId: number | string,
     staff: Omit<Staff, 'tenant_id' | 'created_at' | 'is_active' | 'staff_id'>
   ): Promise<Staff> {
     const response = await this.client.put<Staff>(`/staff/${staffId}`, staff);
     return response.data;
   }
 
-  async deleteStaff(staffId: string): Promise<void> {
+  async deleteStaff(staffId: number | string): Promise<void> {
     await this.client.delete(`/staff/${staffId}`);
   }
 
   // Staff Face Images
-  async getStaffFaceImages(staffId: string): Promise<StaffFaceImage[]> {
+  async getStaffFaceImages(staffId: number | string): Promise<StaffFaceImage[]> {
     const response = await this.client.get<StaffFaceImage[]>(`/staff/${staffId}/faces`);
     return response.data;
   }
 
-  async getStaffWithFaces(staffId: string): Promise<StaffWithFaces> {
+  async getStaffWithFaces(staffId: number | string): Promise<StaffWithFaces> {
     const response = await this.client.get<StaffWithFaces>(`/staff/${staffId}/details`);
     return response.data;
   }
 
   async uploadStaffFaceImage(
-    staffId: string, 
+    staffId: number | string, 
     imageData: string, 
     isPrimary: boolean = false
   ): Promise<StaffFaceImage> {
@@ -377,11 +385,11 @@ class ApiClient {
     return response.data;
   }
 
-  async deleteStaffFaceImage(staffId: string, imageId: string): Promise<void> {
+  async deleteStaffFaceImage(staffId: number | string, imageId: string): Promise<void> {
     await this.client.delete(`/staff/${staffId}/faces/${imageId}`);
   }
 
-  async recalculateFaceEmbedding(staffId: string, imageId: string): Promise<{
+  async recalculateFaceEmbedding(staffId: number | string, imageId: string): Promise<{
     message: string;
     processing_info: {
       face_count: number;
@@ -392,7 +400,7 @@ class ApiClient {
     return response.data;
   }
 
-  async testFaceRecognition(staffId: string, testImage: string): Promise<FaceRecognitionTestResult> {
+  async testFaceRecognition(staffId: number | string, testImage: string): Promise<FaceRecognitionTestResult> {
     const response = await this.client.post<FaceRecognitionTestResult>(
       `/staff/${staffId}/test-recognition`,
       { test_image: testImage }
@@ -766,7 +774,7 @@ class ApiClient {
       worker_name: string;
       worker_version?: string;
       capabilities?: Record<string, any>;
-      status: 'online' | 'offline' | 'error' | 'maintenance';
+      status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
       site_id?: number;
       camera_id?: number;
       last_heartbeat?: string;
@@ -794,7 +802,7 @@ class ApiClient {
     worker_name: string;
     worker_version?: string;
     capabilities?: Record<string, any>;
-    status: 'online' | 'offline' | 'error' | 'maintenance';
+    status: 'idle' | 'processing' | 'online' | 'offline' | 'error' | 'maintenance';
     site_id?: number;
     camera_id?: number;
     last_heartbeat?: string;

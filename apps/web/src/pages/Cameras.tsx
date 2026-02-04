@@ -38,7 +38,7 @@ export const Cameras: React.FC = () => {
   const [streamingCamera, setStreamingCamera] = useState<Camera | null>(null);
   const [streamModalVisible, setStreamModalVisible] = useState(false);
   const [streamStatuses, setStreamStatuses] = useState<Record<string, boolean>>({});
-  // const [streamConnectionState, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [, setStreamConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [streamIntent, setStreamIntent] = useState<'view' | 'start'>('view');
   const [multiStreamModalVisible, setMultiStreamModalVisible] = useState(false);
 const [processingStatuses, setProcessingStatuses] = useState<Record<string, boolean>>({});

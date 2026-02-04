@@ -1,25 +1,27 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { vi, describe, it, expect, beforeEach, MockedFunction } from 'vitest';
 import { message } from 'antd';
 import { TenantsPage } from '../../pages/Tenants';
 import { apiClient } from '../../services/api';
 import { Tenant } from '../../types/api';
 
 // Mock the API client
-jest.mock('../../services/api');
-const mockedApiClient = apiClient as jest.Mocked<typeof apiClient> & {
-  toggleTenantStatus: jest.MockedFunction<typeof apiClient.toggleTenantStatus>;
-};
+vi.mock('../../services/api');
+const mockedApiClient = apiClient as { [K in keyof typeof apiClient]: MockedFunction<typeof apiClient[K]> };
 
 // Mock antd message
-jest.mock('antd', () => ({
-  ...jest.requireActual('antd'),
-  message: {
-    success: jest.fn(),
-    error: jest.fn(),
-  },
-}));
+vi.mock('antd', async () => {
+  const actual = await vi.importActual('antd');
+  return {
+    ...actual,
+    message: {
+      success: vi.fn(),
+      error: vi.fn(),
+    },
+  };
+});
 
 const mockTenants: Tenant[] = [
   {
@@ -59,7 +61,7 @@ const renderWithRouter = (component: React.ReactElement) => {
 
 describe('TenantManagement', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('System Admin Access', () => {

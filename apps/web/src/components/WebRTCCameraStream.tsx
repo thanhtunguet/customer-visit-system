@@ -19,7 +19,7 @@ interface ApiError {
 }
 
 interface WebRTCCameraStreamProps {
-  siteId: string;
+  siteId: number | string;
   cameraId: number;
   cameraName: string;
   onClose?: () => void;
@@ -38,6 +38,17 @@ interface WebRTCSession {
   client_id: string;
   camera_id: number;
   site_id: number;
+}
+
+interface SignalingData {
+  type: string;
+  sdp?: string;
+  from_id?: string;
+  ice_candidate?: {
+    candidate: string;
+    sdpMid: string | null;
+    sdpMLineIndex: number | null;
+  };
 }
 
 export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
@@ -75,7 +86,11 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
   // Connection retry logic
   const retryCountRef = useRef(0);
   const maxRetries = 3;
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Refs for callback functions to avoid circular dependencies
+  const handleReconnectRef = useRef<() => Promise<void>>();
+  const handleSignalingMessageRef = useRef<(message: { type: string; data?: unknown; from_id?: string; sdp?: string; candidate?: string; sdpMid?: string; sdpMLineIndex?: number }) => Promise<void>>();
   
   // Generate unique client ID
   const currentClientId = useMemo(() => 
@@ -181,7 +196,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         case 'failed':
           updateConnectionState('error');
           setError('WebRTC connection failed');
-          handleReconnect();
+          handleReconnectRef.current?.();
           break;
         case 'closed':
           updateConnectionState('disconnected');
@@ -195,7 +210,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     };
 
     return pc;
-  }, [currentClientId, updateConnectionState, workerIdRef, handleReconnect, session]);
+  }, [currentClientId, updateConnectionState, workerIdRef, session]);
 
   // Setup signaling WebSocket connection
   const setupSignalingConnection = useCallback(async (): Promise<WebSocket | null> => {
@@ -241,7 +256,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           const message = JSON.parse(event.data);
           console.log('Received signaling message:', message);
           
-          await handleSignalingMessage(message);
+          await handleSignalingMessageRef.current?.(message);
         } catch (err) {
           console.error('Error processing signaling message:', err);
         }
@@ -271,7 +286,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
       setError('Failed to setup signaling connection');
       return null;
     }
-  }, [currentClientId, isStreaming, manuallyStopped, handleSignalingMessage]);
+  }, [currentClientId, isStreaming, manuallyStopped]);
 
   // Stop WebRTC streaming session
   const handleStopStream = useCallback(async () => {
@@ -416,7 +431,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         break;
         
       case 'signaling': {
-        const signalingData = message.data;
+        const signalingData = message.data as SignalingData;
         
         switch (signalingData.type) {
           case 'offer':
@@ -480,6 +495,11 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
         console.log('Unknown signaling message type:', message.type);
     }
   }, [currentClientId, workerIdRef, handleStopStream, session]);
+
+  // Assign handleSignalingMessage to ref
+  useEffect(() => {
+    handleSignalingMessageRef.current = handleSignalingMessage;
+  }, [handleSignalingMessage]);
 
   // Start WebRTC streaming session
   const handleStartStream = useCallback(async () => {
@@ -578,11 +598,16 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
           setError('Failed to reconnect after maximum attempts');
           updateConnectionState('error');
         } else {
-          handleReconnect();
+          handleReconnectRef.current?.();
         }
       }
     }, delay);
   }, [manuallyStopped, setupPeerConnection, setupSignalingConnection, updateConnectionState, handleStartStream]);
+
+  // Assign callbacks to refs to avoid circular dependencies
+  useEffect(() => {
+    handleReconnectRef.current = handleReconnect;
+  }, [handleReconnect]);
 
   // Manual reconnect button
   const handleManualReconnect = useCallback(async () => {
@@ -590,7 +615,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     setError(null);
     // If we have an active session try reconnect, else do full start
     if (sessionRef.current) {
-      await handleReconnect();
+      await handleReconnectRef.current?.();
     } else {
       await handleStartStream();
     }
@@ -733,7 +758,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
               icon={<PlayCircleOutlined />}
               onClick={handleStartStream}
               loading={loading}
-              size="default"
+              size="middle"
             >
               Start WebRTC Stream
             </Button>
@@ -750,7 +775,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
                 <Button
                   icon={<StopOutlined />}
                   loading={loading}
-                  size="default"
+                  size="middle"
                   danger
                 >
                   Stop Stream
@@ -762,7 +787,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
                   icon={<ReloadOutlined />}
                   onClick={handleManualReconnect}
                   loading={loading}
-                  size="default"
+                  size="middle"
                 >
                   Reconnect
                 </Button>

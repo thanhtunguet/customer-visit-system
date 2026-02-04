@@ -25,10 +25,14 @@ import {
   CopyOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 
 import { apiClient } from '../services/api';
 import { ApiKey, ApiKeyCreate, ApiKeyCreateResponse, ApiKeyUpdate } from '../types/api';
+
+interface ApiKeyFormValues extends Omit<ApiKeyCreate, 'expires_at'> {
+  expires_at?: Dayjs;
+}
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -44,7 +48,7 @@ const ApiKeys: React.FC = () => {
   const [newApiKeyData, setNewApiKeyData] = useState<ApiKeyCreateResponse | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
 
-  const [createForm] = Form.useForm<ApiKeyCreate>();
+  const [createForm] = Form.useForm<ApiKeyFormValues>();
   const [editForm] = Form.useForm<ApiKeyUpdate>();
 
   useEffect(() => {
@@ -75,10 +79,10 @@ const ApiKeys: React.FC = () => {
     }
   };
 
-  const handleCreateApiKey = async (values: ApiKeyCreate) => {
+  const handleCreateApiKey = async (values: ApiKeyFormValues) => {
     try {
       // Convert dayjs to ISO string if expires_at is provided
-      const payload = {
+      const payload: ApiKeyCreate = {
         ...values,
         expires_at: values.expires_at ? values.expires_at.toISOString() : undefined
       };
@@ -183,7 +187,7 @@ const ApiKeys: React.FC = () => {
       dataIndex: 'last_used',
       key: 'last_used',
       render: (lastUsed) => (
-        <Text type={lastUsed ? 'default' : 'secondary'}>
+        <Text type={lastUsed ? undefined : 'secondary'}>
           {formatLastUsed(lastUsed)}
         </Text>
       ),
@@ -196,7 +200,7 @@ const ApiKeys: React.FC = () => {
         if (!expiresAt) return <Text type="secondary">Never</Text>;
         const expired = isExpired(expiresAt);
         return (
-          <Text type={expired ? 'danger' : 'default'}>
+          <Text type={expired ? 'danger' : undefined}>
             {dayjs(expiresAt).format('MMM D, YYYY')}
           </Text>
         );
