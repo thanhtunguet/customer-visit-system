@@ -15,7 +15,7 @@ jobs:
       python: ${{ steps.changes.outputs.python }}
       typescript: ${{ steps.changes.outputs.typescript }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -44,9 +44,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -78,9 +78,9 @@ jobs:
         ports:
           - 5432:5432
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Create .env file for testing
@@ -107,7 +107,7 @@ jobs:
           TEST_MODE: true
         run: pytest --cov=apps --cov=packages --cov-report=xml --cov-report=term-missing
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           fail_ci_if_error: true
@@ -117,9 +117,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.typescript == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -142,9 +142,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.typescript == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -156,7 +156,7 @@ jobs:
         working-directory: apps/web
         run: npm run test:coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v4
         with:
           file: ./apps/web/coverage/coverage-final.json
           fail_ci_if_error: true
@@ -166,9 +166,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
