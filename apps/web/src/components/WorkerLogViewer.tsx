@@ -78,7 +78,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
   }, [autoScroll]);
 
   // Load recent logs
-  const loadRecentLogs = async () => {
+  const loadRecentLogs = useCallback(async () => {
     if (!workerId) return;
     
     setLoading(true);
@@ -112,7 +112,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [workerId, notification, scrollToBottom]);
 
   // Start streaming logs
   const startStreaming = () => {
@@ -255,7 +255,7 @@ const WorkerLogViewer: React.FC<WorkerLogViewerProps> = ({
     if (visible && workerId) {
       loadRecentLogs();
     }
-  }, [visible, workerId]);
+  }, [visible, workerId, loadRecentLogs]);
 
   // Cleanup on unmount or close
   useEffect(() => {

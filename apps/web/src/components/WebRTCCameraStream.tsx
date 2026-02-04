@@ -619,7 +619,7 @@ export const WebRTCCameraStream: React.FC<WebRTCCameraStreamProps> = ({
     } else {
       await handleStartStream();
     }
-  }, [handleReconnect, handleStartStream]);
+  }, [handleStartStream]);
 
   // Auto-start effect
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Typography, Button, Table, Space, Alert, message, Tag, Image } from 'antd';
 import { DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import { apiClient } from '../services/api';
@@ -30,14 +30,7 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
   const [selectedVisitIds, setSelectedVisitIds] = useState<string[]>([]);
   const [removing, setRemoving] = useState(false);
 
-  useEffect(() => {
-    if (visible && customerId) {
-      loadCustomerVisits();
-      setSelectedVisitIds([]);
-    }
-  }, [visible, customerId]);
-
-  const loadCustomerVisits = async () => {
+  const loadCustomerVisits = useCallback(async () => {
     if (!customerId) return;
     
     try {
@@ -59,7 +52,14 @@ export const VisitFaceRemovalModal: React.FC<VisitFaceRemovalModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerId]);
+
+  useEffect(() => {
+    if (visible && customerId) {
+      loadCustomerVisits();
+      setSelectedVisitIds([]);
+    }
+  }, [visible, customerId, loadCustomerVisits]);
 
   const handleRemoveSelected = async () => {
     if (selectedVisitIds.length === 0) return;

@@ -367,7 +367,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       message.error('Failed to access camera devices');
       return [];
     }
-  }, [selectedCameraId]);
+  }, [selectedCameraId, message]);
 
   // Start camera stream
   const startCamera = useCallback(async (deviceId?: string) => {
@@ -400,7 +400,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
       message.error('Failed to start camera. Please check camera permissions.');
       return null;
     }
-  }, [cameraStream]);
+  }, [cameraStream, message]);
 
   // Stop camera stream
   const stopCamera = useCallback(() => {
@@ -756,14 +756,14 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                 </div>
               }
               actions={[
-                <Tooltip title="View Image">
+                <Tooltip title="View Image" key="view">
                   <Button
                     type="text"
                     icon={<EyeOutlined />}
                     onClick={() => handlePreview(image)}
                   />
                 </Tooltip>,
-                <Tooltip title="Recalculate Landmarks & Embedding">
+                <Tooltip title="Recalculate Landmarks & Embedding" key="recalc">
                   <Button
                     type="text"
                     icon={<ReloadOutlined />}
@@ -773,6 +773,7 @@ export const StaffFaceGallery: React.FC<StaffFaceGalleryProps> = ({
                   />
                 </Tooltip>,
                 <Popconfirm
+                  key="delete"
                   title="Delete Face Image"
                   description="Are you sure you want to delete this face image?"
                   onConfirm={() => handleDelete(image.image_id)}

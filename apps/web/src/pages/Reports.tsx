@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Row,
@@ -143,11 +143,7 @@ export const Reports: React.FC = () => {
   const totalStaff = realStats.totalStaff;
   const avgDailyVisits = realStats.avgDailyVisits;
 
-  useEffect(() => {
-    loadReportsData();
-  }, [dateRange, selectedSites, granularity]);
-
-  const loadReportsData = async () => {
+  const loadReportsData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -345,7 +341,11 @@ export const Reports: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange, selectedSites, granularity]);
+
+  useEffect(() => {
+    loadReportsData();
+  }, [loadReportsData]);
 
   const handleExport = (type: 'visitor-trends' | 'demographics' | 'site-comparison') => {
     // Mock CSV export - in real implementation, this would call API

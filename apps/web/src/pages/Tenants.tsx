@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Space, Popconfirm, 
   Typography, Alert, Switch, Card, App
@@ -9,7 +9,7 @@ import {
 import { ColumnsType } from 'antd/es/table';
 import { AuthUser, Tenant, TenantCreate } from '../types/api';
 import { apiClient } from '../services/api';
-import { useTenants } from '../contexts/TenantContext';
+import { useTenants } from '../contexts/useTenants';
 
 const { Title } = Typography;
 
@@ -25,16 +25,12 @@ export const TenantsPage: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    checkUserRole();
-  }, []);
-
-  useEffect(() => {
     if (isSystemAdmin) {
       loadTenants();
     }
   }, [isSystemAdmin, loadTenants]);
 
-  const checkUserRole = async () => {
+  const checkUserRole = useCallback(async () => {
     try {
       const user = await apiClient.getCurrentUser();
       setCurrentUser(user);
@@ -43,7 +39,11 @@ export const TenantsPage: React.FC = () => {
       console.error('Failed to get current user:', error);
       message.error('Failed to verify user role');
     }
-  };
+  }, [message]);
+
+  useEffect(() => {
+    checkUserRole();
+  }, [checkUserRole]);
 
 
 

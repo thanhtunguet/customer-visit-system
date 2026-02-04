@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   Tabs,
@@ -42,13 +42,7 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('details');
 
-  useEffect(() => {
-    if (visible && staffId) {
-      loadStaffData();
-    }
-  }, [visible, staffId]);
-
-  const loadStaffData = async () => {
+  const loadStaffData = useCallback(async () => {
     if (!staffId) return;
 
     try {
@@ -63,7 +57,13 @@ export const StaffDetailsModal: React.FC<StaffDetailsModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [staffId]);
+
+  useEffect(() => {
+    if (visible && staffId) {
+      loadStaffData();
+    }
+  }, [visible, staffId, loadStaffData]);
 
   const handleClose = () => {
     setStaffData(null);

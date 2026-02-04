@@ -41,10 +41,6 @@ export const useAuthenticatedAvatar = (avatarUrl?: string) => {
 
     return () => {
       cancelled = true;
-      // Clean up blob URL to prevent memory leaks
-      if (blobUrl && blobUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(blobUrl);
-      }
     };
   }, [avatarUrl]);
 

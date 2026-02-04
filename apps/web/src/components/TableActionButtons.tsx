@@ -1,6 +1,6 @@
+import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { Button, Popconfirm, PopconfirmProps, Tooltip } from 'antd';
 import React from 'react';
-import { Button, Space, Tooltip, Popconfirm, PopconfirmProps } from 'antd';
-import { EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 
 interface ActionButtonProps {
   onClick: () => void;
@@ -23,11 +23,11 @@ interface DeleteActionProps extends Omit<PopconfirmProps, 'children'> {
   tooltip?: string;
 }
 
-export const ViewAction: React.FC<ViewActionProps> = ({ 
-  onClick, 
-  disabled = false, 
+export const ViewAction: React.FC<ViewActionProps> = ({
+  onClick,
+  disabled = false,
   loading = false,
-  tooltip = "View details"
+  tooltip = 'View details',
 }) => (
   <Tooltip title={tooltip}>
     <Button
@@ -41,11 +41,11 @@ export const ViewAction: React.FC<ViewActionProps> = ({
   </Tooltip>
 );
 
-export const EditAction: React.FC<EditActionProps> = ({ 
-  onClick, 
-  disabled = false, 
+export const EditAction: React.FC<EditActionProps> = ({
+  onClick,
+  disabled = false,
   loading = false,
-  tooltip = "Edit"
+  tooltip = 'Edit',
 }) => (
   <Tooltip title={tooltip}>
     <Button
@@ -59,15 +59,15 @@ export const EditAction: React.FC<EditActionProps> = ({
   </Tooltip>
 );
 
-export const DeleteAction: React.FC<DeleteActionProps> = ({ 
-  onConfirm, 
-  disabled = false, 
+export const DeleteAction: React.FC<DeleteActionProps> = ({
+  onConfirm,
+  disabled = false,
   loading = false,
-  tooltip = "Delete",
-  title = "Are you sure?",
+  tooltip = 'Delete',
+  title = 'Are you sure?',
   description,
-  okText = "Yes",
-  cancelText = "No",
+  okText = 'Yes',
+  cancelText = 'No',
   ...popconfirmProps
 }) => (
   <Tooltip title={tooltip}>
@@ -90,48 +90,3 @@ export const DeleteAction: React.FC<DeleteActionProps> = ({
     </Popconfirm>
   </Tooltip>
 );
-
-interface TableActionsProps {
-  children: React.ReactNode;
-  fixed?: boolean;
-  width?: number;
-}
-
-interface ColumnConfig {
-  title: string;
-  key: string;
-  width: number;
-  fixed?: 'right' | 'left';
-  render: () => React.ReactNode;
-}
-
-export const TableActions = ({ 
-  children, 
-  fixed = true,
-  width = 120
-}: TableActionsProps): ColumnConfig => {
-  return {
-    title: 'Actions',
-    key: 'actions',
-    width,
-    ...(fixed && { fixed: 'right' as const }),
-    render: () => (
-      <Space size="small">
-        {children}
-      </Space>
-    ),
-  };
-};
-
-// Higher-order component for creating action columns
-export const createActionColumn = (actions: React.ReactNode, options?: { width?: number; fixed?: boolean }) => ({
-  title: 'Actions',
-  key: 'actions',
-  width: options?.width || 120,
-  ...(options?.fixed !== false && { fixed: 'right' as const }),
-  render: () => (
-    <Space size="small">
-      {actions}
-    </Space>
-  ),
-});

@@ -1,15 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Tenant } from '../types/api';
+import React, { useState, useCallback, ReactNode } from 'react';
 import { apiClient } from '../services/api';
-
-interface TenantContextValue {
-  tenants: Tenant[];
-  loading: boolean;
-  loadTenants: () => Promise<void>;
-  refreshTenants: () => Promise<void>;
-}
-
-const TenantContext = createContext<TenantContextValue | null>(null);
+import { TenantContext, TenantContextValue } from './TenantContextInternal';
 
 interface TenantProviderProps {
   children: ReactNode;
@@ -48,12 +39,4 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
       {children}
     </TenantContext.Provider>
   );
-};
-
-export const useTenants = (): TenantContextValue => {
-  const context = useContext(TenantContext);
-  if (!context) {
-    throw new Error('useTenants must be used within a TenantProvider');
-  }
-  return context;
 };

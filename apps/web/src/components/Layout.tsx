@@ -18,7 +18,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { AuthUser, UserRole } from '../types/api';
 import { ChangePasswordModal } from './ChangePasswordModal';
-import { useTenants } from '../contexts/TenantContext';
+import { useTenants } from '../contexts/useTenants';
 
 const { Header, Sider, Content } = AntLayout;
 const { Text } = Typography;

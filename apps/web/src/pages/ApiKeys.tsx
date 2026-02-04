@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { App } from 'antd';
 import { 
   Table, 
@@ -51,16 +51,7 @@ const ApiKeys: React.FC = () => {
   const [createForm] = Form.useForm<ApiKeyFormValues>();
   const [editForm] = Form.useForm<ApiKeyUpdate>();
 
-  useEffect(() => {
-    // Add a small delay to ensure tenant context is properly set
-    const timer = setTimeout(() => {
-      loadApiKeys();
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, []);
-
-  const loadApiKeys = async () => {
+  const loadApiKeys = useCallback(async () => {
     setLoading(true);
     try {
 
@@ -78,7 +69,16 @@ const ApiKeys: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [message]);
+
+  useEffect(() => {
+    // Add a small delay to ensure tenant context is properly set
+    const timer = setTimeout(() => {
+      loadApiKeys();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [loadApiKeys]);
 
   const handleCreateApiKey = async (values: ApiKeyFormValues) => {
     try {

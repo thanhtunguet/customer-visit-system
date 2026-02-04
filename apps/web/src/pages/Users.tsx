@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, 
   Button, 
@@ -46,12 +46,7 @@ export const Users: React.FC = () => {
   const [editForm] = Form.useForm<UserUpdate>();
   const [passwordForm] = Form.useForm<UserPasswordUpdate>();
 
-  useEffect(() => {
-    loadUsers();
-    loadTenants();
-  }, []);
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiClient.getUsers();
@@ -62,16 +57,21 @@ export const Users: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [message]);
 
-  const loadTenants = async () => {
+  const loadTenants = useCallback(async () => {
     try {
       const data = await apiClient.getTenants();
       setTenants(data);
     } catch (error) {
       console.error('Failed to load tenants:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+    loadTenants();
+  }, [loadUsers, loadTenants]);
 
   const handleCreateUser = async (values: UserCreate) => {
     try {
