@@ -18,18 +18,6 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
-// Mock antd message
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    message: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
-  };
-});
-
 const mockUsers = [
   {
     user_id: '1',

@@ -2,9 +2,10 @@ import { jsx as _jsx } from 'react/jsx-runtime';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { message } from 'antd';
 import { TenantsPage } from '../../pages/Tenants';
+import { TenantProvider } from '../../contexts/TenantContext';
 import { apiClient } from '../../services/api';
+import { mockMessage } from '../../test/appMocks';
 import { UserRole } from '../../types/api';
 // Mock the API client
 vi.mock('../../services/api', () => ({
@@ -17,17 +18,6 @@ vi.mock('../../services/api', () => ({
   },
 }));
 const mockedApiClient = apiClient;
-// Mock antd message
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    message: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
-  };
-});
 const mockTenants = [
   {
     tenant_id: 'test-tenant-1',
@@ -53,8 +43,12 @@ const mockTenantAdminUser = {
   role: UserRole.TENANT_ADMIN,
   tenant_id: 'test-tenant-1',
 };
-const renderWithRouter = (component) => {
-  return render(_jsx(BrowserRouter, { children: component }));
+const renderWithProviders = (component) => {
+  return render(
+    _jsx(TenantProvider, {
+      children: _jsx(BrowserRouter, { children: component }),
+    })
+  );
 };
 describe('TenantManagement', () => {
   beforeEach(() => {
@@ -66,7 +60,7 @@ describe('TenantManagement', () => {
       mockedApiClient.getTenants.mockResolvedValue(mockTenants);
     });
     it('should render tenant management page for system admin', async () => {
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('Tenant Management')).toBeInTheDocument();
       });
@@ -75,7 +69,7 @@ describe('TenantManagement', () => {
       expect(screen.getByText('Test Tenant 1')).toBeInTheDocument();
     });
     it('should open create tenant modal when create button is clicked', async () => {
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('Create Tenant')).toBeInTheDocument();
       });
@@ -96,7 +90,7 @@ describe('TenantManagement', () => {
         created_at: '2023-01-03T00:00:00Z',
       };
       mockedApiClient.createTenant.mockResolvedValue(newTenant);
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('Create Tenant')).toBeInTheDocument();
       });
@@ -131,7 +125,7 @@ describe('TenantManagement', () => {
       });
     });
     it('should edit an existing tenant', async () => {
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
       });
@@ -146,7 +140,7 @@ describe('TenantManagement', () => {
     });
     it('should delete a tenant successfully', async () => {
       mockedApiClient.deleteTenant.mockResolvedValue();
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
       });
@@ -171,7 +165,7 @@ describe('TenantManagement', () => {
     it('should toggle tenant status successfully', async () => {
       const updatedTenant = { ...mockTenants[1], is_active: true };
       mockedApiClient.toggleTenantStatus.mockResolvedValue(updatedTenant);
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('test-tenant-2')).toBeInTheDocument();
       });
@@ -200,7 +194,7 @@ describe('TenantManagement', () => {
     it('should show confirmation dialog when deactivating tenant', async () => {
       const updatedTenant = { ...mockTenants[0], is_active: false };
       mockedApiClient.toggleTenantStatus.mockResolvedValue(updatedTenant);
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
       });
@@ -237,7 +231,7 @@ describe('TenantManagement', () => {
       mockedApiClient.getCurrentUser.mockResolvedValue(mockTenantAdminUser);
     });
     it('should show access denied for non-system admin users', async () => {
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('Access Denied')).toBeInTheDocument();
         expect(
@@ -255,9 +249,9 @@ describe('TenantManagement', () => {
     });
     it('should handle fetch tenants error gracefully', async () => {
       mockedApiClient.getTenants.mockRejectedValue(new Error('Network error'));
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
-        expect(message.error).toHaveBeenCalledWith('Network error');
+        expect(mockMessage.error).toHaveBeenCalledWith('Network error');
       });
     });
     it('should handle create tenant error gracefully', async () => {
@@ -265,7 +259,7 @@ describe('TenantManagement', () => {
       mockedApiClient.createTenant.mockRejectedValue({
         response: { data: { detail: 'Tenant already exists' } },
       });
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('Create Tenant')).toBeInTheDocument();
       });
@@ -282,7 +276,7 @@ describe('TenantManagement', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: 'Create Tenant' }));
       await waitFor(() => {
-        expect(message.error).toHaveBeenCalledWith('Tenant already exists');
+        expect(mockMessage.error).toHaveBeenCalledWith('Tenant already exists');
       });
     });
     it('should handle toggle tenant status error gracefully', async () => {
@@ -290,7 +284,7 @@ describe('TenantManagement', () => {
       mockedApiClient.toggleTenantStatus.mockRejectedValue({
         response: { data: { detail: 'Failed to update tenant status' } },
       });
-      renderWithRouter(_jsx(TenantsPage, {}));
+      renderWithProviders(_jsx(TenantsPage, {}));
       await waitFor(() => {
         expect(screen.getByText('test-tenant-1')).toBeInTheDocument();
       });
@@ -306,7 +300,7 @@ describe('TenantManagement', () => {
           screen.getByRole('button', { name: 'Yes, Deactivate' })
         );
         await waitFor(() => {
-          expect(message.error).toHaveBeenCalledWith(
+          expect(mockMessage.error).toHaveBeenCalledWith(
             'Failed to update tenant status'
           );
         });

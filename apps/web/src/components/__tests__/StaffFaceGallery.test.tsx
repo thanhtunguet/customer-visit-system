@@ -2,9 +2,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
-import { message } from 'antd';
 import { StaffFaceGallery } from '../StaffFaceGallery';
 import { apiClient } from '../../services/api';
+import { mockMessage } from '../../test/appMocks';
 import { StaffFaceImage } from '../../types/api';
 
 // Mock the API client
@@ -16,18 +16,6 @@ vi.mock('../../services/api', () => ({
     recalculateFaceEmbedding: vi.fn(),
   },
 }));
-
-// Mock antd message
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    message: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
-  };
-});
 
 // Mock environment variables
 Object.defineProperty(import.meta, 'env', {
@@ -71,7 +59,7 @@ const mockFaceImages: StaffFaceImage[] = [
 
 describe('StaffFaceGallery', () => {
   const mockProps = {
-    staffId: '123',
+    staffId: 123,
     staffName: 'John Doe',
     faceImages: mockFaceImages,
     onImagesChange: vi.fn(),
@@ -91,7 +79,7 @@ describe('StaffFaceGallery', () => {
 
     expect(screen.getByText('Face Images (2)')).toBeInTheDocument();
     expect(screen.getByText('Primary')).toBeInTheDocument();
-    expect(screen.getByText('Add Image')).toBeInTheDocument();
+    expect(screen.getByText('Add Images')).toBeInTheDocument();
   });
 
   it('renders empty state when no images', () => {
@@ -127,11 +115,8 @@ describe('StaffFaceGallery', () => {
 
     render(<StaffFaceGallery {...mockProps} />);
 
-    const uploadButton = screen.getByText('Add Image');
-    const uploadInput = uploadButton
-      .closest('.ant-upload')
-      ?.querySelector('input[type="file"]');
-
+    const uploadInput = document.querySelector('input[type="file"]');
+    expect(uploadInput).toBeTruthy();
     if (uploadInput) {
       fireEvent.change(uploadInput, { target: { files: [mockFile] } });
     }
@@ -144,7 +129,7 @@ describe('StaffFaceGallery', () => {
       );
     });
 
-    expect(message.success).toHaveBeenCalledWith(
+    expect(mockMessage.success).toHaveBeenCalledWith(
       'Face image uploaded successfully'
     );
     expect(mockProps.onImagesChange).toHaveBeenCalled();
@@ -164,17 +149,16 @@ describe('StaffFaceGallery', () => {
 
     render(<StaffFaceGallery {...mockProps} />);
 
-    const uploadButton = screen.getByText('Add Image');
-    const uploadInput = uploadButton
-      .closest('.ant-upload')
-      ?.querySelector('input[type="file"]');
-
+    const uploadInput = document.querySelector('input[type="file"]');
+    expect(uploadInput).toBeTruthy();
     if (uploadInput) {
       fireEvent.change(uploadInput, { target: { files: [mockFile] } });
     }
 
     await waitFor(() => {
-      expect(message.error).toHaveBeenCalledWith('No faces detected in image');
+      expect(mockMessage.error).toHaveBeenCalledWith(
+        'No faces detected in image'
+      );
     });
   });
 
@@ -203,7 +187,7 @@ describe('StaffFaceGallery', () => {
           123,
           'img-1'
         );
-        expect(message.success).toHaveBeenCalledWith(
+        expect(mockMessage.success).toHaveBeenCalledWith(
           'Face image deleted successfully'
         );
         expect(mockProps.onImagesChange).toHaveBeenCalled();
@@ -240,7 +224,7 @@ describe('StaffFaceGallery', () => {
           123,
           'img-1'
         );
-        expect(message.success).toHaveBeenCalledWith(
+        expect(mockMessage.success).toHaveBeenCalledWith(
           'Face landmarks and embedding recalculated successfully (Confidence: 95.0%)'
         );
         expect(mockProps.onImagesChange).toHaveBeenCalled();
@@ -279,8 +263,8 @@ describe('StaffFaceGallery', () => {
   it('generates correct image URLs', () => {
     render(<StaffFaceGallery {...mockProps} />);
 
-    const images = screen.getAllByRole('img');
-    expect(images[0]).toHaveAttribute(
+    const image = screen.getByAltText('Face image img-1');
+    expect(image).toHaveAttribute(
       'src',
       'http://localhost:8080/v1/files/staff-faces/t-test/img-1.jpg'
     );
